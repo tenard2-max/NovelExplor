@@ -1,0 +1,12 @@
+__pycache__/
+*.pyc
+.venv/
+
+# Streamlit local/runtime artifacts
+.streamlit/
+data/uploads/
+data/ledger.json
+data/active_files.json
+data/reading_progress.json
+bin/
+.run/

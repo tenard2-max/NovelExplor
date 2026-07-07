@@ -1,0 +1,11 @@
+services:
+  - type: web
+    name: story-bible-navigator
+    env: python
+    plan: free
+    buildCommand: pip install -r requirements.txt
+    startCommand: bash scripts/start_live_server.sh
+    autoDeploy: true
+    envVars:
+      - key: PYTHON_VERSION
+        value: "3.11.9"
