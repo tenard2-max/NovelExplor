@@ -23,6 +23,7 @@ LEDGER_PATH = DATA_DIR / "ledger.json"
 EPISODE_SEED_DIR = SEED_DIR / "episodes"
 EPISODE_UPLOAD_DIR = UPLOAD_DIR / "episodes"
 READING_PROGRESS_PATH = DATA_DIR / "reading_progress.json"
+EPISODE_TITLES_PATH = DATA_DIR / "episode_titles.json"
 EPISODE_COUNT = 100
 
 EPISODE_TITLES: dict[int, str] = {
@@ -328,7 +329,34 @@ def episode_filename(episode_num: int) -> str:
     return f"{episode_code(episode_num)}.md"
 
 
+TITLE_OVERRIDES: dict[int, str] = {}
+
+
+def load_title_overrides() -> dict[int, str]:
+    if not EPISODE_TITLES_PATH.exists():
+        return {}
+    try:
+        data = json.loads(EPISODE_TITLES_PATH.read_text(encoding="utf-8"))
+        return {int(key): str(value) for key, value in data.items() if str(value).strip()}
+    except (json.JSONDecodeError, OSError, TypeError, ValueError):
+        return {}
+
+
+def save_title_overrides(new_titles: dict[int, str]) -> None:
+    merged = load_title_overrides()
+    merged.update({num: title for num, title in new_titles.items() if title.strip()})
+    payload = {str(num): title for num, title in sorted(merged.items())}
+    EPISODE_TITLES_PATH.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
+
+
+def refresh_title_overrides() -> None:
+    global TITLE_OVERRIDES
+    TITLE_OVERRIDES = load_title_overrides()
+
+
 def get_episode_title(episode_num: int) -> str:
+    if episode_num in TITLE_OVERRIDES:
+        return TITLE_OVERRIDES[episode_num]
     return EPISODE_TITLES.get(episode_num, f"제{episode_num:03d}화")
 
 
@@ -362,6 +390,69 @@ def load_episode_markdown(episode_num: int) -> str:
         if content:
             return content
     return build_default_episode_markdown(episode_num)
+
+
+EPISODE_SECTION_RE = re.compile(r"^\s{0,3}(?:#{1,6}\s*)?EP\s*0*(\d{1,3})\b", re.IGNORECASE)
+
+
+def extract_episode_title(header_line: str) -> str:
+    without_hashes = re.sub(r"^\s{0,3}#{1,6}\s*", "", header_line).strip()
+    without_code = re.sub(r"^EP\s*0*\d{1,3}\s*", "", without_hashes, flags=re.IGNORECASE)
+    cleaned = re.sub(r"^[·:∙・.\-–—]\s*", "", without_code).strip()
+    return cleaned
+
+
+def split_multi_episode_markdown(text: str) -> dict[int, str]:
+    """EP 헤더로 구분된 통합 MD를 화 번호 → 본문(헤더 포함) 사전으로 분리한다."""
+    sections: dict[int, list[str]] = {}
+    current_episode: int | None = None
+
+    for line in text.splitlines():
+        match = EPISODE_SECTION_RE.match(line)
+        if match:
+            current_episode = int(match.group(1))
+            sections[current_episode] = [line]
+        elif current_episode is not None:
+            sections[current_episode].append(line)
+
+    result: dict[int, str] = {}
+    for episode_num, body_lines in sections.items():
+        content = "\n".join(body_lines).strip()
+        if content:
+            result[episode_num] = content + "\n"
+    return result
+
+
+def save_multi_episode_markdown(text: str) -> tuple[list[int], list[int]]:
+    """통합 MD를 화별 파일로 저장하고, 제목 오버라이드도 갱신한다.
+
+    반환값: (저장된 화 목록, 범위를 벗어나 건너뛴 화 목록)
+    """
+    parsed = split_multi_episode_markdown(text)
+    saved: list[int] = []
+    skipped: list[int] = []
+    new_titles: dict[int, str] = {}
+
+    for episode_num in sorted(parsed):
+        if not 1 <= episode_num <= EPISODE_COUNT:
+            skipped.append(episode_num)
+            continue
+
+        content = parsed[episode_num]
+        EPISODE_UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
+        target = EPISODE_UPLOAD_DIR / episode_filename(episode_num)
+        target.write_text(content, encoding="utf-8")
+        saved.append(episode_num)
+
+        title = extract_episode_title(content.splitlines()[0])
+        if title:
+            new_titles[episode_num] = title
+
+    if new_titles:
+        save_title_overrides(new_titles)
+        refresh_title_overrides()
+
+    return saved, skipped
 
 
 def build_episode_catalog(master_episodes: list[dict[str, str]]) -> list[dict[str, Any]]:
@@ -1233,6 +1324,7 @@ def main() -> None:
     render_mobile_css()
 
     config = load_active_config()
+    refresh_title_overrides()
     source_texts = load_story_sources(config)
     master_data = parse_master_data(source_texts["master"])
     story_data = parse_story_data(source_texts["story"])
@@ -1459,6 +1551,34 @@ def main() -> None:
             st.success(f"{episode_code(int(episode_save_num))} 저장 완료")
             st.rerun()
 
+        st.markdown("#### 여러 화 일괄 업로드 (예: EP002~EP007)")
+        st.caption(
+            "각 화 시작에 `# EP002 · 제목` 형식의 EP 헤더가 있는 통합 MD를 붙여넣으면, "
+            "화별로 분리 저장하고 소설 읽기·네비게이터 제목을 한 번에 갱신합니다."
+        )
+        multi_episode_text = st.text_area(
+            "여러 화 통합 본문 (MD)",
+            value="",
+            height=280,
+            key="multi_episode_editor",
+            placeholder="# EP002 · 대학 친구들과 재회\n본문...\n\n# EP003 · 지은과 재회\n본문...",
+        )
+        if st.button("일괄 저장 및 네비게이터 업데이트", key="save_multi_episode"):
+            preview = split_multi_episode_markdown(multi_episode_text)
+            if not preview:
+                st.error("EP 헤더를 찾지 못했습니다. 각 화 시작에 `# EP002` 형식의 헤더를 넣어 주세요.")
+            else:
+                saved, skipped = save_multi_episode_markdown(multi_episode_text)
+                if saved:
+                    st.success("업데이트 완료: " + ", ".join(episode_code(num) for num in saved))
+                if skipped:
+                    st.warning(
+                        "1~100 범위를 벗어나 건너뜀: "
+                        + ", ".join(f"EP{num:03d}" for num in skipped)
+                    )
+                if saved:
+                    st.rerun()
+
         st.markdown("#### 스토리바이블 ZIP 경로/링크 저장")
         zip_hint = config.get("story_bible_zip", "")
         zip_ref = st.text_input(
@@ -1501,6 +1621,26 @@ def main() -> None:
                 save_active_config(config)
                 st.success(f"ZIP 적용 완료: {saved_path.name}")
                 st.rerun()
+
+            uploaded_multi = st.file_uploader(
+                "여러 화 통합 MD 업로드 (EP002~EP007 등)", type=["md"], key="multi_episode_upload"
+            )
+            if uploaded_multi is not None and st.button("통합 MD 일괄 적용", key="save_multi_upload"):
+                raw_multi = uploaded_multi.getvalue().decode("utf-8", errors="ignore")
+                preview = split_multi_episode_markdown(raw_multi)
+                if not preview:
+                    st.error("EP 헤더를 찾지 못했습니다. 각 화 시작에 `# EP002` 형식의 헤더를 넣어 주세요.")
+                else:
+                    saved, skipped = save_multi_episode_markdown(raw_multi)
+                    if saved:
+                        st.success("업데이트 완료: " + ", ".join(episode_code(num) for num in saved))
+                    if skipped:
+                        st.warning(
+                            "1~100 범위를 벗어나 건너뜀: "
+                            + ", ".join(f"EP{num:03d}" for num in skipped)
+                        )
+                    if saved:
+                        st.rerun()
 
         st.markdown("#### 활성 파일 수동 선택")
         master_candidates = available_files(config.get("master_file", ""), MASTER_UPLOAD_DIR, (".md",))

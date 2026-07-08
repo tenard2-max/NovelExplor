@@ -1,0 +1,306 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Fantasy Foreshadow Tool</title>
+  <link rel="stylesheet" href="css/variables.css">
+  <link rel="stylesheet" href="css/layout.css">
+  <link rel="stylesheet" href="css/components.css">
+  <link rel="stylesheet" href="css/themes.css">
+</head>
+<body data-theme="dark">
+  <div id="app" class="app">
+    <!-- 좌측 1 : 메인 네비게이션 -->
+    <aside class="nav-panel" aria-label="메인 메뉴">
+      <div class="nav-brand">
+        <span class="nav-logo">◈</span>
+        <div>
+          <strong class="nav-title">Foreshadow</strong>
+          <small id="nav-project-name">프로젝트 없음</small>
+        </div>
+      </div>
+
+      <nav class="nav-menu" id="nav-menu">
+        <p class="nav-section-label">마스터</p>
+        <button class="nav-item active" data-view="master" data-icon="📋">
+          <span class="nav-icon">📋</span><span class="nav-label">마스터 DB</span>
+        </button>
+        <button class="nav-item" data-view="story-bible" data-icon="📖">
+          <span class="nav-icon">📖</span><span class="nav-label">Story Bible</span>
+        </button>
+
+        <p class="nav-section-label">세계관 · 스토리</p>
+        <button class="nav-item" data-view="world" data-icon="🌍">
+          <span class="nav-icon">🌍</span><span class="nav-label">세계관</span>
+        </button>
+        <button class="nav-item" data-view="reader" data-icon="📚">
+          <span class="nav-icon">📚</span><span class="nav-label">소설 읽기</span>
+        </button>
+        <button class="nav-item" data-view="story-nav" data-icon="🧭">
+          <span class="nav-icon">🧭</span><span class="nav-label">스토리 네비게이터</span>
+        </button>
+
+        <p class="nav-section-label">떡밥 · 인물</p>
+        <button class="nav-item" data-view="foreshadow" data-icon="🔗">
+          <span class="nav-icon">🔗</span><span class="nav-label">떡밥 회수</span>
+          <span class="nav-badge" id="badge-foreshadow">0</span>
+        </button>
+        <button class="nav-item" data-view="character" data-icon="👤">
+          <span class="nav-icon">👤</span><span class="nav-label">인물</span>
+          <span class="nav-badge" id="badge-character">0</span>
+        </button>
+        <button class="nav-item" data-view="timeline" data-icon="📅">
+          <span class="nav-icon">📅</span><span class="nav-label">타임라인</span>
+        </button>
+
+        <p class="nav-section-label">시각화</p>
+        <button class="nav-item" data-view="graph-foreshadow" data-icon="🕸">
+          <span class="nav-icon">🕸</span><span class="nav-label">복선 그래프</span>
+        </button>
+        <button class="nav-item" data-view="graph-character" data-icon="🔀">
+          <span class="nav-icon">🔀</span><span class="nav-label">인물 관계도</span>
+        </button>
+        <button class="nav-item" data-view="graph-timeline" data-icon="📊">
+          <span class="nav-icon">📊</span><span class="nav-label">타임라인 그래프</span>
+        </button>
+
+        <p class="nav-section-label">도구</p>
+        <button class="nav-item" data-view="editor" data-icon="✏️">
+          <span class="nav-icon">✏️</span><span class="nav-label">에디터</span>
+        </button>
+        <button class="nav-item" data-action="analyze-foreshadow" data-icon="✨">
+          <span class="nav-icon">✨</span><span class="nav-label">복선 분석</span>
+        </button>
+      </nav>
+
+      <div class="nav-footer">
+        <button class="nav-item nav-item-sm" data-action="toggle-theme" title="테마 전환">🌓</button>
+        <button class="nav-item nav-item-sm" data-action="save" title="저장">💾</button>
+        <button class="nav-item nav-item-sm" data-action="about" title="정보">ℹ️</button>
+      </div>
+    </aside>
+
+    <!-- 중앙 8 : Canvas 메인 작업공간 -->
+    <main class="canvas-panel" aria-label="메인 작업공간">
+      <header class="canvas-toolbar">
+        <div class="canvas-toolbar-left">
+          <div class="canvas-title-group">
+            <h1 id="canvas-title" class="canvas-title">마스터 DB</h1>
+            <span id="canvas-subtitle" class="canvas-subtitle"></span>
+          </div>
+          <div id="wallpaper-controls" class="wallpaper-controls" hidden>
+            <button type="button" class="btn-sm" data-action="wallpaper-upload" title="배경 이미지 등록">🖼 배경월페이퍼</button>
+            <label class="wp-gauge" title="채도">
+              <span class="wp-gauge-label">채도</span>
+              <input type="range" id="wp-saturation" min="0" max="200" value="100" aria-label="월페이퍼 채도">
+              <span id="wp-saturation-val" class="wp-gauge-val">100%</span>
+            </label>
+            <label class="wp-gauge" title="알파값">
+              <span class="wp-gauge-label">알파</span>
+              <input type="range" id="wp-alpha" min="0" max="100" value="45" aria-label="월페이퍼 알파">
+              <span id="wp-alpha-val" class="wp-gauge-val">45%</span>
+            </label>
+            <label class="wp-gauge" title="크기">
+              <span class="wp-gauge-label">크기</span>
+              <input type="range" id="wp-size" min="30" max="200" value="100" aria-label="월페이퍼 크기">
+              <span id="wp-size-val" class="wp-gauge-val">100%</span>
+            </label>
+            <button type="button" class="btn-sm" data-action="character-autoadd"
+                    title="EP 문서를 검색해 등장인물을 자동 추가">👥 인물 자동추가</button>
+          </div>
+        </div>
+        <div class="canvas-toolbar-right">
+          <input type="search" id="global-search" class="search-input" placeholder="검색..." aria-label="전역 검색">
+          <button class="btn-sm" data-action="undo" title="실행 취소">↩</button>
+          <button class="btn-sm" data-action="redo" title="다시 실행">↪</button>
+          <button class="btn-sm" data-action="find" title="찾기">🔍</button>
+          <select id="graph-filter" class="graph-filter" hidden>
+            <option value="all">전체</option>
+            <option value="OPEN">미회수</option>
+            <option value="PROGRESS">진행중</option>
+            <option value="RESOLVED">회수됨</option>
+          </select>
+        </div>
+      </header>
+
+      <div class="canvas-body">
+        <div id="canvas-wallpaper-layer" class="canvas-wallpaper-layer" hidden aria-hidden="true"></div>
+        <div id="graph-layer" class="graph-layer" hidden>
+          <canvas id="main-canvas" class="main-canvas"></canvas>
+          <div class="graph-controls">
+            <button class="btn-sm" data-action="graph-zoom-in">＋</button>
+            <button class="btn-sm" data-action="graph-zoom-out">－</button>
+            <button class="btn-sm" data-action="graph-reset">⟲</button>
+          </div>
+          <div id="graph-legend" class="graph-legend"></div>
+        </div>
+
+        <!-- 리스트/에디터/리더 뷰 -->
+        <div id="workspace-layer" class="workspace-layer">
+          <!-- 스토리 네비게이터 + 에디터 분할 -->
+          <div id="view-story-nav" class="workspace-view" hidden>
+            <div class="split-pane">
+              <div class="split-list" id="episode-list"></div>
+              <div class="split-main">
+                <div class="editor-toolbar">
+                  <span id="editor-filename" class="editor-filename">에피소드를 선택하세요</span>
+                  <button class="btn-sm" data-action="add-foreshadow">복선 등록</button>
+                </div>
+                <div class="editor-wrap">
+                  <div id="line-numbers" class="line-numbers" aria-hidden="true">1</div>
+                  <textarea id="editor" class="editor-textarea" spellcheck="false"></textarea>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div id="view-reader" class="workspace-view" hidden>
+            <div class="reader-nav">
+              <button class="btn-sm" data-action="prev-episode">◀ 이전화</button>
+              <select id="reader-episode-select" class="reader-story-select" aria-label="소설 선택"></select>
+              <button class="btn-sm" data-action="next-episode">다음화 ▶</button>
+              <button class="btn-sm btn-danger" data-action="delete-story" title="현재 소설 삭제">삭제</button>
+              <button class="btn-sm btn-danger" data-action="delete-all-stories" title="등록된 소설 전체 삭제">전체 삭제</button>
+              <label class="reader-option">
+                <input type="range" id="reader-font-size" min="14" max="24" value="17"> 글꼴
+              </label>
+            </div>
+            <article id="reader-content" class="reader-content"></article>
+          </div>
+
+          <div id="view-list" class="workspace-view">
+            <div id="list-content" class="list-content"></div>
+          </div>
+
+          <div id="view-inspector-drawer" class="inspector-drawer" hidden>
+            <div class="inspector-drawer-header">
+              <strong>속성</strong>
+              <button class="icon-btn" data-action="close-inspector">✕</button>
+            </div>
+            <div id="inspector-content" class="inspector-content"></div>
+          </div>
+        </div>
+
+        <aside id="character-panel" class="character-panel" hidden aria-label="캐릭터 상세">
+          <header class="char-panel-header">
+            <strong id="char-panel-name">캐릭터</strong>
+            <div class="char-panel-actions">
+              <button type="button" class="btn-sm char-btn-danger" data-action="char-delete" title="인물 삭제">🗑 삭제</button>
+              <button class="icon-btn" data-action="close-char-panel" title="닫기">✕</button>
+            </div>
+          </header>
+          <div class="char-panel-body">
+            <div class="char-section-label">대표 이미지 <small>(관계도 공유)</small></div>
+            <div id="char-avatar-box" class="char-avatar-box" tabindex="0" title="클릭 → 원본 보기 / 드래그 앤 드롭으로 등록">
+              <img id="char-avatar-img" class="char-avatar-img" alt="대표 이미지" hidden>
+              <div id="char-avatar-empty" class="char-avatar-empty">
+                <span class="char-avatar-empty-icon">🖼</span>
+                <span>이미지를 끌어다 놓거나<br>클릭해서 등록</span>
+              </div>
+              <div class="char-avatar-draghint">여기에 놓기</div>
+            </div>
+            <div id="char-avatar-actions" class="char-avatar-actions" hidden>
+              <button type="button" class="btn-sm" data-action="char-avatar-register">📁 대표 등록</button>
+              <button type="button" class="btn-sm char-btn-danger" data-action="char-avatar-delete">🗑 삭제</button>
+            </div>
+
+            <div class="char-section-label">
+              이미지 갤러리 <small id="char-gallery-count"></small>
+              <button type="button" class="btn-sm char-gallery-add" data-action="char-images-add">＋ 이미지 추가</button>
+            </div>
+            <div id="char-gallery" class="char-gallery"></div>
+
+            <dl id="char-panel-desc" class="char-panel-desc"></dl>
+          </div>
+        </aside>
+      </div>
+
+      <footer class="canvas-status" role="status">
+        <span id="status-project">—</span>
+        <span id="status-save">저장됨</span>
+        <span id="status-cursor">Ln 1, Col 1</span>
+        <span id="status-words">0 단어</span>
+        <span id="status-graph" class="status-graph"></span>
+      </footer>
+    </main>
+
+    <!-- 우측 1 : 파일 업로드 -->
+    <aside class="upload-panel" aria-label="파일 업로드">
+      <div class="upload-header">
+        <h2>파일</h2>
+      </div>
+
+      <div id="drop-zone" class="drop-zone">
+        <span class="drop-icon">⬆</span>
+        <p>파일을 끌어다 놓으세요</p>
+        <small>최대 100개 · 다중 선택 가능</small>
+        <small>설정: 00_*.md</small>
+        <small>소설: ST*.md · TXT</small>
+        <small>스토리: EP*.md</small>
+        <p id="drop-char-hint" class="drop-char-hint" hidden></p>
+      </div>
+
+      <div class="upload-actions">
+        <button class="upload-btn" data-import="txt">📄 TXT</button>
+        <button class="upload-btn" data-import="md">📝 MD</button>
+        <button class="upload-btn" data-import="json">📦 JSON</button>
+        <button class="upload-btn" data-import="zip">🗜 ZIP</button>
+      </div>
+
+      <div class="upload-section">
+        <h3>보내기</h3>
+        <button class="upload-btn full" data-action="export-json">NovelMD JSON</button>
+        <button class="upload-btn full" data-action="export-md" disabled title="STEP 2 예정">Novel_Master.zip</button>
+      </div>
+
+      <div class="upload-section">
+        <h3>프로젝트</h3>
+        <button class="upload-btn full" data-action="new-project">＋ 새 프로젝트</button>
+        <button class="upload-btn full" data-action="open-project">📂 프로젝트 열기</button>
+        <button class="upload-btn full upload-btn-primary" data-action="save-project">💾 프로젝트 저장</button>
+      </div>
+
+      <div class="upload-section">
+        <h3>최근 Import</h3>
+        <ul id="import-log" class="import-log">
+          <li class="import-log-empty">아직 없음</li>
+        </ul>
+      </div>
+
+      <div class="upload-section upload-info">
+        <h3>Workspace</h3>
+        <dl id="workspace-info" class="workspace-info">
+          <dt>소설 (ST)</dt><dd id="info-stories">0</dd>
+          <dt>에피소드 (EP)</dt><dd id="info-episodes">0</dd>
+          <dt>복선</dt><dd id="info-foreshadows">0</dd>
+          <dt>인물</dt><dd id="info-characters">0</dd>
+        </dl>
+      </div>
+    </aside>
+  </div>
+
+  <dialog id="dialog" class="app-dialog">
+    <form method="dialog" class="dialog-form">
+      <h3 id="dialog-title"></h3>
+      <div id="dialog-body" class="dialog-body"></div>
+      <div class="dialog-actions">
+        <button type="button" id="dialog-cancel" class="btn-secondary">취소</button>
+        <button type="submit" id="dialog-confirm" class="btn-primary">확인</button>
+      </div>
+    </form>
+  </dialog>
+
+  <input type="file" id="import-file" accept=".json,.txt,.md,.zip" multiple hidden>
+  <input type="file" id="wallpaper-file" accept="image/*" hidden>
+  <input type="file" id="character-avatar-file" accept="image/*" hidden>
+  <input type="file" id="character-images-file" accept="image/*" multiple hidden>
+
+  <div id="image-lightbox" class="image-lightbox" hidden>
+    <button class="image-lightbox-close" data-action="close-lightbox" title="닫기">✕</button>
+    <img id="image-lightbox-img" class="image-lightbox-img" alt="원본 이미지">
+  </div>
+
+  <script type="module" src="js/main.js"></script>
+</body>
+</html>
