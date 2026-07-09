@@ -1,0 +1,771 @@
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  margin: 0;
+  height: 100%;
+  overflow: hidden;
+  font-family: var(--font-ui);
+  font-size: 14px;
+  color: var(--text);
+  background: var(--bg-app);
+}
+
+/* 1 : 8 : 1 수평 3분할 — 좌우 고정폭으로 항상 표시 */
+.app {
+  display: grid;
+  grid-template-columns: minmax(200px, 10vw) minmax(400px, 1fr) minmax(200px, 10vw);
+  width: 100vw;
+  height: 100vh;
+  overflow: hidden;
+}
+
+.app > * {
+  min-height: 0;
+  min-width: 0;
+}
+
+/* 패널 구분선 강조 */
+.nav-panel {
+  display: flex;
+  flex-direction: column;
+  background: var(--bg-nav);
+  border-right: 2px solid var(--color-primary);
+  overflow: hidden;
+  min-width: 200px;
+  z-index: 2;
+}
+
+.nav-brand {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 14px 12px;
+  border-bottom: 1px solid var(--border);
+}
+
+.nav-logo {
+  font-size: 22px;
+  color: var(--color-primary);
+}
+
+.nav-title {
+  display: block;
+  font-size: 13px;
+}
+
+#nav-project-name {
+  display: block;
+  font-size: 11px;
+  color: var(--text-muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 110px;
+}
+
+.nav-menu {
+  flex: 1;
+  overflow-y: auto;
+  padding: 8px 6px;
+}
+
+.nav-section-label {
+  margin: 12px 8px 4px;
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--text-dim);
+}
+
+.nav-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  padding: 8px 10px;
+  margin-bottom: 2px;
+  border: none;
+  border-radius: var(--radius);
+  background: transparent;
+  color: var(--text-muted);
+  cursor: pointer;
+  font-family: inherit;
+  font-size: 12px;
+  text-align: left;
+  transition: background 0.15s, color 0.15s;
+}
+
+.nav-item:hover {
+  background: var(--bg-hover);
+  color: var(--text);
+}
+
+.nav-item.active {
+  background: color-mix(in srgb, var(--color-primary) 18%, transparent);
+  color: var(--color-primary);
+  font-weight: 600;
+}
+
+.nav-icon {
+  font-size: 15px;
+  flex-shrink: 0;
+}
+
+.nav-label {
+  flex: 1;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.nav-badge {
+  font-size: 10px;
+  padding: 1px 6px;
+  border-radius: 999px;
+  background: var(--bg-hover);
+  color: var(--text-muted);
+}
+
+.nav-item.active .nav-badge {
+  background: color-mix(in srgb, var(--color-primary) 30%, transparent);
+  color: var(--color-primary);
+}
+
+.nav-footer {
+  display: flex;
+  gap: 4px;
+  padding: 8px;
+  border-top: 1px solid var(--border);
+}
+
+.nav-item-sm {
+  flex: 1;
+  justify-content: center;
+  padding: 6px;
+}
+
+/* ── 중앙 Canvas ── */
+.canvas-panel {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  min-height: 0;
+  height: 100%;
+  background: var(--bg-canvas);
+  border-left: 1px solid var(--border);
+  border-right: 1px solid var(--border);
+  position: relative;
+  overflow: hidden;
+}
+
+/* 그래프 모드에서만 워터마크 표시 */
+.canvas-panel.canvas-mode-graph::before {
+  content: 'CANVAS';
+  position: absolute;
+  top: 55%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  font-size: min(120px, 12vw);
+  font-weight: 900;
+  color: color-mix(in srgb, var(--text) 4%, transparent);
+  pointer-events: none;
+  z-index: 0;
+  letter-spacing: 0.2em;
+}
+
+.canvas-toolbar,
+.canvas-body,
+.canvas-status {
+  position: relative;
+  z-index: 1;
+}
+
+.canvas-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 10px 16px;
+  background: var(--bg-panel);
+  border-bottom: 1px solid var(--border);
+  flex-wrap: wrap;
+}
+
+.canvas-toolbar-left {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex: 1 1 auto;
+  min-width: 0;
+  flex-wrap: wrap;
+}
+
+.canvas-title-group {
+  display: flex;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: 4px 8px;
+}
+
+.wallpaper-controls {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  padding: 4px 8px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--bg-input);
+}
+
+.wp-gauge {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 10px;
+  color: var(--text-muted);
+  white-space: nowrap;
+}
+
+.wp-gauge-label {
+  min-width: 24px;
+}
+
+.wp-gauge input[type="range"] {
+  width: 72px;
+  accent-color: var(--color-primary);
+}
+
+.wp-gauge-val {
+  min-width: 32px;
+  font-size: 10px;
+  color: var(--text-dim);
+  font-variant-numeric: tabular-nums;
+}
+
+.canvas-wallpaper-layer {
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  display: block;
+  background-size: cover;
+  background-position: center;
+  background-repeat: no-repeat;
+  pointer-events: none;
+}
+
+.canvas-wallpaper-layer[hidden] {
+  display: none !important;
+}
+
+.canvas-body.has-wallpaper .workspace-layer,
+.canvas-body.has-wallpaper .graph-layer {
+  background: transparent;
+}
+
+.canvas-body.has-wallpaper #view-reader {
+  background: transparent;
+}
+
+.canvas-body.has-wallpaper .reader-nav {
+  background: color-mix(in srgb, var(--bg-panel) 88%, transparent);
+}
+
+.reader-content.has-wallpaper-bg {
+  background: color-mix(in srgb, var(--bg-canvas) 55%, transparent);
+}
+
+.canvas-title {
+  margin: 0;
+  font-size: 15px;
+  font-weight: 600;
+}
+
+.canvas-subtitle {
+  font-size: 12px;
+  color: var(--text-muted);
+  margin-left: 8px;
+}
+
+.canvas-toolbar-right {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.search-input {
+  width: min(200px, 25vw);
+  padding: 5px 10px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--bg-input);
+  color: var(--text);
+  font-size: 12px;
+}
+
+.graph-filter {
+  padding: 4px 8px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--bg-input);
+  color: var(--text);
+  font-size: 12px;
+}
+
+/* canvas-body: 툴바~상태바 사이 전체 높이 사용 */
+.canvas-body {
+  flex: 1 1 0;
+  min-height: 0;
+  position: relative;
+  overflow: hidden;
+}
+
+.workspace-view[hidden],
+.graph-layer[hidden],
+.inspector-drawer[hidden] {
+  display: none !important;
+}
+
+/* 워크스페이스: canvas-body 전체를 absolute로 채움 */
+.workspace-layer {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  background: var(--bg-app);
+  overflow: hidden;
+  z-index: 1;
+}
+
+/* 그래프만 absolute 오버레이 */
+.graph-layer {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  overflow: hidden;
+  background: var(--bg-canvas);
+  z-index: 5;
+}
+
+.main-canvas {
+  width: 100%;
+  height: 100%;
+  display: block;
+  cursor: grab;
+}
+
+.main-canvas:active {
+  cursor: grabbing;
+}
+
+.graph-controls {
+  position: absolute;
+  bottom: 16px;
+  right: 16px;
+  display: flex;
+  gap: 4px;
+}
+
+.graph-legend {
+  position: absolute;
+  top: 12px;
+  left: 12px;
+  background: color-mix(in srgb, var(--bg-panel) 85%, transparent);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 8px 12px;
+  font-size: 11px;
+  backdrop-filter: blur(8px);
+}
+
+.workspace-view {
+  flex: 1 1 0;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  height: 100%;
+  width: 100%;
+  overflow: hidden;
+}
+
+#view-reader,
+#view-list,
+#view-story-nav {
+  flex: 1 1 0;
+  min-height: 0;
+  background: var(--bg-canvas);
+}
+
+.split-pane {
+  display: grid;
+  grid-template-columns: 220px 1fr;
+  flex: 1 1 0;
+  min-height: 0;
+  height: auto;
+}
+
+.split-list {
+  overflow-y: auto;
+  border-right: 1px solid var(--border);
+  background: var(--bg-panel);
+}
+
+.split-main {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+
+.editor-wrap {
+  display: flex;
+  flex: 1;
+  min-height: 0;
+}
+
+.line-numbers {
+  width: 44px;
+  padding: 12px 6px;
+  text-align: right;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--text-dim);
+  background: var(--bg-panel);
+  border-right: 1px solid var(--border);
+  overflow: hidden;
+  user-select: none;
+  white-space: pre;
+  line-height: 1.6;
+}
+
+.editor-textarea {
+  flex: 1 1 auto;
+  min-height: 0;
+  height: 100%;
+  resize: none;
+  border: none;
+  outline: none;
+  padding: 12px;
+  font-family: var(--font-mono);
+  font-size: 13px;
+  line-height: 1.6;
+  background: var(--bg-input);
+  color: var(--text);
+}
+
+.editor-toolbar,
+.reader-nav {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 12px;
+  border-bottom: 1px solid var(--border);
+  background: var(--bg-panel);
+  flex-shrink: 0;
+  position: relative;
+  flex-wrap: wrap;
+}
+
+.reader-story-select {
+  flex: 1 1 200px;
+  min-width: 180px;
+  max-width: min(520px, 45vw);
+  font-size: 12px;
+  padding: 5px 8px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--bg-input);
+  color: var(--text);
+  font-family: inherit;
+  cursor: pointer;
+}
+
+.reader-story-select:is(:focus, .is-expanded) {
+  outline: none;
+  border-color: var(--color-primary);
+}
+
+.reader-story-select.is-expanded {
+  position: absolute;
+  left: 12px;
+  right: 12px;
+  top: 100%;
+  z-index: 30;
+  max-width: none;
+  width: auto;
+  max-height: min(320px, 50vh);
+  overflow-y: auto;
+  box-shadow: var(--shadow);
+  border-top-left-radius: 0;
+  border-top-right-radius: 0;
+}
+
+.reader-story-select option {
+  padding: 6px 8px;
+}
+
+.editor-filename {
+  flex: 1;
+  font-size: 12px;
+  color: var(--text-muted);
+}
+
+.reader-content {
+  flex: 1 1 0;
+  min-height: 0;
+  overflow-y: auto;
+  overflow-x: hidden;
+  padding: 32px clamp(24px, 5vw, 80px);
+  font-family: var(--font-reader);
+  font-size: 17px;
+  line-height: 1.9;
+  width: 100%;
+  box-sizing: border-box;
+  background: var(--bg-canvas);
+}
+
+.reader-option {
+  margin-left: auto;
+  font-size: 11px;
+  color: var(--text-muted);
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.list-content {
+  flex: 1 1 0;
+  min-height: 0;
+  overflow: auto;
+  padding: 16px 20px;
+  box-sizing: border-box;
+}
+
+.inspector-drawer {
+  position: absolute;
+  right: 0;
+  top: 0;
+  bottom: 0;
+  width: min(320px, 40%);
+  background: var(--bg-panel);
+  border-left: 1px solid var(--border);
+  box-shadow: var(--shadow);
+  display: flex;
+  flex-direction: column;
+  z-index: 10;
+}
+
+.inspector-drawer-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 10px 12px;
+  border-bottom: 1px solid var(--border);
+}
+
+.canvas-status {
+  flex-shrink: 0;
+  display: flex;
+  gap: 16px;
+  padding: 4px 16px;
+  height: var(--status-height);
+  align-items: center;
+  font-size: 11px;
+  color: var(--text-muted);
+  background: var(--bg-panel);
+  border-top: 1px solid var(--border);
+}
+
+.status-graph {
+  margin-left: auto;
+}
+
+/* ── 우측 업로드 ── */
+.upload-panel {
+  display: flex;
+  flex-direction: column;
+  background: var(--bg-nav);
+  border-left: 2px solid var(--color-secondary);
+  overflow-y: auto;
+  min-width: 200px;
+  z-index: 2;
+}
+
+.upload-header {
+  padding: 14px 12px;
+  border-bottom: 1px solid var(--border);
+}
+
+.upload-header h2 {
+  margin: 0;
+  font-size: 12px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--text-muted);
+}
+
+.drop-zone {
+  margin: 10px;
+  padding: 20px 12px;
+  border: 2px dashed var(--border);
+  border-radius: var(--radius);
+  text-align: center;
+  cursor: pointer;
+  transition: border-color 0.2s, background 0.2s;
+}
+
+.drop-zone:hover,
+.drop-zone.drag-over {
+  border-color: var(--color-primary);
+  background: color-mix(in srgb, var(--color-primary) 8%, transparent);
+}
+
+.drop-icon {
+  font-size: 24px;
+  display: block;
+  margin-bottom: 6px;
+  color: var(--color-primary);
+}
+
+.drop-zone p {
+  margin: 0 0 4px;
+  font-size: 12px;
+}
+
+.drop-zone small {
+  color: var(--text-dim);
+  font-size: 10px;
+}
+
+/* 인물이 선택된 상태 — 이미지 드롭 시 해당 인물에 등록 */
+.drop-zone--character {
+  border-color: #facc15;
+  background: color-mix(in srgb, #facc15 8%, transparent);
+}
+
+.drop-char-hint {
+  margin: 8px 0 0;
+  padding-top: 8px;
+  border-top: 1px dashed var(--border);
+  font-size: 11px;
+  color: #facc15;
+  line-height: 1.4;
+}
+
+.upload-actions {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 6px;
+  padding: 0 10px 10px;
+}
+
+.upload-section {
+  padding: 10px;
+  border-top: 1px solid var(--border);
+}
+
+.upload-section h3 {
+  margin: 0 0 8px;
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--text-dim);
+}
+
+.upload-btn {
+  padding: 8px 6px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--bg-panel);
+  color: var(--text);
+  cursor: pointer;
+  font-size: 11px;
+  font-family: inherit;
+  transition: background 0.15s;
+}
+
+.upload-btn:hover {
+  background: var(--bg-hover);
+}
+
+.upload-btn.full {
+  width: 100%;
+  margin-bottom: 6px;
+  text-align: left;
+  padding: 8px 10px;
+}
+
+.upload-btn-primary {
+  border-color: var(--color-primary);
+  background: color-mix(in srgb, var(--color-primary) 12%, var(--bg-panel));
+  font-weight: 600;
+}
+
+.upload-btn-primary:hover {
+  background: color-mix(in srgb, var(--color-primary) 22%, var(--bg-panel));
+}
+
+.import-log {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  font-size: 11px;
+}
+
+.import-log li {
+  padding: 5px 0;
+  border-bottom: 1px solid var(--border);
+  color: var(--text-muted);
+}
+
+.import-log-empty {
+  color: var(--text-dim);
+  font-style: italic;
+}
+
+.workspace-info {
+  margin: 0;
+  font-size: 11px;
+}
+
+.workspace-info dt {
+  color: var(--text-dim);
+  margin-top: 4px;
+}
+
+.workspace-info dd {
+  margin: 0;
+  font-weight: 600;
+  color: var(--text);
+}
+
+@media (max-width: 900px) {
+  .app {
+    grid-template-columns: 56px minmax(0, 1fr) 56px;
+  }
+
+  .nav-label,
+  .nav-badge,
+  .nav-section-label,
+  .nav-brand div,
+  .upload-section h3,
+  .drop-zone p,
+  .drop-zone small,
+  .upload-btn span {
+    display: none;
+  }
+
+  .nav-panel,
+  .upload-panel {
+    min-width: 56px;
+  }
+}

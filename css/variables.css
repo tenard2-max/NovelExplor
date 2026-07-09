@@ -1,0 +1,52 @@
+:root {
+  --color-primary: #6c8cff;
+  --color-secondary: #8b5cf6;
+  --color-success: #34d399;
+  --color-warning: #fbbf24;
+  --color-danger: #f87171;
+  --color-info: #38bdf8;
+
+  --bg-app: #0c0e14;
+  --bg-panel: #13161e;
+  --bg-nav: #0f1219;
+  --bg-hover: #1c2230;
+  --bg-input: #0a0c10;
+  --bg-canvas: #0a0d12;
+  --border: #2a3142;
+  --text: #e8ecf4;
+  --text-muted: #8b95a8;
+  --text-dim: #5c667a;
+
+  --font-ui: "Segoe UI", "Malgun Gothic", sans-serif;
+  --font-mono: "Cascadia Code", "Consolas", monospace;
+  --font-reader: "Noto Serif KR", Georgia, serif;
+
+  --nav-ratio: 1;
+  --canvas-ratio: 8;
+  --upload-ratio: 1;
+  --status-height: 26px;
+  --radius: 8px;
+  --shadow: 0 8px 32px rgba(0, 0, 0, 0.45);
+
+  --grade-f: #6b7280;
+  --grade-d: #60a5fa;
+  --grade-c: #4ade80;
+  --grade-b: #facc15;
+  --grade-a: #fb923c;
+  --grade-s: #c084fc;
+  --grade-ss: #f472b6;
+  --grade-sss: #f87171;
+}
+
+[data-theme="light"] {
+  --bg-app: #eef1f6;
+  --bg-panel: #ffffff;
+  --bg-nav: #f4f6fa;
+  --bg-hover: #e8ecf2;
+  --bg-input: #ffffff;
+  --bg-canvas: #fafbfc;
+  --border: #d4dae4;
+  --text: #1a2030;
+  --text-muted: #5c667a;
+  --text-dim: #8b95a8;
+}

@@ -1,0 +1,26 @@
+[data-theme="light"] .reader-content {
+  background: #fffef9;
+}
+
+[data-theme="light"] .reader-content.has-wallpaper-bg {
+  background: color-mix(in srgb, #fffef9 55%, transparent);
+}
+[data-save-state="saving"] #status-save::before {
+  content: "● ";
+  color: var(--color-warning);
+}
+
+[data-save-state="saved"] #status-save::before {
+  content: "● ";
+  color: var(--color-success);
+}
+
+[data-save-state="dirty"] #status-save::before {
+  content: "● ";
+  color: var(--color-warning);
+}
+
+[data-save-state="error"] #status-save::before {
+  content: "● ";
+  color: var(--color-danger);
+}
