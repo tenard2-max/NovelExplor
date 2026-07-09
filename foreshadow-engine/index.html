@@ -3,20 +3,22 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Fantasy Foreshadow Tool</title>
+  <meta name="description" content="NovelExplor — 인류 생존 프로젝트 복선·스토리·세계관 워크스페이스">
+  <title>NovelExplor — 복선·스토리 워크스페이스</title>
   <link rel="stylesheet" href="css/variables.css">
   <link rel="stylesheet" href="css/layout.css">
   <link rel="stylesheet" href="css/components.css">
   <link rel="stylesheet" href="css/themes.css">
 </head>
 <body data-theme="dark">
+  <!-- 레이아웃: 좌 네비(1) · 중 Canvas(8) · 우 파일(1) — layout.css 와 동일 -->
   <div id="app" class="app">
-    <!-- 좌측 1 : 메인 네비게이션 -->
+    <!-- 좌측: 메인 네비게이션 -->
     <aside class="nav-panel" aria-label="메인 메뉴">
       <div class="nav-brand">
         <span class="nav-logo">◈</span>
         <div>
-          <strong class="nav-title">Foreshadow</strong>
+          <strong class="nav-title">NovelExplor</strong>
           <small id="nav-project-name">프로젝트 없음</small>
         </div>
       </div>
@@ -81,7 +83,7 @@
       </div>
     </aside>
 
-    <!-- 중앙 8 : Canvas 메인 작업공간 -->
+    <!-- 중앙: Canvas 메인 작업공간 -->
     <main class="canvas-panel" aria-label="메인 작업공간">
       <header class="canvas-toolbar">
         <div class="canvas-toolbar-left">
@@ -136,9 +138,7 @@
           <div id="graph-legend" class="graph-legend"></div>
         </div>
 
-        <!-- 리스트/에디터/리더 뷰 -->
         <div id="workspace-layer" class="workspace-layer">
-          <!-- 스토리 네비게이터 + 에디터 분할 -->
           <div id="view-story-nav" class="workspace-view" hidden>
             <div class="split-pane">
               <div class="split-list" id="episode-list"></div>
@@ -225,7 +225,7 @@
       </footer>
     </main>
 
-    <!-- 우측 1 : 파일 업로드 -->
+    <!-- 우측: 파일 업로드 · 프로젝트 관리 -->
     <aside class="upload-panel" aria-label="파일 업로드">
       <div class="upload-header">
         <h2>파일</h2>
@@ -235,9 +235,10 @@
         <span class="drop-icon">⬆</span>
         <p>파일을 끌어다 놓으세요</p>
         <small>최대 100개 · 다중 선택 가능</small>
-        <small>설정: 00_*.md</small>
+        <small>NovelMD: 00_MASTER.md ~ 05_TIMELINE.md</small>
+        <small>시드 호환: 99_Master_DB.md, 01_Characters.md …</small>
         <small>소설: ST*.md · TXT</small>
-        <small>스토리: EP*.md</small>
+        <small>에피소드: EP*.md</small>
         <p id="drop-char-hint" class="drop-char-hint" hidden></p>
       </div>
 

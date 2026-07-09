@@ -1,62 +1,111 @@
-# 웹소설 네비게이터
+# NovelExplor
 
-첨부받은 Story Bible 문서를 기반으로 만든 Streamlit 앱입니다.
+**인류 생존 프로젝트** 웹소설의 Story Bible·에피소드·복선(떡밥)을 탐색·집필·관리하는 저장소입니다.
 
-## 제공 기능
+## 구성
+
+| 경로 | 역할 | 실행 |
+|------|------|------|
+| [`foreshadow-engine/`](foreshadow-engine/) | 복선·스토리·세계관 **집필 워크스페이스** (브라우저, IndexedDB) | Live Server → http://127.0.0.1:9000/index.html |
+| [`app.py`](app.py) | **웹소설 네비게이터** (Streamlit, 모바일·배포용) | `scripts/start_live_server.sh` → 포트 **8501** |
+| [`data/seed/`](data/seed/) | 공유 시드 MD · EP001~007 본문 | 두 앱 모두 참조 |
+
+- 집필·복선 관리·그래프: 저장소 루트 [`index.html`](index.html) → `foreshadow-engine/` 로드
+- 휴대폰에서 1~100화 읽기·인물·투자 로드맵: **Streamlit 앱**
+
+## 제공 기능 (Streamlit)
 
 - 인물 선택 네비게이터
-- **소설 1~100화 선택 읽기** (이전/다음 화, 이어보기 저장)
-- 인물 관계도(모바일 안전 SVG + 관계 표)
+- 소설 1~100화 선택 읽기 (이전/다음 화, 이어보기 저장)
+- 인물 관계도 (모바일 SVG + 관계 표)
 - 중요 이슈 / 투자 로드맵 / 통장잔고 / 적 리스트
 - 마스터 MD / 스토리 MD / Story Bible ZIP 활성 파일 전환
 - 모바일 대응 UI
 
+## 제공 기능 (Foreshadow Engine)
+
+- NovelMD 형식 마스터·Story Bible·세계관·복선·인물·타임라인
+- EP/ST/TXT/MD Import · JSON Export
+- 에디터·리더·복선 분석·Canvas 그래프
+- 자세한 내용: [foreshadow-engine/README.md](foreshadow-engine/README.md)
+
 ---
 
-## 라이브 서버 배포 (GitHub 연동, 권장)
+## 라이브 서버 배포 (Streamlit, GitHub 연동)
 
-요청하신 방식대로 휴대폰 로컬 실행이 아닌 **GitHub 기반 라이브 서버 배포**를 기본으로 사용하세요.
+### Render에서 배포
 
-### 1) GitHub에 브랜치 푸시
+저장소 루트의 `render.yaml`을 연결하면 Streamlit 앱이 배포됩니다.
 
-현재 배포용 브랜치:
-
-- `cursor/story-bible-navigator-0854`
-
-### 2) Render에서 배포
-
-저장소 루트에 `render.yaml`이 준비되어 있으므로, Render에서 이 저장소를 연결하면 바로 배포할 수 있습니다.
-
-- 배포 설정 파일: `render.yaml`
+- 배포 설정: `render.yaml`
 - 실행 스크립트: `scripts/start_live_server.sh`
 
-### 3) 접속
+배포 완료 후 발급되는 Render URL로 접속합니다.
 
-배포 완료 후 발급되는 Render URL을 사용하면 상시 접속 가능합니다.
+> Free 플랜은 비활성 후 슬립이 있을 수 있습니다.
 
-> 참고: free 플랜은 비활성 후 슬립이 있을 수 있습니다.  
-> 완전한 24/7 상시는 유료 플랜 또는 항상 켜진 서버를 사용하세요.
+### Foreshadow Engine (로컬 집필 · Live Server)
+
+저장소 루트 **`index.html`** 에서 **Go Live** (포트 **9000**)
+
+```
+http://127.0.0.1:9000/index.html
+```
+
+루트 `index.html`이 `foreshadow-engine/`의 CSS·JS를 불러옵니다.
+
+> IndexedDB는 `127.0.0.1:9000` origin에 저장됩니다.
 
 ---
 
-## 로컬 실행(개발용)
+## 로컬 실행 (개발용)
+
+### Streamlit 네비게이터
 
 ```bash
 pip install -r requirements.txt
 ./scripts/start_live_server.sh
 ```
 
+### Foreshadow Engine (Live Server · 권장)
+
+저장소 루트 **`index.html`** → **Go Live** (포트 **9000**)
+
+```
+http://127.0.0.1:9000/index.html
+```
+
+설정: `.vscode/settings.json` (`port: 9000`, `root: /`)
+
+### Foreshadow Engine (Python 대안)
+
+Live Server 없을 때 — **같은 포트 9000** 사용 (IndexedDB 유지)
+
+```bash
+cd D:\Cursor\NovelExplor
+python -m http.server 9000 --bind 127.0.0.1
+```
+
+접속: `http://127.0.0.1:9000/index.html`  
+`localhost`가 아닌 **`127.0.0.1`** 로 접속해야 기존 저장 데이터와 일치합니다.
+
 ---
 
 ## 데이터 저장 위치
 
-- 기본 시드 문서: `data/seed/`
-- 업로드 문서: `data/uploads/`
-- 활성 파일 설정: `data/active_files.json`
-- 통장 거래 내역: `data/ledger.json`
-- 화별 본문(시드): `data/seed/episodes/EP001.md` ~ `EP100.md`
-- 화별 본문(업로드): `data/uploads/episodes/`
-- 마지막 읽은 화: `data/reading_progress.json`
+| 데이터 | 경로 |
+|--------|------|
+| 기본 시드 문서 | `data/seed/` |
+| 화별 본문 (시드) | `data/seed/episodes/EP001.md` ~ |
+| 업로드 문서 | `data/uploads/` |
+| 활성 파일 설정 | `data/active_files.json` |
+| 통장 거래 내역 | `data/ledger.json` |
+| 마지막 읽은 화 | `data/reading_progress.json` |
+| Foreshadow 프로젝트 | 브라우저 IndexedDB (origin별 분리) |
 
-> 주의: 대부분의 클라우드 런타임은 파일시스템이 영구 저장소가 아닙니다.  
-> 런타임 재시작 시 업로드 파일이 유실될 수 있으므로, 중요한 파일은 GitHub 또는 외부 스토리지에 별도 백업하세요.
+> 클라우드 런타임(Streamlit)은 파일시스템이 영구 저장소가 아닙니다. 중요한 파일은 JSON Export 또는 Git으로 백업하세요.
+
+## 설계 문서
+
+- `_foreshadow_docs/` — UI·데이터 모델·Import·로드맵 명세
+- `foreshadow-engine/TODO.md` — 구현 진행 체크리스트

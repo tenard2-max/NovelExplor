@@ -22,6 +22,7 @@ import {
 } from './foreshadow/engine.js';
 import { classifyImportFilename, FORESHADOW_GRADES } from './core/utils.js';
 import * as storage from './core/storage.js';
+import { showDialog, showAlert } from './ui/dialog.js';
 
 async function boot() {
   initNav();
@@ -47,7 +48,26 @@ async function boot() {
   } else {
     await project.createProject('인류 생존 프로젝트', true);
   }
+  warnIfWrongOrigin();
   switchView('master');
+}
+
+/** IndexedDB는 host:port(origin)별로 분리됨 — 9000 고정 안내 */
+function warnIfWrongOrigin() {
+  const { hostname, port, href } = window.location;
+  const expectedPort = '9000';
+  if (hostname === '127.0.0.1' && port && port !== expectedPort) {
+    console.warn(
+      `[NovelExplor] 현재 포트 ${port} — 저장 데이터는 127.0.0.1:${expectedPort} 에 있습니다. ` +
+      `Live Server 포트를 ${expectedPort}으로 맞추고 http://127.0.0.1:${expectedPort}/index.html 로 접속하세요.`
+    );
+  }
+  if (hostname === 'localhost' && port === expectedPort) {
+    console.warn(
+      '[NovelExplor] localhost 와 127.0.0.1 은 IndexedDB가 다릅니다. ' +
+      `http://127.0.0.1:${expectedPort}/index.html 로 접속하세요. (현재: ${href})`
+    );
+  }
 }
 
 function initActions() {
@@ -82,7 +102,7 @@ function initActions() {
 
   bindAction('analyze-foreshadow', runForeshadowAnalysis);
   bindAction('add-foreshadow', addForeshadowFromSelection);
-  bindAction('about', () => showAlert('Fantasy Foreshadow Tool', '판타지 소설 복선(떡밥) 관리 도구'));
+  bindAction('about', () => showAlert('NovelExplor', '인류 생존 프로젝트 — 복선·스토리·세계관 워크스페이스'));
 
   const savedTheme = localStorage.getItem('fft-theme');
   if (savedTheme) document.body.dataset.theme = savedTheme;
