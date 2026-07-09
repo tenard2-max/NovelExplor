@@ -5,8 +5,6 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <meta name="description" content="NovelExplor — 인류 생존 프로젝트 복선·스토리·세계관 워크스페이스">
   <title>NovelExplor — 복선·스토리 워크스페이스</title>
-  <!-- 저장소 루트 진입점: foreshadow-engine/ 앱 리소스를 이 경로 기준으로 로드 -->
-  <base href="foreshadow-engine/">
   <link rel="stylesheet" href="css/variables.css">
   <link rel="stylesheet" href="css/layout.css">
   <link rel="stylesheet" href="css/components.css">
@@ -107,6 +105,12 @@
               <input type="range" id="wp-size" min="30" max="200" value="100" aria-label="월페이퍼 크기">
               <span id="wp-size-val" class="wp-gauge-val">100%</span>
             </label>
+          </div>
+          <div id="character-controls" class="character-controls" hidden>
+            <button type="button" class="btn-sm" data-action="character-add"
+                    title="새 인물을 직접 추가">＋ 인물 추가</button>
+            <button type="button" class="btn-sm char-btn-danger" data-action="character-delete"
+                    title="선택한 인물 삭제">🗑 인물 삭제</button>
             <button type="button" class="btn-sm" data-action="character-autoadd"
                     title="EP 문서를 검색해 등장인물을 자동 추가">👥 인물 자동추가</button>
           </div>
@@ -185,6 +189,7 @@
           <header class="char-panel-header">
             <strong id="char-panel-name">캐릭터</strong>
             <div class="char-panel-actions">
+              <button type="button" class="btn-sm" data-action="char-edit" title="인물 정보 수정">✏ 수정</button>
               <button type="button" class="btn-sm char-btn-danger" data-action="char-delete" title="인물 삭제">🗑 삭제</button>
               <button class="icon-btn" data-action="close-char-panel" title="닫기">✕</button>
             </div>
@@ -210,7 +215,62 @@
             </div>
             <div id="char-gallery" class="char-gallery"></div>
 
-            <dl id="char-panel-desc" class="char-panel-desc"></dl>
+            <div id="char-panel-info" class="char-panel-info">
+              <dl id="char-panel-desc" class="char-panel-desc"></dl>
+              <form id="char-panel-form" class="char-panel-form" hidden>
+                <label class="char-form-field">
+                  <span class="char-form-label">이름</span>
+                  <input type="text" id="char-edit-name" class="char-form-input" maxlength="40" required>
+                </label>
+                <label class="char-form-field">
+                  <span class="char-form-label">종족</span>
+                  <input type="text" id="char-edit-race" class="char-form-input" maxlength="30" placeholder="예: 인간, AI">
+                </label>
+                <label class="char-form-field">
+                  <span class="char-form-label">성별</span>
+                  <select id="char-edit-gender" class="char-form-input">
+                    <option value="">—</option>
+                    <option value="M">남</option>
+                    <option value="F">여</option>
+                    <option value="O">기타</option>
+                  </select>
+                </label>
+                <label class="char-form-field">
+                  <span class="char-form-label">나이</span>
+                  <input type="number" id="char-edit-age" class="char-form-input" min="0" max="999" placeholder="0">
+                </label>
+                <label class="char-form-field">
+                  <span class="char-form-label">직업</span>
+                  <input type="text" id="char-edit-occupation" class="char-form-input" maxlength="40">
+                </label>
+                <label class="char-form-field">
+                  <span class="char-form-label">상태</span>
+                  <select id="char-edit-status" class="char-form-input">
+                    <option value="Alive">생존</option>
+                    <option value="Dead">사망</option>
+                    <option value="Unknown">불명</option>
+                  </select>
+                </label>
+                <div class="char-form-row">
+                  <label class="char-form-field">
+                    <span class="char-form-label">첫 등장 EP</span>
+                    <input type="number" id="char-edit-first-ep" class="char-form-input" min="0" max="9999">
+                  </label>
+                  <label class="char-form-field">
+                    <span class="char-form-label">마지막 EP</span>
+                    <input type="number" id="char-edit-last-ep" class="char-form-input" min="0" max="9999">
+                  </label>
+                </div>
+                <label class="char-form-field">
+                  <span class="char-form-label">설명</span>
+                  <textarea id="char-edit-desc" class="char-form-input" rows="4"></textarea>
+                </label>
+                <div class="char-form-actions">
+                  <button type="button" class="btn-sm" data-action="char-edit-save">저장</button>
+                  <button type="button" class="btn-sm" data-action="char-edit-cancel">취소</button>
+                </div>
+              </form>
+            </div>
           </div>
         </aside>
       </div>
@@ -254,6 +314,13 @@
       </div>
 
       <div class="upload-section">
+        <h3>백업</h3>
+        <button class="upload-btn full" data-action="backup-download">💾 백업 저장 (파일)</button>
+        <button class="upload-btn full" data-action="backup-restore">📥 백업 복원</button>
+        <p id="backup-status" class="backup-status">로컬 백업: —</p>
+      </div>
+
+      <div class="upload-section">
         <h3>프로젝트</h3>
         <button class="upload-btn full" data-action="new-project">＋ 새 프로젝트</button>
         <button class="upload-btn full" data-action="open-project">📂 프로젝트 열기</button>
@@ -291,6 +358,7 @@
   </dialog>
 
   <input type="file" id="import-file" accept=".json,.txt,.md,.zip" multiple hidden>
+  <input type="file" id="backup-file" accept=".json,application/json" hidden>
   <input type="file" id="wallpaper-file" accept="image/*" hidden>
   <input type="file" id="character-avatar-file" accept="image/*" hidden>
   <input type="file" id="character-images-file" accept="image/*" multiple hidden>

@@ -213,7 +213,8 @@ body {
   gap: 4px 8px;
 }
 
-.wallpaper-controls {
+.wallpaper-controls,
+.character-controls {
   display: flex;
   align-items: center;
   gap: 8px;
@@ -222,6 +223,10 @@ body {
   border: 1px solid var(--border);
   border-radius: var(--radius);
   background: var(--bg-input);
+}
+
+.character-controls[hidden] {
+  display: none;
 }
 
 .wp-gauge {
@@ -730,6 +735,13 @@ body {
 .import-log-empty {
   color: var(--text-dim);
   font-style: italic;
+}
+
+.backup-status {
+  margin: 8px 0 0;
+  font-size: 11px;
+  color: var(--text-dim);
+  line-height: 1.4;
 }
 
 .workspace-info {
