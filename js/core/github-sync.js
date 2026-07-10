@@ -1,7 +1,8 @@
 /** GitHub 동기화 — JSON 스냅샷 분리 + PNG/MD/TXT 개별 커밋 */
 
 import { buildBackupPayload, timestampBackupFilename } from './backup.js';
-import { putRepoFiles } from './github-api.js';
+import { commitRepoFiles } from './github-api.js';
+import { buildSectionXmlFiles } from './xml-section-writer.js';
 import {
   getGithubConfig,
   hasGithubToken,
@@ -102,7 +103,14 @@ export async function syncProjectToGithub({ snapshotId, reason = 'save' } = {}) 
       });
     }
 
-    await putRepoFiles(files, `NovelExplor: ${reason}`);
+    for (const xml of buildSectionXmlFiles(payload, cfg)) {
+      files.push({ repoPath: xml.repoPath, content: xml.content });
+    }
+
+    const commitMsg = uploadOnly
+      ? `NovelExplor: ${reason} (${files.length} files)`
+      : `NovelExplor: ${reason} snapshot ${stamp} (${files.length} files)`;
+    await commitRepoFiles(files, commitMsg);
 
     if (uploadOnly) {
       setUploadVersionStamp(stamp);

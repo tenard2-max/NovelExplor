@@ -324,8 +324,9 @@
       <div class="upload-section">
         <h3>GitHub</h3>
         <p class="local-db-hint">
-          PAT(<code>repo</code>)로 저장·적용·업로드 시<br>
-          <code>data/workspace/snapshots/</code> + 자산 분리 커밋
+          PAT(<code>repo</code>)로 Push/Pull<br>
+          <code>snapshots/</code> + <code>overlays/</code> + section XML<br>
+          (한 커밋에 묶어서 반영)
         </p>
         <label class="github-field">
           <span>Token</span>
@@ -345,7 +346,8 @@
         </label>
         <button type="button" class="upload-btn full" data-action="github-save">GitHub 설정 저장</button>
         <button type="button" class="upload-btn full" data-action="github-test">연결 테스트</button>
-        <button type="button" class="upload-btn full" data-action="github-sync-now">지금 GitHub 동기화</button>
+        <button type="button" class="upload-btn full" data-action="github-sync-now">지금 GitHub Push</button>
+        <button type="button" class="upload-btn full" data-action="github-pull">GitHub에서 Pull</button>
         <p id="github-status" class="backup-status">미연결</p>
       </div>
 

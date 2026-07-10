@@ -9,6 +9,7 @@ import {
 } from '../core/github-config.js';
 import { testGithubConnection } from '../core/github-api.js';
 import { syncProjectToGithub } from '../core/github-sync.js';
+import { pullProjectFromGithubWithAlert } from '../core/github-pull.js';
 import { refreshNavVersionsFromGithub } from '../app-version.js';
 import { showAlert } from './dialog.js';
 
@@ -21,6 +22,7 @@ export function initGithubPanel() {
   const saveBtn = document.querySelector('[data-action="github-save"]');
   const testBtn = document.querySelector('[data-action="github-test"]');
   const syncBtn = document.querySelector('[data-action="github-sync-now"]');
+  const pullBtn = document.querySelector('[data-action="github-pull"]');
 
   if (!tokenEl) return;
 
@@ -63,16 +65,36 @@ export function initGithubPanel() {
     try {
       if (!hasGithubToken()) throw new Error('토큰을 먼저 저장하세요.');
       syncBtn.disabled = true;
+      if (pullBtn) pullBtn.disabled = true;
       updateGithubStatus(statusEl, '동기화 중…');
       const result = await syncProjectToGithub({ reason: 'manual' });
       updateGithubStatus(statusEl, result
-        ? `완료: ${result.snapshotId}.json (${result.fileCount}파일)`
+        ? `완료: ${result.snapshotId}.json (${result.fileCount}파일, 1커밋)`
         : '완료');
       await refreshNavVersionsFromGithub();
     } catch (err) {
       updateGithubStatus(statusEl, `실패: ${err.message}`);
     } finally {
       syncBtn.disabled = false;
+      if (pullBtn) pullBtn.disabled = false;
+    }
+  });
+
+  pullBtn?.addEventListener('click', async () => {
+    try {
+      if (!hasGithubToken()) throw new Error('토큰을 먼저 저장하세요.');
+      pullBtn.disabled = true;
+      if (syncBtn) syncBtn.disabled = true;
+      updateGithubStatus(statusEl, 'Pull 중…');
+      const id = await pullProjectFromGithubWithAlert();
+      updateGithubStatus(statusEl, id
+        ? `Pull 완료: ${id}.json`
+        : '취소됨');
+    } catch (err) {
+      updateGithubStatus(statusEl, `Pull 실패: ${err.message}`);
+    } finally {
+      pullBtn.disabled = false;
+      if (syncBtn) syncBtn.disabled = false;
     }
   });
 }
