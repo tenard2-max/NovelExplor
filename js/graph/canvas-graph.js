@@ -33,6 +33,8 @@ let linkPickFirst = null;
 const avatarImages = new Map();
 /** 드래그로 옮긴 좌표 — rebuild 시에도 유지, 「위치 저장」으로 DB 반영 */
 const sessionPositions = new Map();
+/** 이름/직업 라벨 방향 — right|left|below|above */
+const sessionLabelSides = new Map();
 /** 비동기 build 경쟁 방지 — 최신 요청만 노드/엣지를 반영 */
 let buildGeneration = 0;
 const CLICK_THRESHOLD = 6;
@@ -63,6 +65,8 @@ export function initGraph() {
 
   on('project:loaded', () => {
     avatarImages.clear();
+    sessionPositions.clear();
+    sessionLabelSides.clear();
     if (isGraphVisible()) buildAndDraw();
   });
 
@@ -388,6 +392,7 @@ async function buildCharacterGraph(cache, gen) {
     if (session) return session;
     const stored = saved[id];
     if (stored && Number.isFinite(stored.x) && Number.isFinite(stored.y)) {
+      if (stored.labelSide) sessionLabelSides.set(id, stored.labelSide);
       return { x: stored.x, y: stored.y };
     }
     return { x: fallbackX, y: fallbackY };
@@ -571,8 +576,9 @@ function draw() {
     ctx.setLineDash([]);
   }
 
+  const labelLayouts = mode === 'character' ? resolveAllCharacterLabels() : new Map();
   for (const n of nodes) {
-    drawNode(n);
+    drawNode(n, labelLayouts.get(n.id) || null);
   }
 
   ctx.restore();
@@ -581,6 +587,220 @@ function draw() {
 function nodeCardHeight(n) {
   if (!n) return CHARACTER_GRAPH.outerR * 2;
   return (Number(n.r) || CHARACTER_GRAPH.outerR) * 2;
+}
+
+function measureTextSize(text, font) {
+  ctx.font = font;
+  const m = String(font).match(/(\d+(?:\.\d+)?)px/);
+  return {
+    w: ctx.measureText(text).width,
+    h: m ? Number(m[1]) : 14,
+  };
+}
+
+function rectsOverlap(a, b, pad = 4) {
+  return !(
+    a.x + a.w + pad <= b.x
+    || b.x + b.w + pad <= a.x
+    || a.y + a.h + pad <= b.y
+    || b.y + b.h + pad <= a.y
+  );
+}
+
+function nodeBodyRect(n) {
+  const r = n.r || 20;
+  if (n.shape === 'square') {
+    return { x: n.x - r, y: n.y - r, w: r * 2, h: r * 2 };
+  }
+  return { x: n.x - r, y: n.y - r, w: r * 2, h: r * 2 };
+}
+
+/** 이름+직업 블록의 후보 배치 (카드 기준 4방향) */
+function buildLabelCandidate(n, side) {
+  const isSquare = n.shape === 'square';
+  const nameText = truncate(n.label, isSquare ? 12 : 8);
+  const subText = n.sub ? truncate(n.sub, isSquare ? 18 : 16) : '';
+  const nameFont = isSquare
+    ? '700 22px sans-serif'
+    : `600 ${Math.max(18, n.r * 0.45)}px sans-serif`;
+  const subFont = isSquare
+    ? '16px sans-serif'
+    : `${Math.max(14, n.r * 0.32)}px sans-serif`;
+  const nameSize = measureTextSize(nameText, nameFont);
+  const subSize = subText ? measureTextSize(subText, subFont) : { w: 0, h: 0 };
+  const gap = 8;
+  const lineGap = isSquare ? 8 : 4;
+  const blockW = Math.max(nameSize.w, subSize.w) + 4;
+  const blockH = nameSize.h + (subText ? lineGap + subSize.h : 0);
+  const r = n.r || 20;
+  let boxX;
+  let boxY;
+  let align = 'left';
+
+  if (side === 'right') {
+    boxX = n.x + r + gap;
+    boxY = n.y - blockH / 2;
+    align = 'left';
+  } else if (side === 'left') {
+    boxX = n.x - r - gap - blockW;
+    boxY = n.y - blockH / 2;
+    align = 'right';
+  } else if (side === 'above') {
+    boxX = n.x - blockW / 2;
+    boxY = n.y - r - gap - blockH;
+    align = 'center';
+  } else {
+    // below
+    boxX = n.x - blockW / 2;
+    boxY = n.y + r + gap;
+    align = 'center';
+  }
+
+  const nameX = align === 'left' ? boxX
+    : align === 'right' ? boxX + blockW
+      : boxX + blockW / 2;
+  const nameY = boxY;
+  const subX = nameX;
+  const subY = boxY + nameSize.h + lineGap;
+
+  return {
+    side,
+    align,
+    box: { x: boxX, y: boxY, w: blockW, h: blockH },
+    nameText,
+    subText,
+    nameFont,
+    subFont,
+    nameX,
+    nameY,
+    subX,
+    subY,
+  };
+}
+
+function scoreLabelCandidate(n, candidate, placed, edgePaths) {
+  let score = 0;
+  const { box, side } = candidate;
+  const cx = box.x + box.w / 2;
+  const cy = box.y + box.h / 2;
+
+  // 관계선 관통 페널티 (중심 + 샘플 점)
+  const samples = [
+    [cx, cy],
+    [box.x + 4, cy],
+    [box.x + box.w - 4, cy],
+    [cx, box.y + 4],
+    [cx, box.y + box.h - 4],
+  ];
+  for (const path of edgePaths) {
+    for (const [px, py] of samples) {
+      const d = distToPolyline(px, py, path);
+      if (d < 8) score += 70;
+      else if (d < 16) score += 25;
+    }
+  }
+
+  // 다른 카드 본체와 겹침
+  for (const other of nodes) {
+    if (other.type !== 'character' || other.id === n.id) continue;
+    if (rectsOverlap(box, nodeBodyRect(other), 6)) score += 100;
+  }
+
+  // 이미 배치된 라벨과 겹침
+  for (const p of placed) {
+    if (rectsOverlap(box, p.box, 6)) score += 90;
+  }
+
+  // 선호: 사각은 below, 원형은 below(선이 중심을 지남) → right → left → above
+  const prefer = n.shape === 'square'
+    ? ['below', 'right', 'left', 'above']
+    : ['below', 'above', 'right', 'left'];
+  score += prefer.indexOf(side) * 3;
+  return score;
+}
+
+/**
+ * 모든 인물 카드의 이름/직업 방향을 충돌 최소로 결정
+ * @returns {Map<string, object>}
+ */
+function resolveAllCharacterLabels() {
+  const layouts = new Map();
+  if (mode !== 'character' || !ctx) return layouts;
+
+  const chars = nodes.filter((n) => n.type === 'character');
+  const edgePaths = edges.map((e) => getCharacterEdgePath(e));
+  const order = [...chars].sort((a, b) => (a.x - b.x) || (a.y - b.y));
+  const placed = [];
+
+  for (const n of order) {
+    const preferred = sessionLabelSides.get(n.id);
+    const sides = preferred
+      ? [preferred, 'below', 'above', 'right', 'left']
+      : (n.shape === 'square'
+        ? ['below', 'right', 'left', 'above']
+        : ['below', 'above', 'right', 'left']);
+    const uniq = [...new Set(sides)];
+    let best = null;
+    let bestScore = Infinity;
+    for (const side of uniq) {
+      const cand = buildLabelCandidate(n, side);
+      const score = scoreLabelCandidate(n, cand, placed, edgePaths);
+      if (score < bestScore) {
+        bestScore = score;
+        best = cand;
+      }
+    }
+    if (best) {
+      layouts.set(n.id, best);
+      placed.push(best);
+      sessionLabelSides.set(n.id, best.side);
+    }
+  }
+  return layouts;
+}
+
+/**
+ * 라벨·카드 겹침이 남으면 카드를 살짝 밀어 분리 (위치 저장 시)
+ * @returns {number} 이동한 카드 수
+ */
+function separateOverlappingCharacterCards(maxIter = 12) {
+  const chars = nodes.filter((n) => n.type === 'character');
+  let moved = 0;
+  for (let iter = 0; iter < maxIter; iter += 1) {
+    const layouts = resolveAllCharacterLabels();
+    let hit = false;
+    for (let i = 0; i < chars.length; i += 1) {
+      for (let j = i + 1; j < chars.length; j += 1) {
+        const a = chars[i];
+        const b = chars[j];
+        const la = layouts.get(a.id);
+        const lb = layouts.get(b.id);
+        const bodyA = nodeBodyRect(a);
+        const bodyB = nodeBodyRect(b);
+        const conflict =
+          (la && lb && rectsOverlap(la.box, lb.box, 8))
+          || (la && rectsOverlap(la.box, bodyB, 8))
+          || (lb && rectsOverlap(lb.box, bodyA, 8))
+          || rectsOverlap(bodyA, bodyB, 4);
+        if (!conflict) continue;
+        hit = true;
+        const dx = b.x - a.x || 0.01;
+        const dy = b.y - a.y || 0.01;
+        const len = Math.hypot(dx, dy) || 1;
+        const push = 18;
+        a.x -= (dx / len) * push;
+        a.y -= (dy / len) * push;
+        b.x += (dx / len) * push;
+        b.y += (dy / len) * push;
+        sessionPositions.set(a.id, { x: a.x, y: a.y });
+        sessionPositions.set(b.id, { x: b.x, y: b.y });
+        moved += 1;
+      }
+    }
+    if (!hit) break;
+  }
+  resolveAllCharacterLabels();
+  return moved;
 }
 
 /**
@@ -677,34 +897,9 @@ function drawEdgeLabel(e, path) {
   ctx.fillText(label, lx, ly);
 }
 
-/** 텍스트 박스 중심이 관계선과 가까우면 true */
-function labelOverlapsEdges(cx, cy, halfW, halfH) {
-  const threshold = Math.max(6, Math.min(halfW, halfH) + 4);
-  for (const e of edges) {
-    const path = mode === 'character'
-      ? getCharacterEdgePath(e)
-      : [{ x: e.from.x, y: e.from.y }, { x: e.to.x, y: e.to.y }];
-    if (distToPolyline(cx, cy, path) <= threshold) return true;
-  }
-  return false;
-}
+/** 텍스트 박스 중심이 관계선과 가까우면 true — 미사용 제거됨 */
 
-/**
- * 이름/부제 텍스트 그리기 — 줄과 겹치면 줄 우선, 텍스트는 오른쪽으로 이동
- * @returns {{ x: number, align: CanvasTextAlign }}
- */
-function resolveLabelPlacement(preferredX, preferredY, text, font) {
-  ctx.font = font;
-  const tw = ctx.measureText(text).width;
-  const halfW = tw / 2;
-  const halfH = 10;
-  if (!labelOverlapsEdges(preferredX, preferredY, halfW, halfH)) {
-    return { x: preferredX, align: 'center' };
-  }
-  return { x: preferredX + halfW + 10, align: 'left' };
-}
-
-function drawNode(n) {
+function drawNode(n, labelLayout = null) {
   const isCharacter = n.type === 'character';
   const isSquare = n.shape === 'square';
   const hasAvatar = isCharacter && n.data?.avatarDataUrl;
@@ -731,7 +926,6 @@ function drawNode(n) {
       ctx.clip();
       ctx.imageSmoothingEnabled = true;
       ctx.imageSmoothingQuality = 'high';
-      // contain: 원본 일러스트가 잘리지 않도록 전체 표시
       const iw = img.naturalWidth;
       const ih = img.naturalHeight;
       const s = Math.min(size / iw, size / ih);
@@ -753,37 +947,11 @@ function drawNode(n) {
     ctx.stroke();
     ctx.restore();
 
-    const nameY = cy + r + 16;
-    const nameText = truncate(n.label, 12);
-    const nameFont = '700 22px sans-serif';
-    const namePlace = mode === 'character'
-      ? resolveLabelPlacement(cx, nameY + 11, nameText, nameFont)
-      : { x: cx, align: 'center' };
-    ctx.fillStyle = '#fff';
-    ctx.font = nameFont;
-    ctx.textAlign = namePlace.align;
-    ctx.textBaseline = 'top';
-    ctx.fillText(nameText, namePlace.x, nameY);
-    if (n.sub) {
-      const subText = truncate(n.sub, 18);
-      const subFont = '16px sans-serif';
-      const subY = nameY + 28;
-      const subPlace = mode === 'character'
-        ? resolveLabelPlacement(cx, subY + 8, subText, subFont)
-        : { x: cx, align: 'center' };
-      // 이름과 부제는 같은 정렬축 유지
-      const subX = namePlace.align === 'left' ? namePlace.x : subPlace.x;
-      const subAlign = namePlace.align === 'left' ? 'left' : subPlace.align;
-      ctx.fillStyle = 'rgba(255,255,255,0.7)';
-      ctx.font = subFont;
-      ctx.textAlign = subAlign;
-      ctx.fillText(subText, subX, subY);
-    }
+    drawCharacterNameSub(n, labelLayout, true);
     return;
   }
 
   const strokeW = isCharacter ? 3 : 2;
-  const subOffset = isCharacter ? 20 : 10;
 
   ctx.beginPath();
   ctx.arc(cx, cy, r, 0, Math.PI * 2);
@@ -793,44 +961,39 @@ function drawNode(n) {
   ctx.lineWidth = strokeW;
   ctx.stroke();
 
-  const nameText = truncate(n.label, 8);
-  const nameFont = `600 ${Math.max(isCharacter ? 18 : 10, r * 0.45)}px sans-serif`;
-  // 인물 원형 노드: 관계선이 중심을 지나므로 이름은 항상 오른쪽
-  let nameX = cx;
-  let nameAlign = 'center';
   if (isCharacter && mode === 'character') {
-    nameX = cx + r + 10;
-    nameAlign = 'left';
-  } else if (mode === 'character') {
-    const place = resolveLabelPlacement(cx, cy, nameText, nameFont);
-    nameX = place.x;
-    nameAlign = place.align;
+    drawCharacterNameSub(n, labelLayout, false);
+    return;
   }
-  ctx.fillStyle = '#fff';
-  ctx.font = nameFont;
-  ctx.textAlign = nameAlign;
-  ctx.textBaseline = 'middle';
-  ctx.fillText(nameText, nameX, cy);
 
+  const nameText = truncate(n.label, 8);
+  ctx.fillStyle = '#fff';
+  ctx.font = `600 ${Math.max(10, r * 0.45)}px sans-serif`;
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  ctx.fillText(nameText, cx, cy);
   if (n.sub) {
-    const subText = String(n.sub);
-    const subFont = `${Math.max(isCharacter ? 14 : 8, r * 0.32)}px sans-serif`;
-    const subY = Math.round(cy + r + subOffset);
-    let subX = cx;
-    let subAlign = 'center';
-    if (isCharacter && mode === 'character') {
-      subX = nameX;
-      subAlign = 'left';
-    } else if (mode === 'character') {
-      const place = resolveLabelPlacement(cx, subY + 6, subText, subFont);
-      subX = place.x;
-      subAlign = place.align;
-    }
     ctx.fillStyle = 'rgba(255,255,255,0.7)';
-    ctx.font = subFont;
-    ctx.textAlign = subAlign;
+    ctx.font = `${Math.max(8, r * 0.32)}px sans-serif`;
     ctx.textBaseline = 'top';
-    ctx.fillText(subText, subX, subY);
+    ctx.fillText(n.sub, cx, Math.round(cy + r + 10));
+  }
+}
+
+function drawCharacterNameSub(n, layout, isSquare) {
+  const fallback = buildLabelCandidate(n, isSquare ? 'below' : 'below');
+  const L = layout || fallback;
+  ctx.fillStyle = '#fff';
+  ctx.font = L.nameFont;
+  ctx.textAlign = L.align;
+  ctx.textBaseline = 'top';
+  ctx.fillText(L.nameText, L.nameX, L.nameY);
+  if (L.subText) {
+    ctx.fillStyle = 'rgba(255,255,255,0.7)';
+    ctx.font = L.subFont;
+    ctx.textAlign = L.align;
+    ctx.textBaseline = 'top';
+    ctx.fillText(L.subText, L.subX, L.subY);
   }
 }
 
@@ -1207,19 +1370,32 @@ async function saveCharacterLayout() {
     await showAlert('위치 저장', '인물 관계도 화면에서만 저장할 수 있습니다.');
     return;
   }
+
+  // 이름·직업이 다른 카드/관계선과 겹치지 않도록 카드 분리 + 라벨 방향 재계산
+  const nudged = separateOverlappingCharacterCards();
+  const layouts = resolveAllCharacterLabels();
+
   const positions = {};
   for (const n of nodes) {
     if (n.type !== 'character') continue;
-    positions[n.id] = { x: n.x, y: n.y };
+    const side = layouts.get(n.id)?.side || sessionLabelSides.get(n.id) || 'below';
+    positions[n.id] = { x: n.x, y: n.y, labelSide: side };
     sessionPositions.set(n.id, { x: n.x, y: n.y });
+    sessionLabelSides.set(n.id, side);
   }
+
   const ok = await project.saveCharacterLayout(positions);
   if (!ok) {
     await showAlert('위치 저장', '저장에 실패했습니다.');
     return;
   }
   autosave.markDirty();
-  await showAlert('위치 저장', `인물 ${Object.keys(positions).length}명의 좌표를 저장했습니다.`);
+  draw();
+  const extra = nudged ? ` · 겹침 해소 ${nudged}회` : '';
+  await showAlert(
+    '위치 저장',
+    `인물 ${Object.keys(positions).length}명의 좌표·라벨 방향을 저장했습니다.${extra}`
+  );
 }
 
 function escHtml(str) {
