@@ -615,8 +615,8 @@ function nodeBodyRect(n) {
   return { x: n.x - r, y: n.y - r, w: r * 2, h: r * 2 };
 }
 
-/** 이름+직업 블록의 후보 배치 (카드 기준 4방향) */
-function buildLabelCandidate(n, side) {
+/** 이름+직업 블록의 후보 배치 (카드 아래 / 라인·카드 오른쪽) */
+function buildLabelCandidate(n, side, overrideX = null) {
   const isSquare = n.shape === 'square';
   const nameText = truncate(n.label, isSquare ? 12 : 8);
   const subText = n.sub ? truncate(n.sub, isSquare ? 18 : 16) : '';
@@ -628,37 +628,29 @@ function buildLabelCandidate(n, side) {
     : `${Math.max(14, n.r * 0.32)}px sans-serif`;
   const nameSize = measureTextSize(nameText, nameFont);
   const subSize = subText ? measureTextSize(subText, subFont) : { w: 0, h: 0 };
-  const gap = 8;
+  const gap = 10;
   const lineGap = isSquare ? 8 : 4;
   const blockW = Math.max(nameSize.w, subSize.w) + 4;
   const blockH = nameSize.h + (subText ? lineGap + subSize.h : 0);
   const r = n.r || 20;
   let boxX;
   let boxY;
-  let align = 'left';
+  let align = 'center';
 
-  if (side === 'right') {
-    boxX = n.x + r + gap;
-    boxY = n.y - blockH / 2;
+  if (side === 'right' || side === 'right-of-line') {
+    const startX = overrideX != null ? overrideX : (n.x + r + gap);
+    boxX = startX;
+    // 카드 아래 높이와 맞춰 이름·직업이 카드 밑 라인 근처에서 읽히게
+    boxY = n.y + r + gap;
     align = 'left';
-  } else if (side === 'left') {
-    boxX = n.x - r - gap - blockW;
-    boxY = n.y - blockH / 2;
-    align = 'right';
-  } else if (side === 'above') {
-    boxX = n.x - blockW / 2;
-    boxY = n.y - r - gap - blockH;
-    align = 'center';
   } else {
-    // below
+    // below (기본)
     boxX = n.x - blockW / 2;
     boxY = n.y + r + gap;
     align = 'center';
   }
 
-  const nameX = align === 'left' ? boxX
-    : align === 'right' ? boxX + blockW
-      : boxX + blockW / 2;
+  const nameX = align === 'left' ? boxX : boxX + blockW / 2;
   const nameY = boxY;
   const subX = nameX;
   const subY = boxY + nameSize.h + lineGap;
@@ -678,49 +670,80 @@ function buildLabelCandidate(n, side) {
   };
 }
 
-function scoreLabelCandidate(n, candidate, placed, edgePaths) {
-  let score = 0;
-  const { box, side } = candidate;
-  const cx = box.x + box.w / 2;
-  const cy = box.y + box.h / 2;
-
-  // 관계선 관통 페널티 (중심 + 샘플 점)
-  const samples = [
-    [cx, cy],
-    [box.x + 4, cy],
-    [box.x + box.w - 4, cy],
-    [cx, box.y + 4],
-    [cx, box.y + box.h - 4],
-  ];
+/** 라벨 박스가 관계선과 겹치는지 (샘플 거리) */
+function labelBoxHitsEdges(box, edgePaths, threshold = 12) {
+  const samples = [];
+  const steps = 4;
+  for (let i = 0; i <= steps; i += 1) {
+    const t = i / steps;
+    samples.push([box.x + box.w * t, box.y + 2]);
+    samples.push([box.x + box.w * t, box.y + box.h / 2]);
+    samples.push([box.x + box.w * t, box.y + box.h - 2]);
+    samples.push([box.x + 2, box.y + box.h * t]);
+    samples.push([box.x + box.w - 2, box.y + box.h * t]);
+  }
   for (const path of edgePaths) {
     for (const [px, py] of samples) {
-      const d = distToPolyline(px, py, path);
-      if (d < 8) score += 70;
-      else if (d < 16) score += 25;
+      if (distToPolyline(px, py, path) <= threshold) return true;
     }
   }
+  return false;
+}
 
-  // 다른 카드 본체와 겹침
+function labelBoxHitsNodes(box, selfId) {
   for (const other of nodes) {
-    if (other.type !== 'character' || other.id === n.id) continue;
-    if (rectsOverlap(box, nodeBodyRect(other), 6)) score += 100;
+    if (other.type !== 'character' || other.id === selfId) continue;
+    if (rectsOverlap(box, nodeBodyRect(other), 8)) return true;
   }
+  return false;
+}
 
-  // 이미 배치된 라벨과 겹침
-  for (const p of placed) {
-    if (rectsOverlap(box, p.box, 6)) score += 90;
-  }
-
-  // 선호: 사각은 below, 원형은 below(선이 중심을 지남) → right → left → above
-  const prefer = n.shape === 'square'
-    ? ['below', 'right', 'left', 'above']
-    : ['below', 'above', 'right', 'left'];
-  score += prefer.indexOf(side) * 3;
-  return score;
+function labelBoxHitsPlaced(box, placed) {
+  return placed.some((p) => rectsOverlap(box, p.box, 8));
 }
 
 /**
- * 모든 인물 카드의 이름/직업 방향을 충돌 최소로 결정
+ * 라벨 영역 근처 관계선의 오른쪽 경계 X
+ * (수직선이면 그 선의 x, 아니면 최근접점 x)
+ */
+function rightEdgeXNearLabel(n, belowBox, edgePaths) {
+  let rightX = n.x + (n.r || 20);
+  const pad = 14;
+  const probes = [
+    [n.x, belowBox.y + belowBox.h / 2],
+    [n.x, belowBox.y],
+    [n.x, belowBox.y + belowBox.h],
+    [belowBox.x + belowBox.w / 2, belowBox.y + belowBox.h / 2],
+  ];
+
+  for (const path of edgePaths) {
+    for (let i = 0; i < path.length - 1; i += 1) {
+      const a = path[i];
+      const b = path[i + 1];
+      for (const [px, py] of probes) {
+        const d = distToSegment(px, py, a.x, a.y, b.x, b.y);
+        if (d > 28) continue;
+        // 수직에 가까운 구간: x 고정
+        if (Math.abs(a.x - b.x) <= 1) {
+          rightX = Math.max(rightX, a.x + pad);
+          continue;
+        }
+        // 최근접점의 x
+        const dx = b.x - a.x;
+        const dy = b.y - a.y;
+        const len2 = dx * dx + dy * dy || 1;
+        let t = ((px - a.x) * dx + (py - a.y) * dy) / len2;
+        t = Math.max(0, Math.min(1, t));
+        const qx = a.x + t * dx;
+        rightX = Math.max(rightX, qx + pad);
+      }
+    }
+  }
+  return rightX;
+}
+
+/**
+ * 기본: 카드 아래. 라인(또는 다른 카드)과 겹치면 라인 오른쪽에 표시.
  * @returns {Map<string, object>}
  */
 function resolveAllCharacterLabels() {
@@ -733,28 +756,30 @@ function resolveAllCharacterLabels() {
   const placed = [];
 
   for (const n of order) {
-    const preferred = sessionLabelSides.get(n.id);
-    const sides = preferred
-      ? [preferred, 'below', 'above', 'right', 'left']
-      : (n.shape === 'square'
-        ? ['below', 'right', 'left', 'above']
-        : ['below', 'above', 'right', 'left']);
-    const uniq = [...new Set(sides)];
-    let best = null;
-    let bestScore = Infinity;
-    for (const side of uniq) {
-      const cand = buildLabelCandidate(n, side);
-      const score = scoreLabelCandidate(n, cand, placed, edgePaths);
-      if (score < bestScore) {
-        bestScore = score;
-        best = cand;
+    let cand = buildLabelCandidate(n, 'below');
+    const hitsLine = labelBoxHitsEdges(cand.box, edgePaths);
+    const hitsNode = labelBoxHitsNodes(cand.box, n.id);
+    const hitsLabel = labelBoxHitsPlaced(cand.box, placed);
+
+    if (hitsLine || hitsNode || hitsLabel) {
+      let x = rightEdgeXNearLabel(n, cand.box, edgePaths);
+      // 다른 카드/라벨을 피할 때까지 오른쪽으로 밀기
+      for (let attempt = 0; attempt < 8; attempt += 1) {
+        cand = buildLabelCandidate(n, 'right-of-line', x);
+        if (
+          !labelBoxHitsEdges(cand.box, edgePaths, 10)
+          && !labelBoxHitsNodes(cand.box, n.id)
+          && !labelBoxHitsPlaced(cand.box, placed)
+        ) {
+          break;
+        }
+        x += 22;
       }
     }
-    if (best) {
-      layouts.set(n.id, best);
-      placed.push(best);
-      sessionLabelSides.set(n.id, best.side);
-    }
+
+    layouts.set(n.id, cand);
+    placed.push(cand);
+    sessionLabelSides.set(n.id, cand.side);
   }
   return layouts;
 }
