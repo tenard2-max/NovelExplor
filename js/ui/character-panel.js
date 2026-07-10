@@ -86,6 +86,7 @@ export async function openCharacterPanel(character) {
   renderPanel(ch);
   const panel = document.getElementById('character-panel');
   if (panel) panel.hidden = false;
+  setCharacterPanelOpen(true);
   // 우측 파일 섹션이 "선택된 인물에 이미지 등록"을 안내/처리할 수 있도록 알림
   emit('character:selection', { id: ch.id, name: ch.name || '' });
 }
@@ -95,7 +96,13 @@ export function closeCharacterPanel() {
   if (panel) panel.hidden = true;
   currentId = null;
   isEditing = false;
+  setCharacterPanelOpen(false);
   emit('character:selection', { id: null, name: '' });
+}
+
+/** 정보 패널이 열리면 카드 그리드가 패널 폭만큼 줄어들도록 canvas-body에 표시 */
+function setCharacterPanelOpen(open) {
+  document.querySelector('.canvas-body')?.classList.toggle('has-character-panel', open);
 }
 
 /** 확인 다이얼로그 후 인물을 삭제한다. 패널·목록 카드에서 공통 사용 */

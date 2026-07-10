@@ -841,8 +841,11 @@
 }
 
 /* ── 인물 관계도: 캐릭터 상세 패널 ── */
-.character-panel {
+.canvas-body {
   --character-panel-width: min(360px, 42%);
+}
+
+.character-panel {
   position: absolute;
   top: 0;
   right: 0;
@@ -861,10 +864,20 @@
   display: none;
 }
 
-/* 정보 패널이 열리면 카드 그리드가 패널 폭만큼 줄어 한 줄 카드 수가 1개 줄어듦 */
+/* 패널이 열리면 워크스페이스·카드 그리드가 패널 아래로 들어가지 않도록 폭을 줄임 */
+.canvas-body.has-character-panel .workspace-layer,
+.canvas-body.has-character-panel .graph-layer {
+  right: var(--character-panel-width);
+}
+
 .canvas-body.has-character-panel .list-content,
 .canvas-body.has-character-panel .xml-section-root {
-  padding-right: calc(min(360px, 42%) + 16px);
+  padding-right: 16px;
+  box-sizing: border-box;
+}
+
+.canvas-body.has-character-panel .xml-card-grid {
+  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
 }
 
 .char-panel-header {
