@@ -14,23 +14,7 @@ const AUTO_BACKUP_DELAY_MS = 3000;
 let autoBackupTimer = null;
 
 export function initBackup() {
-  document.querySelector('[data-action="backup-download"]')
-    ?.addEventListener('click', () => downloadBackupFile().catch(onBackupError));
-  document.querySelector('[data-action="backup-restore"]')
-    ?.addEventListener('click', () => document.getElementById('backup-file')?.click());
-
-  document.getElementById('backup-file')?.addEventListener('change', async (e) => {
-    const file = e.target.files?.[0];
-    e.target.value = '';
-    if (!file) return;
-    try {
-      const ok = await restoreFromBackupFile(file);
-      if (ok) refreshBackupStatus();
-    } catch (err) {
-      onBackupError(err);
-    }
-  });
-
+  // 백업 UI는 프로젝트 저장/열기에 통합됨. 상태 표시·자동 로컬 스냅샷만 유지.
   on('project:saved', () => scheduleAutoBackup());
   on('project:loaded', () => {
     refreshBackupStatus();
@@ -70,18 +54,47 @@ export async function offerLocalRecovery() {
 }
 
 export async function downloadBackupFile() {
+  return exportTimestampedBackup({ notify: true });
+}
+
+/** YYYYMMDDHHMMSS.json 파일명 */
+export function timestampBackupFilename(date = new Date()) {
+  const p = (n) => String(n).padStart(2, '0');
+  return (
+    `${date.getFullYear()}${p(date.getMonth() + 1)}${p(date.getDate())}` +
+    `${p(date.getHours())}${p(date.getMinutes())}${p(date.getSeconds())}.json`
+  );
+}
+
+/**
+ * 프로젝트 동기화 스냅샷: JSON 다운로드 + 브라우저 로컬 백업 갱신
+ * (깃허브에 올릴 수 있는 휴대용 DB 파일)
+ */
+export async function exportTimestampedBackup({ notify = false } = {}) {
   const json = await buildBackupJson();
   if (!json) throw new Error('열린 프로젝트가 없습니다.');
 
-  const proj = project.getCurrentProject();
-  const safeTitle = (proj.title || 'project').replace(/[^\w가-힣-]+/g, '_').slice(0, 30);
-  const stamp = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19);
-  downloadText(json, `ForeshadowBackup_${safeTitle}_${stamp}.json`);
-
-  // 파일 저장과 함께 로컬 백업도 갱신
+  const filename = timestampBackupFilename();
+  downloadText(json, filename);
   await saveLocalBackup();
-  refreshBackupStatus();
-  await showAlert('백업 저장', '백업 파일을 다운로드했습니다.\n브라우저 로컬 백업도 함께 갱신했습니다.');
+  refreshBackupStatus(filename);
+
+  if (notify) {
+    await showAlert(
+      '프로젝트 동기화',
+      `DB를 저장하고 백업 파일을 받았습니다.<br><code>${esc(filename)}</code><br>` +
+      '이 JSON을 깃허브에 올리면 다른 PC에서 「프로젝트 열기」로 복원할 수 있습니다.'
+    );
+  }
+  return filename;
+}
+
+/** JSON 백업 파일로 프로젝트 복원 (프로젝트 열기에서 사용) */
+export async function openBackupJsonFile(file) {
+  if (!file) return false;
+  const ok = await restoreFromBackupFile(file);
+  if (ok) refreshBackupStatus(file.name);
+  return ok;
 }
 
 export async function restoreFromBackupFile(file) {
@@ -100,8 +113,8 @@ export async function restoreFromBackupFile(file) {
   const when = formatBackupTime(data.exportedAt);
 
   const confirmed = await showDialog({
-    title: '백업 복원',
-    bodyHtml: `<p><strong>${esc(title)}</strong> 백업을 복원합니다.</p>
+    title: '프로젝트 열기 (JSON)',
+    bodyHtml: `<p><strong>${esc(title)}</strong> 동기화 파일을 엽니다.</p>
       <p>백업 시각: ${when}<br>복원 시 새 프로젝트로 추가됩니다. 계속할까요?</p>`,
   });
   if (!confirmed) return false;
@@ -160,20 +173,21 @@ export async function saveLocalBackup() {
   }
 }
 
-export function refreshBackupStatus() {
+export function refreshBackupStatus(lastFile = '') {
   const el = document.getElementById('backup-status');
   if (!el) return;
 
   const proj = project.getCurrentProject();
   const meta = readLocalBackupMeta();
   if (!proj || !meta || meta.projectId !== proj.projectId) {
-    el.textContent = '로컬 백업: 없음';
+    el.textContent = lastFile ? `최근 파일: ${lastFile}` : '최근 동기화: —';
     return;
   }
 
   const when = formatBackupTime(meta.exportedAt);
   const type = meta.backupType === 'lite' ? ' (경량)' : '';
-  el.textContent = `로컬 백업: ${when}${type}`;
+  const fileNote = lastFile ? ` · ${lastFile}` : '';
+  el.textContent = `최근 동기화: ${when}${type}${fileNote}`;
 }
 
 async function buildBackupJson({ lite = false } = {}) {

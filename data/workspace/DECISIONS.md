@@ -35,3 +35,10 @@
 
 - XML 카드 + IndexedDB 아바타/추가 인물 병합
 - PNG 등록은 캐릭터 패널 → IndexedDB (XML Avatar 미갱신)
+
+## UI: 프로젝트 통합 (2026-07-10)
+
+- 백업 메뉴 제거. **새 프로젝트 / 프로젝트 열기 / 프로젝트 저장** 만 유지
+- 저장·새 프로젝트·열기(목록) 시: IndexedDB 반영 + \YYYYMMDDHHMMSS.json\ 다운로드
+- 프로젝트 열기에서 \J\ → JSON 파일 복원 (깃허브/다른 PC 동기화)
+- XML은 계속 읽기 전용. JSON이 휴대용 DB 스냅샷

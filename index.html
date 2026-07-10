@@ -319,28 +319,16 @@
       </div>
 
       <div class="upload-section">
-        <h3>로컬 DB</h3>
-        <p class="local-db-hint">
-          <strong>XML은 고정(읽기 전용)</strong>입니다. 업로드·인물 PNG·DB 편집은
-          이 브라우저 IndexedDB에만 저장됩니다.<br>
-          GitHub에서 다시 받을 필요 없습니다.<br>
-          화면 = Pages XML 원본 + 로컬 DB 오버레이<br>
-          다른 PC로 옮길 때만 <strong>백업 저장/복원</strong>을 사용하세요.
-        </p>
-      </div>
-
-      <div class="upload-section">
-        <h3>백업</h3>
-        <button class="upload-btn full" data-action="backup-download">💾 백업 저장 (파일)</button>
-        <button class="upload-btn full" data-action="backup-restore">📥 백업 복원</button>
-        <p id="backup-status" class="backup-status">로컬 백업: —</p>
-      </div>
-
-      <div class="upload-section">
         <h3>프로젝트</h3>
+        <p class="local-db-hint">
+          <strong>저장</strong> = 이 브라우저 DB 반영 + <code>YYYYMMDDHHMMSS.json</code> 백업 파일 다운로드<br>
+          JSON은 깃허브/다른 PC로 옮길 때 쓰는 동기화 파일입니다.<br>
+          <strong>열기</strong> = 브라우저 프로젝트 선택, 또는 JSON 파일로 복원
+        </p>
         <button class="upload-btn full" data-action="new-project">＋ 새 프로젝트</button>
         <button class="upload-btn full" data-action="open-project">📂 프로젝트 열기</button>
         <button class="upload-btn full upload-btn-primary" data-action="save-project">💾 프로젝트 저장</button>
+        <p id="backup-status" class="backup-status">최근 동기화: —</p>
       </div>
 
       <div class="upload-section">
