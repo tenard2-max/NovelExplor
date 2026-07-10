@@ -130,8 +130,8 @@ export async function syncProjectToGithub({ snapshotId, reason = 'save' } = {}) 
       setJsonVersionStamp(stamp);
     }
     refreshNavVersions();
-    setNavSyncProgress(`완료 ${files.length}파일`);
-    progressClearTimer = setTimeout(() => clearNavSyncProgress(), 2500);
+    setNavSyncProgress(`완료 ${files.length}파일 (100%)`);
+    progressClearTimer = setTimeout(() => clearNavSyncProgress(), 6000);
     emit('github:sync-done', { snapshotId: stamp, fileCount: files.length, uploadOnly });
     return { snapshotId: stamp, fileCount: files.length, uploadId: uploadOnly ? stamp : undefined };
   } catch (err) {

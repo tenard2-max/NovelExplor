@@ -1,6 +1,6 @@
 /** 배포 빌드 버전 — 커밋·푸시 시 scripts/bump-version.js 로 갱신 */
 
-export const APP_BUILD = '20260710170905';
+export const APP_BUILD = '20260710171340';
 const JSON_VERSION_KEY = 'fft-json-version';
 const UPLOAD_VERSION_KEY = 'fft-upload-version';
 

@@ -260,7 +260,7 @@ export async function commitRepoFiles(files, message = 'NovelExplor sync', optio
     phase: 'done',
     done: total,
     total,
-    label: `완료 ${total}파일`,
+    label: `완료 ${total}파일 (100%)`,
   });
 
   return { commitSha: commit.sha, fileCount: files.length };
