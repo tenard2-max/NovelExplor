@@ -77,55 +77,122 @@ function shortPath(url) {
 function renderCharacterSection(doc, xmlUrl) {
   const xmlList = parseCharacters(doc);
   characterXmlUrl = xmlUrl;
-  characterXmlById = new Map(xmlList.map((c) => [c.id, c]));
 
   const xmlIds = new Set(xmlList.map((c) => c.id));
-  const idbOnly = (project.getCache().characters || [])
+  const idbChars = project.getCache().characters || [];
+
+  // XML 인물 + IndexedDB 오버레이 (DB 필드가 화면 우선 — XML은 고정 원본)
+  const mergedFromXml = xmlList.map((xmlChar) => {
+    const idb = project.findCharacterByXmlRef(xmlChar.id, xmlChar.name);
+    return mergeCharacterDisplay(xmlChar, idb, xmlUrl);
+  });
+
+  const idbOnly = idbChars
     .filter((c) => {
       const cid = c.characterId || String(c.id).split('-').pop();
       return !xmlIds.has(cid) && !xmlList.some((x) => x.name === c.name);
     })
-    .map((c) => ({
+    .map((c) => mergeCharacterDisplay({
       id: c.characterId || String(c.id).split('-').pop(),
-      name: c.name || '',
-      race: c.race || '',
-      gender: c.gender || '',
-      age: String(c.age || ''),
-      occupation: c.occupation || '',
-      firstEpisode: String(c.firstEpisode || ''),
-      lastEpisode: String(c.lastEpisode || ''),
-      status: c.status || '',
-      description: c.description || '',
+      name: '',
+      race: '',
+      gender: '',
+      age: '',
+      occupation: '',
+      firstEpisode: '',
+      lastEpisode: '',
+      status: '',
+      description: '',
       avatarSrc: '',
-      fromIdb: true,
-    }));
+    }, c, xmlUrl));
 
-  for (const c of idbOnly) characterXmlById.set(c.id, c);
+  characterXmlById = new Map([...mergedFromXml, ...idbOnly].map((c) => [c.id, c]));
 
-  const list = [...xmlList, ...idbOnly];
+  const list = [...mergedFromXml, ...idbOnly];
   if (!list.length) return '<p class="xml-section-empty">인물 없음</p>';
 
   const cards = list.map((c) => {
-    const idb = project.findCharacterByXmlRef(c.id, c.name);
-    const avatar = idb?.avatarDataUrl
-      || (c.avatarSrc ? resolveAssetUrl(c.avatarSrc, xmlUrl) : '');
-    const img = avatar
-      ? `<img class="xml-card-img" src="${escapeHtml(avatar)}" alt="">`
+    const img = c.avatarUrl
+      ? `<img class="xml-card-img" src="${escapeHtml(c.avatarUrl)}" alt="">`
       : '<div class="xml-card-img xml-card-img--empty">👤</div>';
-    const localTag = (c.fromIdb || idb?.avatarDataUrl) ? '<span class="xml-card-local">로컬</span>' : '';
+    const localTag = c.isLocal ? '<span class="xml-card-local">로컬</span>' : '';
     return `
       <article class="xml-card xml-card--character" data-id="${escapeHtml(c.id)}" role="button" tabindex="0" title="클릭하여 PNG 등록">
         ${img}
         <div class="xml-card-body">
           <h3>${escapeHtml(c.name)} <small>${escapeHtml(c.id)}</small> ${localTag}</h3>
-          <p class="xml-card-meta">${escapeHtml(c.race)} · EP${escapeHtml(c.firstEpisode)}~${escapeHtml(c.lastEpisode)}</p>
+          <p class="xml-card-meta">${escapeHtml(c.race)} · EP${escapeHtml(String(c.firstEpisode))}~${escapeHtml(String(c.lastEpisode))}</p>
           <p>${escapeHtml(c.description)}</p>
-          <p class="xml-card-hint">클릭 → 우측에서 PNG 등록 (XML 변경 없음)</p>
+          <p class="xml-card-hint">클릭 → 우측에서 PNG 등록 (XML 변경 없음 · 화면은 DB 우선)</p>
         </div>
       </article>`;
   }).join('');
 
   return `<div class="xml-card-grid">${cards}</div>`;
+}
+
+/**
+ * 화면용 인물 병합: IndexedDB가 있으면 텍스트·이미지 모두 DB 우선, XML은 폴백.
+ * @param {object} xmlChar
+ * @param {object | null} idb
+ * @param {string} xmlUrl
+ */
+export function mergeCharacterDisplay(xmlChar, idb, xmlUrl = '') {
+  const id = xmlChar?.id || idb?.characterId || '';
+  const pick = (idbVal, xmlVal) => {
+    if (idbVal !== undefined && idbVal !== null && String(idbVal).trim() !== '') return idbVal;
+    return xmlVal ?? '';
+  };
+
+  const name = String(pick(idb?.name, xmlChar?.name) || '');
+  const race = String(pick(idb?.race, xmlChar?.race) || '');
+  const description = String(pick(idb?.description, xmlChar?.description) || '');
+  const firstEpisode = String(pick(idb?.firstEpisode, xmlChar?.firstEpisode) || '');
+  const lastEpisode = String(pick(idb?.lastEpisode, xmlChar?.lastEpisode) || '');
+  const gender = String(pick(idb?.gender, xmlChar?.gender) || '');
+  const age = String(pick(idb?.age, xmlChar?.age) || '');
+  const occupation = String(pick(idb?.occupation, xmlChar?.occupation) || '');
+  const status = String(pick(idb?.status, xmlChar?.status) || '');
+
+  const avatarUrl = idb?.avatarDataUrl
+    || (xmlChar?.avatarSrc && xmlUrl ? resolveAssetUrl(xmlChar.avatarSrc, xmlUrl) : '')
+    || (xmlChar?.avatarUrl || '');
+
+  const xmlName = xmlChar?.xmlSnapshot?.name ?? xmlChar?.name ?? '';
+  const xmlDesc = xmlChar?.xmlSnapshot?.description ?? xmlChar?.description ?? '';
+  const xmlRace = xmlChar?.xmlSnapshot?.race ?? xmlChar?.race ?? '';
+
+  const textDiffers = Boolean(idb) && (
+    (idb.name && idb.name !== xmlName)
+    || (idb.description && idb.description !== xmlDesc)
+    || (idb.race && idb.race !== xmlRace)
+    || Boolean(idb.avatarDataUrl)
+  );
+
+  const xmlSnapshot = xmlChar?.xmlSnapshot || {
+    name: xmlChar?.name || '',
+    race: xmlChar?.race || '',
+    description: xmlChar?.description || '',
+  };
+
+  return {
+    id,
+    name,
+    race,
+    gender,
+    age,
+    occupation,
+    firstEpisode,
+    lastEpisode,
+    status,
+    description,
+    avatarSrc: xmlChar?.avatarSrc || '',
+    avatarUrl,
+    xmlSnapshot,
+    fromIdb: !xmlName && Boolean(idb),
+    isLocal: Boolean(idb) && (textDiffers || !xmlName),
+    xmlId: xmlChar?.xmlId || xmlChar?.id || id,
+  };
 }
 
 function renderReaderSection(doc, xmlUrl) {
@@ -272,26 +339,65 @@ function bindCharacterCardActions(mountEl) {
     on('character:updated', (ch) => {
       const root = document.getElementById('xml-section-root');
       if (!root || !ch) return;
-      const xmlId = ch.characterId || String(ch.id).split('-').pop();
-      const card = root.querySelector(`.xml-card--character[data-id="${cssEscape(xmlId)}"]`);
-      if (!card || !ch.avatarDataUrl) return;
-      let img = card.querySelector('img.xml-card-img');
-      if (!img) {
-        const empty = card.querySelector('.xml-card-img--empty');
-        img = document.createElement('img');
-        img.className = 'xml-card-img';
-        empty?.replaceWith(img);
-      }
-      if (img) img.src = ch.avatarDataUrl;
+      patchCharacterCard(root, ch);
     });
   }
 }
 
-async function openXmlCharacter(xmlId, mountEl) {
-  const xmlChar = characterXmlById.get(xmlId);
-  if (!xmlChar) return;
+/** DB 갱신 직후 카드 텍스트·이미지를 즉시 반영 */
+function patchCharacterCard(root, ch) {
+  const xmlId = ch.characterId || String(ch.id).split('-').pop();
+  const card = root.querySelector(`.xml-card--character[data-id="${cssEscape(xmlId)}"]`);
+  if (!card) return;
 
-  const record = await project.ensureCharacterFromXml(xmlChar);
+  const merged = mergeCharacterDisplay(
+    characterXmlById.get(xmlId) || { id: xmlId },
+    ch,
+    characterXmlUrl
+  );
+  characterXmlById.set(xmlId, merged);
+
+  const title = card.querySelector('h3');
+  if (title) {
+    const local = merged.isLocal ? ' <span class="xml-card-local">로컬</span>' : '';
+    title.innerHTML = `${escapeHtml(merged.name)} <small>${escapeHtml(merged.id)}</small>${local}`;
+  }
+  const meta = card.querySelector('.xml-card-meta');
+  if (meta) {
+    meta.textContent = `${merged.race} · EP${merged.firstEpisode}~${merged.lastEpisode}`;
+  }
+  const desc = card.querySelector('.xml-card-body > p:not(.xml-card-meta):not(.xml-card-hint)');
+  if (desc) desc.textContent = merged.description;
+
+  if (merged.avatarUrl) {
+    let img = card.querySelector('img.xml-card-img');
+    if (!img) {
+      const empty = card.querySelector('.xml-card-img--empty');
+      img = document.createElement('img');
+      img.className = 'xml-card-img';
+      empty?.replaceWith(img);
+    }
+    if (img) img.src = merged.avatarUrl;
+  }
+}
+
+async function openXmlCharacter(xmlId, mountEl) {
+  const display = characterXmlById.get(xmlId);
+  if (!display) return;
+
+  // ensure에는 XML id 기준으로 조회 (표시용 병합 객체도 id 동일)
+  const record = await project.ensureCharacterFromXml({
+    id: display.xmlId || display.id,
+    name: display.name,
+    race: display.race,
+    gender: display.gender,
+    age: display.age,
+    occupation: display.occupation,
+    firstEpisode: display.firstEpisode,
+    lastEpisode: display.lastEpisode,
+    status: display.status,
+    description: display.description,
+  });
   if (!record) {
     console.warn('[section-canvas] 인물 IndexedDB 동기화 실패', xmlId);
     return;
