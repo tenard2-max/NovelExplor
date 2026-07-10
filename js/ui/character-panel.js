@@ -176,11 +176,12 @@ function renderPanel(ch) {
   if (hasAvatar) {
     img.src = ch.avatarDataUrl;
     img.hidden = false;
+    if (empty) empty.hidden = true;
   } else {
     img.removeAttribute('src');
     img.hidden = true;
+    if (empty) empty.hidden = false;
   }
-  empty.hidden = true;
   actions.hidden = hasAvatar;
 
   renderGallery(ch);

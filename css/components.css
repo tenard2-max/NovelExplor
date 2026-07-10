@@ -760,6 +760,11 @@
   display: flex;
   flex-direction: column;
   gap: 14px;
+  align-items: stretch;
+}
+
+.char-panel-body > * {
+  flex-shrink: 0;
 }
 
 .char-avatar-box {
@@ -847,6 +852,9 @@
   display: flex;
   flex-direction: column;
   gap: 8px;
+  margin-top: 4px;
+  padding-top: 4px;
+  border-top: 1px solid var(--border);
 }
 
 .char-panel-form {
@@ -965,6 +973,8 @@
   grid-template-columns: repeat(3, 1fr);
   gap: 8px;
   min-height: 56px;
+  /* flex 패널 안에서 높이 축소되면 썸네일이 정보 영역과 겹침 */
+  width: 100%;
   border: 1px dashed transparent;
   border-radius: 10px;
   transition: border-color 0.15s, background 0.15s;
@@ -988,6 +998,8 @@
 .char-gallery-item {
   position: relative;
   aspect-ratio: 1 / 1;
+  width: 100%;
+  min-height: 0;
   border-radius: 8px;
   overflow: hidden;
   background: rgba(255, 255, 255, 0.04);
