@@ -669,6 +669,82 @@ export async function updateCharacter(character) {
 
 }
 
+/** XML CHR id / 이름으로 IndexedDB 인물 조회 */
+export function findCharacterByXmlRef(xmlId, name = '') {
+  const chars = cache.characters || [];
+  if (xmlId) {
+    const byId = chars.find(
+      (c) => c.characterId === xmlId
+        || c.id === xmlId
+        || String(c.id).endsWith(`-${xmlId}`)
+    );
+    if (byId) return byId;
+  }
+  if (name) {
+    return chars.find((c) => c.name === name) || null;
+  }
+  return null;
+}
+
+/**
+ * 섹션 XML 인물 클릭 시 IndexedDB 레코드를 보장한다 (PNG 등록 패널용).
+ * 없으면 characterId를 유지한 채 생성한다.
+ */
+export async function ensureCharacterFromXml(xmlChar) {
+  if (!xmlChar?.id && !xmlChar?.name) return null;
+
+  const existing = findCharacterByXmlRef(xmlChar.id, xmlChar.name);
+  if (existing) {
+    // XML 메타가 더 최신이면 비어 있는 필드만 보강
+    const patched = {
+      ...existing,
+      name: existing.name || xmlChar.name || '',
+      race: existing.race || xmlChar.race || '',
+      gender: existing.gender || xmlChar.gender || '',
+      age: existing.age || Number(xmlChar.age) || 0,
+      occupation: existing.occupation || xmlChar.occupation || '',
+      description: existing.description || xmlChar.description || '',
+      firstEpisode: existing.firstEpisode || Number(xmlChar.firstEpisode) || 0,
+      lastEpisode: existing.lastEpisode || Number(xmlChar.lastEpisode) || 0,
+      status: existing.status || xmlChar.status || 'Alive',
+      updatedAt: nowIso(),
+    };
+    const changed = JSON.stringify(patched) !== JSON.stringify(existing);
+    if (changed) await updateCharacter(patched);
+    return findCharacterByXmlRef(xmlChar.id, xmlChar.name);
+  }
+
+  const proj = getCurrentProject();
+  if (!proj) return null;
+
+  const characterId = xmlChar.id || `CHR${String((cache.characters?.length || 0) + 1).padStart(4, '0')}`;
+  const record = {
+    id: `${proj.projectId}-${characterId}`,
+    projectId: proj.projectId,
+    characterId,
+    name: xmlChar.name || characterId,
+    alias: [],
+    race: xmlChar.race || '',
+    gender: xmlChar.gender || '',
+    age: Number(xmlChar.age) || 0,
+    occupation: xmlChar.occupation || '',
+    description: xmlChar.description || '',
+    ability: [],
+    firstEpisode: Number(xmlChar.firstEpisode) || 0,
+    lastEpisode: Number(xmlChar.lastEpisode) || 0,
+    status: xmlChar.status || 'Alive',
+    images: [],
+    avatarDataUrl: '',
+    createdAt: nowIso(),
+    updatedAt: nowIso(),
+  };
+
+  cache.characters.push(record);
+  await storage.put('characters', record);
+  emit('character:updated', record);
+  return record;
+}
+
 // 새 인물을 생성해 저장한다. characterId는 CHR#### 형식으로 자동 증가.
 export async function addCharacter(data = {}) {
   const proj = getCurrentProject();

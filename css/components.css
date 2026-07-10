@@ -1203,6 +1203,26 @@
   background: var(--bg-panel);
 }
 
+.xml-card--character {
+  cursor: pointer;
+  transition: border-color 0.15s ease, box-shadow 0.15s ease;
+}
+
+.xml-card--character:hover {
+  border-color: var(--accent, #3b82f6);
+}
+
+.xml-card--character.is-selected {
+  border-color: var(--accent, #3b82f6);
+  box-shadow: 0 0 0 1px var(--accent, #3b82f6);
+}
+
+.xml-card-hint {
+  margin: 6px 0 0;
+  font-size: 11px;
+  color: var(--text-dim);
+}
+
 .xml-card-img {
   width: 72px;
   height: 72px;

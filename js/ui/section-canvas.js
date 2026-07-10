@@ -10,6 +10,14 @@ import {
   parseMasterFields,
 } from '../core/workspace-xml.js';
 import { escapeHtml } from '../core/utils.js';
+import * as project from '../core/project.js';
+import { openCharacterPanel } from './character-panel.js';
+import { on } from '../core/events.js';
+
+/** 인물 XML 카드 클릭용 메타 (id → xml 필드) */
+let characterXmlById = new Map();
+let characterXmlUrl = '';
+let characterActionsBound = false;
 
 /**
  * @param {string} viewId
@@ -68,19 +76,26 @@ function shortPath(url) {
 
 function renderCharacterSection(doc, xmlUrl) {
   const list = parseCharacters(doc);
+  characterXmlUrl = xmlUrl;
+  characterXmlById = new Map(list.map((c) => [c.id, c]));
+
   if (!list.length) return '<p class="xml-section-empty">인물 없음</p>';
 
   const cards = list.map((c) => {
-    const img = c.avatarSrc
-      ? `<img class="xml-card-img" src="${escapeHtml(resolveAssetUrl(c.avatarSrc, xmlUrl))}" alt="">`
+    const idb = project.findCharacterByXmlRef(c.id, c.name);
+    const avatar = idb?.avatarDataUrl
+      || (c.avatarSrc ? resolveAssetUrl(c.avatarSrc, xmlUrl) : '');
+    const img = avatar
+      ? `<img class="xml-card-img" src="${escapeHtml(avatar)}" alt="">`
       : '<div class="xml-card-img xml-card-img--empty">👤</div>';
     return `
-      <article class="xml-card" data-id="${escapeHtml(c.id)}">
+      <article class="xml-card xml-card--character" data-id="${escapeHtml(c.id)}" role="button" tabindex="0" title="클릭하여 PNG 등록">
         ${img}
         <div class="xml-card-body">
           <h3>${escapeHtml(c.name)} <small>${escapeHtml(c.id)}</small></h3>
           <p class="xml-card-meta">${escapeHtml(c.race)} · EP${escapeHtml(c.firstEpisode)}~${escapeHtml(c.lastEpisode)}</p>
           <p>${escapeHtml(c.description)}</p>
+          <p class="xml-card-hint">클릭 → 우측에서 PNG 등록</p>
         </div>
       </article>`;
   }).join('');
@@ -169,7 +184,7 @@ function renderStoryNavSection(doc, xmlUrl) {
   return `<div class="xml-tl-list">${rows}</div>`;
 }
 
-/** 마운트 후 MD 미리보기 / 소설 행 클릭 바인딩 */
+/** 마운트 후 MD 미리보기 / 소설 행 / 인물 카드 클릭 바인딩 */
 export function bindSectionCanvasActions(mountEl) {
   if (!mountEl) return;
 
@@ -211,4 +226,60 @@ export function bindSectionCanvasActions(mountEl) {
       }
     });
   });
+
+  bindCharacterCardActions(mountEl);
+}
+
+function bindCharacterCardActions(mountEl) {
+  mountEl.querySelectorAll('.xml-card--character').forEach((card) => {
+    const activate = () => openXmlCharacter(card.dataset.id, mountEl);
+    card.addEventListener('click', activate);
+    card.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter' || e.key === ' ') {
+        e.preventDefault();
+        activate();
+      }
+    });
+  });
+
+  if (!characterActionsBound) {
+    characterActionsBound = true;
+    on('character:updated', (ch) => {
+      const root = document.getElementById('xml-section-root');
+      if (!root || !ch) return;
+      const xmlId = ch.characterId || String(ch.id).split('-').pop();
+      const card = root.querySelector(`.xml-card--character[data-id="${cssEscape(xmlId)}"]`);
+      if (!card || !ch.avatarDataUrl) return;
+      let img = card.querySelector('img.xml-card-img');
+      if (!img) {
+        const empty = card.querySelector('.xml-card-img--empty');
+        img = document.createElement('img');
+        img.className = 'xml-card-img';
+        empty?.replaceWith(img);
+      }
+      if (img) img.src = ch.avatarDataUrl;
+    });
+  }
+}
+
+async function openXmlCharacter(xmlId, mountEl) {
+  const xmlChar = characterXmlById.get(xmlId);
+  if (!xmlChar) return;
+
+  const record = await project.ensureCharacterFromXml(xmlChar);
+  if (!record) {
+    console.warn('[section-canvas] 인물 IndexedDB 동기화 실패', xmlId);
+    return;
+  }
+
+  mountEl.querySelectorAll('.xml-card--character').forEach((c) => {
+    c.classList.toggle('is-selected', c.dataset.id === xmlId);
+  });
+
+  await openCharacterPanel(record);
+}
+
+function cssEscape(value) {
+  if (typeof CSS !== 'undefined' && CSS.escape) return CSS.escape(value);
+  return String(value).replace(/"/g, '\\"');
 }
