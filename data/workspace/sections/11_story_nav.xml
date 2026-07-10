@@ -1,19 +1,19 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<Section id="story-nav" viewId="story-nav" title="??? ?????" version="1">
+<Section id="story-nav" viewId="story-nav" title="스토리 네비게이터" version="1">
   <Episodes>
-    <Episode id="EP001" number="1" title="??? 1? � ?? � AI? ???"
+    <Episode id="EP001" number="1" title="마지막 1초 · 회귀 · AI폰 재기동"
              src="../../seed/episodes/EP001.md" mime="text/markdown"/>
-    <Episode id="EP002" number="2" title="?? ???? ?? � ?? ??? ??"
+    <Episode id="EP002" number="2" title="대학 친구들과 재회 · 미래 보스의 단서"
              src="../../seed/episodes/EP002.md" mime="text/markdown"/>
-    <Episode id="EP003" number="3" title="??? ?? � ???? ??? ??"
+    <Episode id="EP003" number="3" title="지은과 재회 · 잃어버린 청춘의 감정"
              src="../../seed/episodes/EP003.md" mime="text/markdown"/>
-    <Episode id="EP004" number="4" title="AI? ?? ?? � ? ?? ??"
+    <Episode id="EP004" number="4" title="AI와 일상 시작 · 첫 이상 징후"
              src="../../seed/episodes/EP004.md" mime="text/markdown"/>
-    <Episode id="EP005" number="5" title="??? ??? � AI? ??? ???"
+    <Episode id="EP005" number="5" title="민수의 맵부심 · AI의 유머와 인간성"
              src="../../seed/episodes/EP005.md" mime="text/markdown"/>
-    <Episode id="EP006" number="6" title="AI? ?? ?? ?? � ?? ?? ???? ??"
+    <Episode id="EP006" number="6" title="AI가 투자 계획 제시 · 인류 생존 프로젝트 시작"
              src="../../seed/episodes/EP006.md" mime="text/markdown"/>
-    <Episode id="EP007" number="7" title="????? ??? ?? � ? ?? ??"
+    <Episode id="EP007" number="7" title="아버지에게 투자금 확보 · 첫 자본 마련"
              src="../../seed/episodes/EP007.md" mime="text/markdown"/>
   </Episodes>
 </Section>

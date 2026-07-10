@@ -24,6 +24,7 @@ const VIEW_META = {
 /** XML 섹션 캔버스 뷰 — reader는 기존 view-reader(Q4=B) 사용 */
 const XML_CANVAS_VIEWS = new Set([
   'master', 'story-bible', 'world', 'foreshadow', 'character', 'timeline',
+  'story-nav', 'editor',
 ]);
 
 let currentView = 'master';
@@ -82,9 +83,7 @@ export function switchView(viewId) {
     return;
   }
 
-  if (viewId === 'story-nav' || viewId === 'editor') showView('view-story-nav');
-  else showView('view-list');
-
+  showView('view-list');
   emit('workspace:render', viewId);
 }
 

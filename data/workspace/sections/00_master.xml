@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<Section id="master" viewId="master" title="??? DB" version="1">
+<Section id="master" viewId="master" title="마스터 DB" version="1">
   <Meta>
-    <Field name="Title">?? ?? ????</Field>
+    <Field name="Title">인류 생존 프로젝트</Field>
     <Field name="TimelineStart">2005-03-02</Field>
     <Field name="OriginalTimeline">2080</Field>
     <Field name="StoryStatus">EP001~EP007</Field>
