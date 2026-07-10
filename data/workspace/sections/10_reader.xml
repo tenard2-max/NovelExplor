@@ -1,7 +1,6 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <Section id="reader" viewId="reader" title="소설 읽기" version="1">
   <Stories>
-    <Story id="ST014" number="14" title="이상한 진동" src="../overlays/stories/ST014.md" mime="text/markdown"/>
     <Story id="ST015" number="15" title="금이 간 벽" src="../overlays/stories/ST015.md" mime="text/markdown"/>
     <Story id="ST016" number="16" title="무너지는 공학관" src="../overlays/stories/ST016.md" mime="text/markdown"/>
   </Stories>

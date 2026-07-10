@@ -8,7 +8,7 @@
     </Character>
     <Character id="CHR0002" name="AI 폰" race="AI" gender="F" age="0" occupation="전략 AI" firstEpisode="1" lastEpisode="7" status="Alive">
       <Description>2080년 자기학습 AI, 노인 케어 성격</Description>
-      <Avatar src="../overlays/characters/CHR0002.png" mime="image/png"/>
+      <Avatar src="" mime="image/png"/>
       <Gallery/>
     </Character>
     <Character id="CHR0003" name="민수" race="인간" gender="M" age="20" occupation="대학생" firstEpisode="2" lastEpisode="7" status="Alive">
@@ -18,12 +18,12 @@
     </Character>
     <Character id="CHR0004" name="지은" race="인간" gender="F" age="20" occupation="대학생" firstEpisode="3" lastEpisode="7" status="Alive">
       <Description>첫사랑, 지켜야 할 평범한 인간</Description>
-      <Avatar src="../overlays/characters/CHR0004.png" mime="image/png"/>
+      <Avatar src="" mime="image/png"/>
       <Gallery/>
     </Character>
     <Character id="CHR0005" name="수아" race="인간" gender="F" age="20" occupation="대학생" firstEpisode="4" lastEpisode="7" status="Alive">
       <Description>지은의 친구, 후반 핵심 조력자</Description>
-      <Avatar src="../overlays/characters/CHR0005.png" mime="image/png"/>
+      <Avatar src="" mime="image/png"/>
       <Gallery/>
     </Character>
     <Character id="CHR0006" name="아버지" race="인간" gender="M" age="55" occupation="기업 오너" firstEpisode="7" lastEpisode="7" status="Alive">
