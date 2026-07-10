@@ -29,24 +29,32 @@ export async function renderSectionCanvas(viewId, mountEl) {
 
   mountEl.innerHTML = '<p class="xml-section-loading">섹션 XML 로드 중…</p>';
 
-  let payload;
+  let payload = null;
   try {
     payload = await loadSectionForView(viewId);
   } catch (err) {
-    mountEl.innerHTML = `<p class="xml-section-error">XML 로드 실패: ${escapeHtml(err.message)}</p>`;
-    return null;
+    // 타임라인·스토리 네비는 IndexedDB만으로도 표시 가능
+    if (viewId !== 'timeline' && viewId !== 'story-nav') {
+      mountEl.innerHTML = `<p class="xml-section-error">XML 로드 실패: ${escapeHtml(err.message)}</p>`;
+      return null;
+    }
   }
 
-  if (!payload) {
+  if (!payload && viewId !== 'timeline' && viewId !== 'story-nav') {
     mountEl.innerHTML = '<p class="xml-section-empty">이 뷰에 연결된 섹션 XML이 없습니다.</p>';
     return null;
   }
 
-  const { meta, doc, xmlUrl } = payload;
+  const meta = payload?.meta || {
+    id: viewId,
+    title: viewId === 'timeline' ? '타임라인' : '스토리 네비',
+  };
+  const doc = payload?.doc || null;
+  const xmlUrl = payload?.xmlUrl || '';
   const banner = `
     <div class="xml-section-banner" data-view="${escapeHtml(viewId)}">
-      <span class="xml-section-badge">XML</span>
-      <code class="xml-section-path">${escapeHtml(shortPath(xmlUrl))}</code>
+      <span class="xml-section-badge">${xmlUrl ? 'XML' : 'IDB'}</span>
+      <code class="xml-section-path">${escapeHtml(xmlUrl ? shortPath(xmlUrl) : 'IndexedDB')}</code>
       <span class="xml-section-title">${escapeHtml(meta.title)}</span>
     </div>`;
 
@@ -54,13 +62,16 @@ export async function renderSectionCanvas(viewId, mountEl) {
   if (viewId === 'character') body = renderCharacterSection(doc, xmlUrl);
   else if (viewId === 'reader') body = renderReaderSection(doc, xmlUrl);
   else if (viewId === 'foreshadow') body = renderForeshadowSection(doc);
-  else if (viewId === 'timeline') body = renderTimelineSection(doc);
+  else if (viewId === 'timeline') body = renderTimelineSectionFromIdb(doc);
   else if (viewId === 'master') body = renderMasterSection(doc, xmlUrl);
   else if (viewId === 'story-bible' || viewId === 'world') body = renderDocSection(doc, xmlUrl);
-  else if (viewId === 'story-nav') body = renderStoryNavSection(doc, xmlUrl);
+  else if (viewId === 'story-nav') body = renderStoryNavSectionFromIdb(doc, xmlUrl);
   else body = `<p class="xml-section-note">섹션 <strong>${escapeHtml(meta.id)}</strong> XML이 로드되었습니다.</p>`;
 
-  mountEl.innerHTML = banner + body;
+  const sourceNote = (viewId === 'timeline' || viewId === 'story-nav')
+    ? '<p class="xml-section-note">IndexedDB 기준 표시 · 스토리 동기화 시 XML도 자동 재생성됩니다.</p>'
+    : '';
+  mountEl.innerHTML = banner + sourceNote + body;
   return { xmlUrl, title: meta.title };
 }
 
@@ -231,6 +242,55 @@ function renderTimelineSection(doc) {
   return `<div class="xml-tl-list">${rows || '<p class="xml-section-empty">이벤트 없음</p>'}</div>`;
 }
 
+/** 타임라인: IndexedDB 우선, 없으면 XML 폴백 */
+function renderTimelineSectionFromIdb(doc) {
+  const idb = [...(project.getCache().timeline || [])]
+    .sort((a, b) => (a.episode - b.episode) || String(a.title).localeCompare(String(b.title)));
+  if (idb.length) {
+    const rows = idb.map((t) => `
+      <div class="xml-tl-row">
+        <span>EP${escapeHtml(String(t.episode).padStart(3, '0'))}</span>
+        <strong>${escapeHtml(t.title)}</strong>
+        <small>${escapeHtml(t.source === 'story-sync' ? (t.keywords || []).join('·') : (t.date || ''))}</small>
+      </div>`).join('');
+    return `<div class="xml-tl-list">${rows}</div>`;
+  }
+  if (doc) return renderTimelineSection(doc);
+  return '<p class="xml-section-empty">이벤트 없음 · 스토리 동기화로 생성할 수 있습니다.</p>';
+}
+
+function renderStoryNavSection(doc, xmlUrl) {
+  const eps = [...doc.querySelectorAll('Episodes > Episode')].map((el) => ({
+    id: el.getAttribute('id'),
+    number: el.getAttribute('number'),
+    title: el.getAttribute('title') || '',
+    src: el.getAttribute('src') || '',
+  }));
+  const rows = eps.map((e) => `
+    <div class="xml-tl-row">
+      <span>${escapeHtml(e.id)}</span>
+      <strong>${escapeHtml(e.title)}</strong>
+      <code>${escapeHtml(e.src.split('/').pop() || '')}</code>
+    </div>`).join('');
+  return `<div class="xml-tl-list">${rows}</div>`;
+}
+
+/** 스토리 네비: IndexedDB episodes 우선 */
+function renderStoryNavSectionFromIdb(doc, xmlUrl) {
+  const eps = [...(project.getCache().episodes || [])].sort((a, b) => a.number - b.number);
+  if (eps.length) {
+    const rows = eps.map((e) => `
+      <div class="xml-tl-row">
+        <span>EP${escapeHtml(String(e.number).padStart(3, '0'))}</span>
+        <strong>${escapeHtml(e.title || '')}</strong>
+        <code>${escapeHtml(e.textFile || '')}</code>
+      </div>`).join('');
+    return `<div class="xml-tl-list">${rows}</div>`;
+  }
+  if (doc) return renderStoryNavSection(doc, xmlUrl);
+  return '<p class="xml-section-empty">에피소드 없음 · ST 업로드 후 스토리 동기화를 실행하세요.</p>';
+}
+
 function renderMasterSection(doc, xmlUrl) {
   const fields = parseMasterFields(doc);
   const fieldHtml = Object.entries(fields).map(([k, v]) =>
@@ -254,22 +314,6 @@ function renderDocSection(doc, xmlUrl) {
     return `<button type="button" class="btn-sm" data-xml-doc="${escapeHtml(resolveAssetUrl(src, xmlUrl))}">${escapeHtml(id)}</button>`;
   }).join(' ');
   return `<div class="xml-doc-actions">${links}</div><article id="xml-doc-preview" class="xml-reader-body" hidden></article>`;
-}
-
-function renderStoryNavSection(doc, xmlUrl) {
-  const eps = [...doc.querySelectorAll('Episodes > Episode')].map((el) => ({
-    id: el.getAttribute('id'),
-    number: el.getAttribute('number'),
-    title: el.getAttribute('title') || '',
-    src: el.getAttribute('src') || '',
-  }));
-  const rows = eps.map((e) => `
-    <div class="xml-tl-row">
-      <span>${escapeHtml(e.id)}</span>
-      <strong>${escapeHtml(e.title)}</strong>
-      <code>${escapeHtml(e.src.split('/').pop() || '')}</code>
-    </div>`).join('');
-  return `<div class="xml-tl-list">${rows}</div>`;
 }
 
 /** 마운트 후 MD 미리보기 / 소설 행 / 인물 카드 클릭 바인딩 */

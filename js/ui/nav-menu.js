@@ -11,10 +11,10 @@ const VIEW_META = {
   'story-bible': { title: 'Story Bible', subtitle: 'sections/01_story_bible.xml' },
   world: { title: '세계관', subtitle: 'sections/02_world.xml' },
   reader: { title: '소설 읽기', subtitle: 'sections/10_reader.xml' },
-  'story-nav': { title: '스토리 네비게이터', subtitle: 'sections/11_story_nav.xml' },
+  'story-nav': { title: '스토리 네비게이터', subtitle: 'IndexedDB · XML 자동생성' },
   foreshadow: { title: '떡밥 회수', subtitle: 'sections/04_foreshadows.xml' },
   character: { title: '인물', subtitle: 'sections/03_characters.xml' },
-  timeline: { title: '타임라인', subtitle: 'sections/05_timeline.xml' },
+  timeline: { title: '타임라인', subtitle: 'IndexedDB · XML 자동생성' },
   editor: { title: '에디터', subtitle: 'sections/12_editor.xml' },
   'graph-foreshadow': { title: '복선 그래프', subtitle: 'Canvas' },
   'graph-character': { title: '인물 관계도', subtitle: 'Canvas' },
@@ -39,8 +39,13 @@ export function initNav() {
 
   on('project:loaded', updateBadges);
   on('project:loaded', () => {
-    // DB 로드 후 현재 뷰가 인물이면 카드(사진·정보)를 DB 기준으로 다시 그림
-    if (currentView === 'character') loadXmlCanvas('character');
+    // DB 로드 후 현재 뷰가 IDB 우선 섹션이면 다시 그림
+    if (currentView === 'character' || currentView === 'timeline' || currentView === 'story-nav') {
+      loadXmlCanvas(currentView);
+    }
+  });
+  on('timeline:updated', () => {
+    if (currentView === 'timeline') loadXmlCanvas('timeline');
   });
   on('character:updated', () => {
     updateBadges();

@@ -98,12 +98,40 @@ function buildTimelineXml(timeline = []) {
       + xmlAttr('episode', ev.episode)
       + xmlAttr('date', ev.date)
       + xmlAttr('title', ev.title)
+      + xmlAttr('source', ev.source || '')
       + `/>`;
   });
 
   return `<?xml version="1.0" encoding="UTF-8"?>\n`
     + `<Section id="timeline" viewId="timeline" title="타임라인" version="1">\n`
     + `  <Events>\n${rows.join('\n')}\n  </Events>\n`
+    + `</Section>\n`;
+}
+
+function buildStoryNavXml(episodes = [], files = []) {
+  const overlayFiles = overlayStoryPaths(files);
+  const sorted = [...episodes].sort((a, b) => (a.number || 0) - (b.number || 0));
+  const rows = sorted.map((ep) => {
+    const num = ep.number || 0;
+    const id = `EP${String(num).padStart(3, '0')}`;
+    const textFile = ep.textFile || `${padEpisode(num)}.md`;
+    let src = `../overlays/stories/${textFile}`;
+    const stName = `${padStory(num)}.md`;
+    if (overlayFiles.has(stName) || overlayFiles.has(`Story/Original/${stName}`)) {
+      src = `../overlays/stories/${stName}`;
+    } else if (overlayFiles.has(textFile) || overlayFiles.has(`Story/${textFile}`)) {
+      src = `../overlays/stories/${textFile}`;
+    }
+    return `    <Episode id="${escapeXml(id)}"`
+      + xmlAttr('number', num)
+      + xmlAttr('title', ep.title)
+      + xmlAttr('src', src)
+      + `/>`;
+  });
+
+  return `<?xml version="1.0" encoding="UTF-8"?>\n`
+    + `<Section id="story-nav" viewId="story-nav" title="스토리 네비" version="1">\n`
+    + `  <Episodes>\n${rows.join('\n')}\n  </Episodes>\n`
     + `</Section>\n`;
 }
 
@@ -227,6 +255,10 @@ export function buildSectionXmlFiles(payload, cfg) {
     {
       repoPath: `${root}/sections/10_reader.xml`,
       content: buildReaderXml(payload.stories, payload.files),
+    },
+    {
+      repoPath: `${root}/sections/11_story_nav.xml`,
+      content: buildStoryNavXml(payload.episodes, payload.files),
     },
     {
       repoPath: `${root}/workspace.xml`,

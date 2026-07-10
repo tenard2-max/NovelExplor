@@ -1085,6 +1085,94 @@ export async function saveCharacterLayout(positions = {}) {
   return true;
 }
 
+function nextTimelineEventId() {
+  const nums = (cache.timeline || [])
+    .map((t) => parseInt(String(t.eventId || '').replace(/\D/g, ''), 10))
+    .filter((n) => !Number.isNaN(n));
+  const next = (nums.length ? Math.max(...nums) : 0) + 1;
+  return `TL${String(next).padStart(4, '0')}`;
+}
+
+export async function addTimelineEvent(data = {}) {
+  const proj = getCurrentProject();
+  if (!proj) return null;
+
+  const eventId = data.eventId || nextTimelineEventId();
+  const record = {
+    id: `${proj.projectId}-${eventId}`,
+    projectId: proj.projectId,
+    eventId,
+    episode: Number(data.episode) || 0,
+    date: data.date || '',
+    title: data.title || '사건',
+    description: data.description || '',
+    characters: Array.isArray(data.characters) ? data.characters : [],
+    foreshadows: Array.isArray(data.foreshadows) ? data.foreshadows : [],
+    source: data.source || 'manual',
+    keywords: Array.isArray(data.keywords) ? data.keywords : [],
+    createdAt: nowIso(),
+    updatedAt: nowIso(),
+  };
+
+  cache.timeline.push(record);
+  cache.timeline.sort((a, b) => (a.episode - b.episode) || String(a.eventId).localeCompare(String(b.eventId)));
+  await storage.put('timeline', record);
+  emit('timeline:updated', record);
+  return record;
+}
+
+/** 스토리 동기화로 만든 타임라인만 제거하고 새 후보로 교체 */
+export async function replaceStorySyncTimeline(candidates = []) {
+  const proj = getCurrentProject();
+  if (!proj) return 0;
+
+  const keep = [];
+  for (const ev of cache.timeline || []) {
+    if (ev.source === 'story-sync') {
+      await storage.remove('timeline', ev.id);
+    } else {
+      keep.push(ev);
+    }
+  }
+  cache.timeline = keep;
+
+  let added = 0;
+  for (const c of candidates) {
+    const rec = await addTimelineEvent({
+      ...c,
+      source: 'story-sync',
+    });
+    if (rec) added += 1;
+  }
+  return added;
+}
+
+/** 인물 카드 MD를 IndexedDB files에 등록 (GitHub overlays/characters 로 동기화) */
+export async function upsertCharacterCardMarkdown(character, markdown) {
+  const proj = getCurrentProject();
+  if (!proj || !character) return null;
+
+  const cid = character.characterId || String(character.id || '').split('-').pop() || 'CHR0000';
+  const safeName = String(character.name || cid).replace(/[^\w가-힣\-]+/g, '_');
+  const filename = `${cid}_${safeName}.md`;
+  const path = `CharacterCards/${filename}`;
+  const record = {
+    id: `${proj.projectId}-file-${path}`,
+    projectId: proj.projectId,
+    path,
+    folder: 'CharacterCards',
+    content: markdown,
+    characterId: character.id,
+    updatedAt: nowIso(),
+  };
+
+  const idx = cache.files.findIndex((f) => f.path === path);
+  if (idx >= 0) cache.files[idx] = record;
+  else cache.files.push(record);
+  await storage.put('files', record);
+  return record;
+}
+
 export async function updateCharacterAvatar(characterId, avatarDataUrl) {
   const ch = cache.characters.find((c) => c.id === characterId);
   if (!ch) return null;

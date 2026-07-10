@@ -203,7 +203,12 @@ export function splitPayloadForGithub(payload, snapshotId) {
   for (const f of payload.files || []) {
     const name = basename(f.path || f.id || 'file.txt');
     const safe = name.replace(/[^\w.\-가-힣]/g, '_');
-    const sub = safe.match(/\.(md|txt)$/i) ? 'stories' : 'files';
+    let sub = 'files';
+    if (String(f.path || '').startsWith('CharacterCards/') || /^CHR\d+/i.test(safe)) {
+      sub = 'characters';
+    } else if (/\.(md|txt)$/i.test(safe)) {
+      sub = 'stories';
+    }
     const filePath = `${root}/${sub}/${safe}`;
     assetFiles.push({
       repoPath: filePath,
@@ -246,4 +251,5 @@ export function initGithubSync() {
   on('character:deleted', schedule('character-delete'));
   on('upload:committed', schedule('file-upload'));
   on('wallpaper:updated', schedule('wallpaper-upload'));
+  on('timeline:updated', schedule('change'));
 }

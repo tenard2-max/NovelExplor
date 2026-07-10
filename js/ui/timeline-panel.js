@@ -6,11 +6,12 @@ import * as project from '../core/project.js';
 export function initTimeline() {
   on('project:loaded', render);
   on('foreshadow:updated', render);
+  on('timeline:updated', render);
 
   document.getElementById('timeline-sort')?.addEventListener('change', render);
   document.querySelector('[data-action="toggle-timeline"]')?.addEventListener('click', () => {
     const panel = document.getElementById('timeline-panel');
-    panel.hidden = !panel.hidden;
+    if (panel) panel.hidden = !panel.hidden;
   });
 }
 

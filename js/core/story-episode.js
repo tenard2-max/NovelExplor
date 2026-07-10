@@ -5,7 +5,7 @@ import { nowIso, padEpisode, padStory, extractStoryReaderTitle, basename, parseS
 
 export function createEpisodeFromStory(story, projectId) {
   const textFile = `${padEpisode(story.number)}.md`;
-  const title = story.title || extractDocTitle(story.content, textFile);
+  const title = story.title || extractStoryReaderTitle(story.content, textFile);
   return {
     id: `${projectId}-ep-${story.number}`,
     projectId,
@@ -49,7 +49,11 @@ export function createEpisodeFileRecord(episode, projectId) {
   };
 }
 
-/** EP가 없으면 ST 소설을 참조해 EP 문서 생성 */
+/**
+ * ST를 원본으로 EP를 맞춘다.
+ * - EP 없으면 생성
+ * - EP 있으면 제목·본문을 ST 기준으로 항상 덮어씀
+ */
 export async function ensureEpisodesFromStories(cache, projectId) {
   if (!projectId || !cache.stories?.length) return false;
 
@@ -57,20 +61,45 @@ export async function ensureEpisodesFromStories(cache, projectId) {
   const stories = [...cache.stories].sort((a, b) => a.number - b.number);
 
   for (const story of stories) {
+    const title = story.title || extractStoryReaderTitle(story.content, story.textFile);
     let ep = cache.episodes.find((e) => e.number === story.number);
-    if (ep) continue;
 
-    ep = createEpisodeFromStory(story, projectId);
-    cache.episodes.push(ep);
-    await storage.put('episodes', ep);
+    if (!ep) {
+      ep = createEpisodeFromStory(story, projectId);
+      cache.episodes.push(ep);
+      await storage.put('episodes', ep);
+      changed = true;
+    } else {
+      const nextContent = story.content || '';
+      const nextTitle = title;
+      if (ep.content !== nextContent || ep.title !== nextTitle || ep.sourceStoryId !== story.id) {
+        ep = {
+          ...ep,
+          title: nextTitle,
+          content: nextContent,
+          originalContent: story.originalContent || nextContent,
+          sourceStoryId: story.id,
+          textFile: ep.textFile || `${padEpisode(story.number)}.md`,
+          updatedAt: nowIso(),
+        };
+        const idx = cache.episodes.findIndex((e) => e.id === ep.id);
+        if (idx >= 0) cache.episodes[idx] = ep;
+        await storage.put('episodes', ep);
+        changed = true;
+      }
+    }
 
     const epFile = createEpisodeFileRecord(ep, projectId);
-    const existingFile = cache.files.find((f) => f.path === epFile.path);
-    if (!existingFile) {
+    const fileIdx = cache.files.findIndex((f) => f.path === epFile.path);
+    if (fileIdx < 0) {
       cache.files.push(epFile);
       await storage.put('files', epFile);
+      changed = true;
+    } else if (cache.files[fileIdx].content !== epFile.content) {
+      cache.files[fileIdx] = { ...cache.files[fileIdx], ...epFile, id: cache.files[fileIdx].id };
+      await storage.put('files', cache.files[fileIdx]);
+      changed = true;
     }
-    changed = true;
   }
 
   if (changed) {

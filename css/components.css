@@ -842,11 +842,12 @@
 
 /* ── 인물 관계도: 캐릭터 상세 패널 ── */
 .character-panel {
+  --character-panel-width: min(360px, 42%);
   position: absolute;
   top: 0;
   right: 0;
   bottom: 0;
-  width: min(360px, 42%);
+  width: var(--character-panel-width);
   background: var(--bg-panel);
   border-left: 1px solid var(--border);
   box-shadow: var(--shadow);
@@ -858,6 +859,12 @@
 
 .character-panel[hidden] {
   display: none;
+}
+
+/* 정보 패널이 열리면 카드 그리드가 패널 폭만큼 줄어 한 줄 카드 수가 1개 줄어듦 */
+.canvas-body.has-character-panel .list-content,
+.canvas-body.has-character-panel .xml-section-root {
+  padding-right: calc(min(360px, 42%) + 16px);
 }
 
 .char-panel-header {
@@ -1262,6 +1269,17 @@
   flex: 0 0 auto;
   font-size: 12px;
   color: var(--text-muted, #94a3b8);
+}
+
+.sync-section-title {
+  margin: 14px 0 6px;
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--text, #e2e8f0);
+}
+
+.sync-section-title:first-of-type {
+  margin-top: 4px;
 }
 
 /* 인물 추가 다이얼로그 폼 */

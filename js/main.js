@@ -30,6 +30,8 @@ import { showDialog, showAlert } from './ui/dialog.js';
 import { refreshNavVersions, refreshNavVersionsFromGithub } from './app-version.js';
 import { initGithubPanel } from './ui/github-panel.js';
 import { initGithubSync } from './core/github-sync.js';
+import { initStorySync } from './ui/story-sync.js';
+import { initTimeline } from './ui/timeline-panel.js';
 
 async function boot() {
   initNav();
@@ -43,6 +45,8 @@ async function boot() {
   initCanvasWallpaper();
   initCharacterPanel();
   initCharacterActions();
+  initStorySync();
+  initTimeline();
   initActions();
   initBackup();
   initGithubSync();
