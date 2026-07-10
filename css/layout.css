@@ -69,7 +69,8 @@ body {
 }
 
 .nav-app-version,
-.nav-json-version {
+.nav-json-version,
+.nav-upload-version {
   display: block;
   margin-top: 2px;
   font-size: 10px;
@@ -78,7 +79,8 @@ body {
   letter-spacing: 0.02em;
 }
 
-.nav-json-version {
+.nav-json-version,
+.nav-upload-version {
   color: var(--text-muted, #9ca3af);
 }
 

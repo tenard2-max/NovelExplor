@@ -10,21 +10,34 @@ import {
 } from './github-config.js';
 import {
   setJsonVersionStamp,
-  stampFromBackupFilename,
+  setUploadVersionStamp,
+  stampFromDate,
   refreshNavVersions,
 } from '../app-version.js';
 import { emit, on } from './events.js';
-import { basename } from './utils.js';
+import { basename, nowIso } from './utils.js';
 
 let syncTimer = null;
 let syncInFlight = false;
+let pendingReason = 'change';
+
+/** 업로드 전용 — PNG·MD·TXT 등 (JSON 스냅샷 버전은 갱신하지 않음) */
+const UPLOAD_REASONS = new Set([
+  'character-image',
+  'character-delete',
+  'file-upload',
+  'wallpaper-upload',
+]);
 
 /** 저장·적용·업로드 후 디바운스 동기화 */
 export function scheduleGithubSync(reason = 'change') {
   if (!hasGithubToken()) return;
+  pendingReason = reason;
   clearTimeout(syncTimer);
   syncTimer = setTimeout(() => {
-    syncProjectToGithub({ reason }).catch((err) => {
+    const r = pendingReason;
+    pendingReason = 'change';
+    syncProjectToGithub({ reason: r }).catch((err) => {
       console.warn('[github-sync]', err);
       emit('github:sync-error', err);
     });
@@ -32,25 +45,28 @@ export function scheduleGithubSync(reason = 'change') {
 }
 
 /**
- * IndexedDB → GitHub (스냅샷 JSON + 분리 자산)
- * @returns {Promise<{ snapshotId: string, fileCount: number } | null>}
+ * IndexedDB → GitHub
+ * @returns {Promise<{ snapshotId: string, fileCount: number, uploadId?: string } | null>}
  */
 export async function syncProjectToGithub({ snapshotId, reason = 'save' } = {}) {
   if (!hasGithubToken()) return null;
   if (syncInFlight) return null;
 
+  const uploadOnly = UPLOAD_REASONS.has(reason);
   syncInFlight = true;
-  emit('github:sync-start', { reason });
+  emit('github:sync-start', { reason, uploadOnly });
 
   try {
     const payload = await buildBackupPayload({ lite: false });
     if (!payload) throw new Error('열린 프로젝트가 없습니다.');
 
-    const stamp = snapshotId || timestampBackupFilename().replace(/\.json$/i, '');
+    const stamp = snapshotId
+      || (uploadOnly ? stampFromDate(new Date()) : timestampBackupFilename().replace(/\.json$/i, ''));
 
     const { manifest, assetFiles } = splitPayloadForGithub(payload, stamp);
     const cfg = getGithubConfig();
     const snapDir = snapshotsDir(cfg);
+    const overlayRoot = overlaysDir(cfg);
     const files = [];
 
     for (const asset of assetFiles) {
@@ -61,27 +77,41 @@ export async function syncProjectToGithub({ snapshotId, reason = 'save' } = {}) 
       });
     }
 
-    files.push({
-      repoPath: `${snapDir}/${stamp}.json`,
-      content: JSON.stringify(manifest, null, 2),
-    });
-
-    files.push({
-      repoPath: `${snapDir}/latest.json`,
-      content: JSON.stringify({
-        snapshotId: stamp,
-        filename: `${stamp}.json`,
-        updatedAt: manifest.exportedAt,
-        reason,
-      }, null, 2),
-    });
+    if (uploadOnly) {
+      files.push({
+        repoPath: `${overlayRoot}/upload-latest.json`,
+        content: JSON.stringify({
+          uploadId: stamp,
+          updatedAt: nowIso(),
+          reason,
+        }, null, 2),
+      });
+    } else {
+      files.push({
+        repoPath: `${snapDir}/${stamp}.json`,
+        content: JSON.stringify(manifest, null, 2),
+      });
+      files.push({
+        repoPath: `${snapDir}/latest.json`,
+        content: JSON.stringify({
+          snapshotId: stamp,
+          filename: `${stamp}.json`,
+          updatedAt: manifest.exportedAt,
+          reason,
+        }, null, 2),
+      });
+    }
 
     await putRepoFiles(files, `NovelExplor: ${reason}`);
 
-    setJsonVersionStamp(stamp);
+    if (uploadOnly) {
+      setUploadVersionStamp(stamp);
+    } else {
+      setJsonVersionStamp(stamp);
+    }
     refreshNavVersions();
-    emit('github:sync-done', { snapshotId: stamp, fileCount: files.length });
-    return { snapshotId: stamp, fileCount: files.length };
+    emit('github:sync-done', { snapshotId: stamp, fileCount: files.length, uploadOnly });
+    return { snapshotId: stamp, fileCount: files.length, uploadId: uploadOnly ? stamp : undefined };
   } finally {
     syncInFlight = false;
   }
@@ -187,7 +217,8 @@ function dataUrlToBase64(dataUrl) {
 
 export function initGithubSync() {
   const schedule = (reason) => () => scheduleGithubSync(reason);
-  on('project:saved', schedule('db-edit'));
   on('character:updated', schedule('character-image'));
   on('character:deleted', schedule('character-delete'));
+  on('upload:committed', schedule('file-upload'));
+  on('wallpaper:updated', schedule('wallpaper-upload'));
 }

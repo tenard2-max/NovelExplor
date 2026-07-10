@@ -209,6 +209,7 @@ function initUploadHandler() {
     if (successCount > 0) {
       emit('project:loaded', project.getCurrentProject());
       autosave.markDirty();
+      emit('upload:committed', { count: successCount });
       if (lastView) switchView(lastView);
     }
 

@@ -1,7 +1,33 @@
 /** 배포 빌드 버전 — 커밋·푸시 시 scripts/bump-version.js 로 갱신 */
 
-export const APP_BUILD = '20260710161407';
+export const APP_BUILD = '20260710161642';
 const JSON_VERSION_KEY = 'fft-json-version';
+const UPLOAD_VERSION_KEY = 'fft-upload-version';
+
+/** 업로드(PNG·MD·TXT) GitHub 반영 시각 — GitHub upload-latest.json 기준 */
+export function formatUploadVersionNav(stamp = getUploadVersionStamp()) {
+  if (!stamp) return 'UPLOAD: —';
+  const s = String(stamp).replace(/\.json$/i, '');
+  if (/^\d{14}$/.test(s)) return `UPLOAD: ${s}`;
+  return `UPLOAD: ${s}`;
+}
+
+export function getUploadVersionStamp() {
+  try {
+    return localStorage.getItem(UPLOAD_VERSION_KEY) || '';
+  } catch {
+    return '';
+  }
+}
+
+export function setUploadVersionStamp(stamp) {
+  try {
+    if (!stamp) localStorage.removeItem(UPLOAD_VERSION_KEY);
+    else localStorage.setItem(UPLOAD_VERSION_KEY, String(stamp));
+  } catch {
+    /* ignore */
+  }
+}
 
 /** YYYYMMDDHHMMSS → YYYY-MM-DD HH:MM:SS */
 export function formatAppBuild(stamp = APP_BUILD) {
@@ -82,18 +108,28 @@ export function refreshNavVersions() {
 
   const jsonEl = document.getElementById('nav-json-version');
   if (jsonEl) jsonEl.textContent = formatJsonVersionNav();
+
+  const uploadEl = document.getElementById('nav-upload-version');
+  if (uploadEl) uploadEl.textContent = formatUploadVersionNav();
 }
 
-/** GitHub snapshots/latest.json 에서 JSON 버전 로드 */
+/** GitHub latest.json · upload-latest.json 에서 버전 로드 */
 export async function refreshNavVersionsFromGithub() {
   try {
-    const { rawGithubUrl, snapshotsDir } = await import('./core/github-config.js');
-    const url = rawGithubUrl(`${snapshotsDir()}/latest.json`);
-    const res = await fetch(`${url}?t=${Date.now()}`, { cache: 'no-store' });
-    if (res.ok) {
-      const data = await res.json();
+    const { rawGithubUrl, snapshotsDir, overlaysDir } = await import('./core/github-config.js');
+    const jsonUrl = rawGithubUrl(`${snapshotsDir()}/latest.json`);
+    const jsonRes = await fetch(`${jsonUrl}?t=${Date.now()}`, { cache: 'no-store' });
+    if (jsonRes.ok) {
+      const data = await jsonRes.json();
       const stamp = data.snapshotId || stampFromBackupFilename(data.filename || '');
       if (stamp) setJsonVersionStamp(stamp);
+    }
+    const uploadUrl = rawGithubUrl(`${overlaysDir()}/upload-latest.json`);
+    const uploadRes = await fetch(`${uploadUrl}?t=${Date.now()}`, { cache: 'no-store' });
+    if (uploadRes.ok) {
+      const data = await uploadRes.json();
+      const stamp = data.uploadId || data.snapshotId || '';
+      if (stamp) setUploadVersionStamp(stamp);
     }
   } catch {
     /* GitHub 미반영·오프라인 */
