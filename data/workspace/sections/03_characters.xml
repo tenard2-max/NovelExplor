@@ -1,39 +1,33 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <Section id="character" viewId="character" title="인물" version="1">
   <Characters>
-    <Character id="CHR0001" name="주인공" race="인간" gender="M" age="20" occupation="대학생"
-               firstEpisode="1" lastEpisode="7" status="Alive">
-      <Description>100세 이상 회귀, 초기 치매 수준의 기억 손실</Description>
-      <Avatar src="../assets/characters/CHR0001/avatar.png" mime="image/png"/>
+    <Character id="CHR0001" name="주인공" race="인간" gender="M" age="20" occupation="대학생" firstEpisode="1" lastEpisode="7" status="Alive">
+      <Description>100세 이상 회귀, 기억 일부 소실</Description>
+      <Avatar src="../overlays/characters/CHR0001.png" mime="image/png"/>
       <Gallery/>
     </Character>
-    <Character id="CHR0002" name="AI 폰" race="AI" gender="F" age="0" occupation="케어 AI"
-               firstEpisode="1" lastEpisode="7" status="Alive">
-      <Description>2080년 자기학습 AI, 오프라인 동작</Description>
-      <Avatar src="" mime="image/png"/>
+    <Character id="CHR0002" name="AI 폰" race="AI" gender="F" age="0" occupation="전략 AI" firstEpisode="1" lastEpisode="7" status="Alive">
+      <Description>2080년 자기학습 AI, 노인 케어 성격</Description>
+      <Avatar src="../overlays/characters/CHR0002.png" mime="image/png"/>
       <Gallery/>
     </Character>
-    <Character id="CHR0003" name="민수" race="인간" gender="M" age="20" occupation="대학생"
-               firstEpisode="2" lastEpisode="7" status="Alive">
+    <Character id="CHR0003" name="민수" race="인간" gender="M" age="20" occupation="대학생" firstEpisode="2" lastEpisode="7" status="Alive">
       <Description>맵부심, 미래 최강 방패</Description>
       <Avatar src="" mime="image/png"/>
       <Gallery/>
     </Character>
-    <Character id="CHR0004" name="지은" race="인간" gender="F" age="20" occupation="대학생"
-               firstEpisode="3" lastEpisode="7" status="Alive">
-      <Description>첫사랑, 지키고 싶은 평범한 인간</Description>
-      <Avatar src="" mime="image/png"/>
+    <Character id="CHR0004" name="지은" race="인간" gender="F" age="20" occupation="대학생" firstEpisode="3" lastEpisode="7" status="Alive">
+      <Description>첫사랑, 지켜야 할 평범한 인간</Description>
+      <Avatar src="../overlays/characters/CHR0004.png" mime="image/png"/>
       <Gallery/>
     </Character>
-    <Character id="CHR0005" name="수아" race="인간" gender="F" age="20" occupation="대학생"
-               firstEpisode="4" lastEpisode="7" status="Alive">
+    <Character id="CHR0005" name="수아" race="인간" gender="F" age="20" occupation="대학생" firstEpisode="4" lastEpisode="7" status="Alive">
       <Description>지은의 친구, 후반 핵심 조력자</Description>
-      <Avatar src="" mime="image/png"/>
+      <Avatar src="../overlays/characters/CHR0005.png" mime="image/png"/>
       <Gallery/>
     </Character>
-    <Character id="CHR0006" name="아버지" race="인간" gender="M" age="55" occupation="기업 오너"
-               firstEpisode="7" lastEpisode="7" status="Alive">
-      <Description>중견기업 오너, 투자금 약 58.7억 위임</Description>
+    <Character id="CHR0006" name="아버지" race="인간" gender="M" age="55" occupation="기업 오너" firstEpisode="7" lastEpisode="7" status="Alive">
+      <Description>중견기업 대표, 투자금 58.7억 위임</Description>
       <Avatar src="" mime="image/png"/>
       <Gallery/>
     </Character>

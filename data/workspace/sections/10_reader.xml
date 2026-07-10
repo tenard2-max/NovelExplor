@@ -1,21 +1,8 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <Section id="reader" viewId="reader" title="소설 읽기" version="1">
   <Stories>
-    <Story id="ST001" number="1" title="마지막 1초 · 회귀 · AI폰 재기동"
-           src="../../seed/episodes/EP001.md" mime="text/markdown"/>
-    <Story id="ST002" number="2" title="대학 친구들과 재회 · 미래 보스의 단서"
-           src="../../seed/episodes/EP002.md" mime="text/markdown"/>
-    <Story id="ST003" number="3" title="지은과 재회 · 잃어버린 청춘의 감정"
-           src="../../seed/episodes/EP003.md" mime="text/markdown"/>
-    <Story id="ST004" number="4" title="AI와 일상 시작 · 첫 이상 징후"
-           src="../../seed/episodes/EP004.md" mime="text/markdown"/>
-    <Story id="ST005" number="5" title="민수의 맵부심 · AI의 유머와 인간성"
-           src="../../seed/episodes/EP005.md" mime="text/markdown"/>
-    <Story id="ST006" number="6" title="AI가 투자 계획 제시 · 인류 생존 프로젝트 시작"
-           src="../../seed/episodes/EP006.md" mime="text/markdown"/>
-    <Story id="ST007" number="7" title="아버지에게 투자금 확보 · 첫 자본 마련"
-           src="../../seed/episodes/EP007.md" mime="text/markdown"/>
-    <Story id="ST999" number="999" title="Pages 테스트 소설"
-           src="../assets/stories/ST999.md" mime="text/markdown"/>
+    <Story id="ST014" number="14" title="이상한 진동" src="../overlays/stories/ST014.md" mime="text/markdown"/>
+    <Story id="ST015" number="15" title="금이 간 벽" src="../overlays/stories/ST015.md" mime="text/markdown"/>
+    <Story id="ST016" number="16" title="무너지는 공학관" src="../overlays/stories/ST016.md" mime="text/markdown"/>
   </Stories>
 </Section>
