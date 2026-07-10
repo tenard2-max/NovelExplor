@@ -3,40 +3,86 @@
 import { getGithubConfig } from './github-config.js';
 
 const API = 'https://api.github.com';
+const DEFAULT_TIMEOUT_MS = 45000;
+const BLOB_TIMEOUT_MS = 90000;
+const MAX_RETRIES = 2;
+const BLOB_BATCH = 4;
 
-async function githubRequest(path, { method = 'GET', body, allow404 = false } = {}) {
+async function githubRequest(path, {
+  method = 'GET',
+  body,
+  allow404 = false,
+  timeoutMs = DEFAULT_TIMEOUT_MS,
+  retries = MAX_RETRIES,
+} = {}) {
   const { token } = getGithubConfig();
   if (!token?.trim()) {
     throw new Error('GitHub Personal Access Token이 설정되지 않았습니다. 우측 패널에서 연결하세요.');
   }
 
-  const res = await fetch(`${API}${path}`, {
-    method,
-    headers: {
-      Accept: 'application/vnd.github+json',
-      Authorization: `Bearer ${token.trim()}`,
-      'X-GitHub-Api-Version': '2022-11-28',
-      ...(body ? { 'Content-Type': 'application/json' } : {}),
-    },
-    body: body ? JSON.stringify(body) : undefined,
-  });
-
-  if (res.status === 404 && allow404) return null;
-
-  if (!res.ok) {
-    let detail = '';
+  let lastError;
+  for (let attempt = 0; attempt <= retries; attempt++) {
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), timeoutMs);
     try {
-      const err = await res.json();
-      detail = err.message || '';
-    } catch {
-      /* ignore */
-    }
-    throw new Error(detail || `GitHub API 오류 (${res.status})`);
-  }
+      const res = await fetch(`${API}${path}`, {
+        method,
+        headers: {
+          Accept: 'application/vnd.github+json',
+          Authorization: `Bearer ${token.trim()}`,
+          'X-GitHub-Api-Version': '2022-11-28',
+          ...(body ? { 'Content-Type': 'application/json' } : {}),
+        },
+        body: body ? JSON.stringify(body) : undefined,
+        signal: controller.signal,
+      });
 
-  if (res.status === 204) return null;
-  const text = await res.text();
-  return text ? JSON.parse(text) : null;
+      if (res.status === 404 && allow404) return null;
+
+      if (!res.ok) {
+        let detail = '';
+        try {
+          const err = await res.json();
+          detail = err.message || '';
+        } catch {
+          /* ignore */
+        }
+        // rate limit / secondary rate — 재시도
+        if ((res.status === 403 || res.status === 429) && attempt < retries) {
+          await sleep(1000 * (attempt + 1));
+          continue;
+        }
+        throw new Error(detail || `GitHub API 오류 (${res.status})`);
+      }
+
+      if (res.status === 204) return null;
+      const text = await res.text();
+      return text ? JSON.parse(text) : null;
+    } catch (err) {
+      lastError = err;
+      const aborted = err?.name === 'AbortError';
+      const network = err instanceof TypeError;
+      if ((aborted || network) && attempt < retries) {
+        await sleep(800 * (attempt + 1));
+        continue;
+      }
+      if (aborted) {
+        throw new Error(`GitHub 요청 타임아웃 (${Math.round(timeoutMs / 1000)}초)`);
+      }
+      throw err;
+    } finally {
+      clearTimeout(timer);
+    }
+  }
+  throw lastError || new Error('GitHub 요청 실패');
+}
+
+function sleep(ms) {
+  return new Promise((r) => setTimeout(r, ms));
+}
+
+function reportProgress(onProgress, payload) {
+  if (typeof onProgress === 'function') onProgress(payload);
 }
 
 /** 저장소 파일 SHA (없으면 null) */
@@ -114,26 +160,45 @@ export async function putRepoFile(repoPath, content, message, {
 /**
  * 여러 파일을 한 커밋으로 푸시 (Git Trees API)
  * @param {{ repoPath: string, content: string, contentBase64?: boolean }[]} files
+ * @param {string} message
+ * @param {{ onProgress?: (p: object) => void }} [options]
  */
-export async function commitRepoFiles(files, message = 'NovelExplor sync') {
+export async function commitRepoFiles(files, message = 'NovelExplor sync', options = {}) {
   if (!files?.length) throw new Error('커밋할 파일이 없습니다.');
 
+  const onProgress = options.onProgress;
+  const total = files.length;
   const { owner, repo, branch } = getGithubConfig();
+
+  reportProgress(onProgress, {
+    phase: 'prepare',
+    done: 0,
+    total,
+    label: `준비 중… (0/${total})`,
+  });
+
   const ref = await githubRequest(`/repos/${owner}/${repo}/git/ref/heads/${encodeURIComponent(branch)}`);
   const parentSha = ref.object.sha;
   const parentCommit = await githubRequest(`/repos/${owner}/${repo}/git/commits/${parentSha}`);
   const baseTreeSha = parentCommit.tree.sha;
 
   const treeItems = [];
-  const BATCH = 8;
-  for (let i = 0; i < files.length; i += BATCH) {
-    const batch = files.slice(i, i + BATCH);
+  let done = 0;
+
+  for (let i = 0; i < files.length; i += BLOB_BATCH) {
+    const batch = files.slice(i, i + BLOB_BATCH);
     const blobs = await Promise.all(batch.map(async (f) => {
       const blobBody = f.contentBase64
         ? { content: f.content, encoding: 'base64' }
         : { content: utf8ToBase64(f.content), encoding: 'base64' };
-      return githubRequest(`/repos/${owner}/${repo}/git/blobs`, { method: 'POST', body: blobBody });
+      return githubRequest(`/repos/${owner}/${repo}/git/blobs`, {
+        method: 'POST',
+        body: blobBody,
+        timeoutMs: BLOB_TIMEOUT_MS,
+        retries: MAX_RETRIES,
+      });
     }));
+
     batch.forEach((f, j) => {
       treeItems.push({
         path: f.repoPath,
@@ -141,14 +206,36 @@ export async function commitRepoFiles(files, message = 'NovelExplor sync') {
         type: 'blob',
         sha: blobs[j].sha,
       });
+      done += 1;
+      const short = shortPath(f.repoPath);
+      const pct = Math.round((done / total) * 100);
+      reportProgress(onProgress, {
+        phase: 'blobs',
+        done,
+        total,
+        file: f.repoPath,
+        label: `업로드 ${done}/${total} (${pct}%) ${short}`,
+      });
     });
   }
 
+  reportProgress(onProgress, {
+    phase: 'tree',
+    done: total,
+    total,
+    label: `트리 생성… (${total}파일)`,
+  });
   const tree = await githubRequest(`/repos/${owner}/${repo}/git/trees`, {
     method: 'POST',
     body: { base_tree: baseTreeSha, tree: treeItems },
   });
 
+  reportProgress(onProgress, {
+    phase: 'commit',
+    done: total,
+    total,
+    label: '커밋 중…',
+  });
   const commit = await githubRequest(`/repos/${owner}/${repo}/git/commits`, {
     method: 'POST',
     body: {
@@ -158,9 +245,22 @@ export async function commitRepoFiles(files, message = 'NovelExplor sync') {
     },
   });
 
+  reportProgress(onProgress, {
+    phase: 'ref',
+    done: total,
+    total,
+    label: '브랜치 갱신…',
+  });
   await githubRequest(`/repos/${owner}/${repo}/git/refs/heads/${encodeURIComponent(branch)}`, {
     method: 'PATCH',
     body: { sha: commit.sha },
+  });
+
+  reportProgress(onProgress, {
+    phase: 'done',
+    done: total,
+    total,
+    label: `완료 ${total}파일`,
   });
 
   return { commitSha: commit.sha, fileCount: files.length };
@@ -178,6 +278,11 @@ export async function testGithubConnection() {
   const { owner, repo } = getGithubConfig();
   const data = await githubRequest(`/repos/${owner}/${repo}`);
   return { fullName: data.full_name, defaultBranch: data.default_branch };
+}
+
+function shortPath(repoPath) {
+  const parts = String(repoPath).split('/');
+  return parts[parts.length - 1] || repoPath;
 }
 
 function encodeRepoPath(p) {

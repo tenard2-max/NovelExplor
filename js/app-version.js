@@ -1,6 +1,6 @@
 /** 배포 빌드 버전 — 커밋·푸시 시 scripts/bump-version.js 로 갱신 */
 
-export const APP_BUILD = '20260710163255';
+export const APP_BUILD = '20260710170905';
 const JSON_VERSION_KEY = 'fft-json-version';
 const UPLOAD_VERSION_KEY = 'fft-upload-version';
 
@@ -111,6 +111,28 @@ export function refreshNavVersions() {
 
   const uploadEl = document.getElementById('nav-upload-version');
   if (uploadEl) uploadEl.textContent = formatUploadVersionNav();
+}
+
+/** UPLOAD 아래 Trees 커밋 진행률 */
+export function setNavSyncProgress(label = '', { error = false } = {}) {
+  const el = document.getElementById('nav-sync-progress');
+  if (!el) return;
+  const text = String(label || '').trim();
+  if (!text) {
+    el.hidden = true;
+    el.textContent = '';
+    el.classList.remove('is-error', 'is-active');
+    return;
+  }
+  el.hidden = false;
+  el.textContent = text;
+  el.classList.toggle('is-error', Boolean(error));
+  el.classList.toggle('is-active', !error);
+  el.title = text;
+}
+
+export function clearNavSyncProgress() {
+  setNavSyncProgress('');
 }
 
 /** GitHub latest.json · upload-latest.json 에서 버전 로드 */

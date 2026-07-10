@@ -14,6 +14,8 @@ import {
   setUploadVersionStamp,
   stampFromDate,
   refreshNavVersions,
+  setNavSyncProgress,
+  clearNavSyncProgress,
 } from '../app-version.js';
 import { emit, on } from './events.js';
 import { basename, nowIso } from './utils.js';
@@ -21,6 +23,7 @@ import { basename, nowIso } from './utils.js';
 let syncTimer = null;
 let syncInFlight = false;
 let pendingReason = 'change';
+let progressClearTimer = null;
 
 /** 업로드 전용 — PNG·MD·TXT 등 (JSON 스냅샷 버전은 갱신하지 않음) */
 const UPLOAD_REASONS = new Set([
@@ -40,9 +43,16 @@ export function scheduleGithubSync(reason = 'change') {
     pendingReason = 'change';
     syncProjectToGithub({ reason: r }).catch((err) => {
       console.warn('[github-sync]', err);
+      setNavSyncProgress(`실패: ${err.message || err}`, { error: true });
       emit('github:sync-error', err);
     });
   }, 1500);
+}
+
+function onCommitProgress(p) {
+  const label = p?.label || '';
+  setNavSyncProgress(label);
+  emit('github:sync-progress', p);
 }
 
 /**
@@ -55,6 +65,8 @@ export async function syncProjectToGithub({ snapshotId, reason = 'save' } = {}) 
 
   const uploadOnly = UPLOAD_REASONS.has(reason);
   syncInFlight = true;
+  clearTimeout(progressClearTimer);
+  setNavSyncProgress('동기화 준비…');
   emit('github:sync-start', { reason, uploadOnly });
 
   try {
@@ -110,7 +122,7 @@ export async function syncProjectToGithub({ snapshotId, reason = 'save' } = {}) 
     const commitMsg = uploadOnly
       ? `NovelExplor: ${reason} (${files.length} files)`
       : `NovelExplor: ${reason} snapshot ${stamp} (${files.length} files)`;
-    await commitRepoFiles(files, commitMsg);
+    await commitRepoFiles(files, commitMsg, { onProgress: onCommitProgress });
 
     if (uploadOnly) {
       setUploadVersionStamp(stamp);
@@ -118,8 +130,13 @@ export async function syncProjectToGithub({ snapshotId, reason = 'save' } = {}) 
       setJsonVersionStamp(stamp);
     }
     refreshNavVersions();
+    setNavSyncProgress(`완료 ${files.length}파일`);
+    progressClearTimer = setTimeout(() => clearNavSyncProgress(), 2500);
     emit('github:sync-done', { snapshotId: stamp, fileCount: files.length, uploadOnly });
     return { snapshotId: stamp, fileCount: files.length, uploadId: uploadOnly ? stamp : undefined };
+  } catch (err) {
+    setNavSyncProgress(`실패: ${err.message || err}`, { error: true });
+    throw err;
   } finally {
     syncInFlight = false;
   }

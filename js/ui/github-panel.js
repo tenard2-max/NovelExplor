@@ -12,6 +12,7 @@ import { syncProjectToGithub } from '../core/github-sync.js';
 import { pullProjectFromGithubWithAlert } from '../core/github-pull.js';
 import { refreshNavVersionsFromGithub } from '../app-version.js';
 import { showAlert } from './dialog.js';
+import { on } from '../core/events.js';
 
 export function initGithubPanel() {
   const tokenEl = document.getElementById('github-token');
@@ -33,6 +34,13 @@ export function initGithubPanel() {
   if (cfg.token) tokenEl.placeholder = '토큰 저장됨 (다시 입력하면 교체)';
 
   updateGithubStatus(statusEl);
+
+  on('github:sync-progress', (p) => {
+    if (p?.label) updateGithubStatus(statusEl, p.label);
+  });
+  on('github:sync-error', (err) => {
+    updateGithubStatus(statusEl, `실패: ${err?.message || err}`);
+  });
 
   saveBtn?.addEventListener('click', () => {
     saveGithubConfig({

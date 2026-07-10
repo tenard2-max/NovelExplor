@@ -84,6 +84,28 @@ body {
   color: var(--text-muted, #9ca3af);
 }
 
+.nav-sync-progress {
+  display: block;
+  margin-top: 3px;
+  max-width: 120px;
+  font-size: 9px;
+  line-height: 1.35;
+  color: var(--accent, #60a5fa);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.nav-sync-progress.is-active {
+  color: var(--accent, #60a5fa);
+}
+
+.nav-sync-progress.is-error {
+  color: var(--danger, #f87171);
+  white-space: normal;
+}
+
 .nav-menu {
   flex: 1;
   overflow-y: auto;
