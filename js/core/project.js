@@ -1081,10 +1081,17 @@ export function getStoryByNumber(num) {
   return getRegisteredStories().find((s) => s.number === num);
 }
 
-/** 소설 읽기에 표시할 ST*.md 목록 */
+/** 소설 읽기에 표시할 스토리 목록 (IndexedDB) */
 export function getRegisteredStories() {
   return (cache.stories || [])
-    .filter((s) => /^ST\d+\.md$/i.test(s.textFile || ''))
+    .filter((s) => {
+      if (s == null || s.number == null || Number.isNaN(Number(s.number))) return false;
+      const tf = s.textFile || '';
+      // ST###.md 이거나, 본문/제목이 있는 업로드 소설
+      if (/^ST\d+\.md$/i.test(tf)) return true;
+      if (/ST\d+/i.test(tf)) return true;
+      return Boolean(s.content || s.title);
+    })
     .sort((a, b) => a.number - b.number);
 }
 

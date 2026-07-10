@@ -38,6 +38,10 @@ export function initNav() {
   });
 
   on('project:loaded', updateBadges);
+  on('project:loaded', () => {
+    // DB 로드 후 현재 뷰가 인물이면 카드(사진·정보)를 DB 기준으로 다시 그림
+    if (currentView === 'character') loadXmlCanvas('character');
+  });
   on('character:updated', () => {
     updateBadges();
     if (currentView === 'character') loadXmlCanvas('character');

@@ -114,23 +114,23 @@ async function buildCatalog() {
   const fromXml = await loadXmlStories();
   const fromIdb = project.getRegisteredStories().map((s) => ({
     id: s.storyId || s.id,
-    number: s.number,
+    number: Number(s.number),
     title: s.title || '',
     src: '',
     content: s.content || '',
     source: 'idb',
   }));
 
-  // XML은 읽기 전용 원본. IndexedDB는 로컬 오버레이(같은 화 번호면 DB 본문 우선).
+  // DB 소설을 우선 넣고, XML에만 있는 화는 뒤에 보강 (XML 파일은 변경하지 않음)
   const byNum = new Map();
-  for (const s of fromXml) byNum.set(s.number, s);
-  for (const s of fromIdb) {
+  for (const s of fromIdb) byNum.set(s.number, s);
+  for (const s of fromXml) {
     const existing = byNum.get(s.number);
-    if (existing?.source === 'xml') {
+    if (existing) {
       byNum.set(s.number, {
-        ...existing,
-        title: s.title || existing.title,
-        content: s.content,
+        ...s,
+        title: existing.title || s.title,
+        content: existing.content,
         source: 'overlay',
       });
     } else {

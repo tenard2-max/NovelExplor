@@ -77,38 +77,31 @@ function shortPath(url) {
 function renderCharacterSection(doc, xmlUrl) {
   const xmlList = parseCharacters(doc);
   characterXmlUrl = xmlUrl;
-
-  const xmlIds = new Set(xmlList.map((c) => c.id));
   const idbChars = project.getCache().characters || [];
 
-  // XML 인물 + IndexedDB 오버레이 (DB 필드가 화면 우선 — XML은 고정 원본)
-  const mergedFromXml = xmlList.map((xmlChar) => {
-    const idb = project.findCharacterByXmlRef(xmlChar.id, xmlChar.name);
-    return mergeCharacterDisplay(xmlChar, idb, xmlUrl);
-  });
+  // DB가 있으면 DB 기준으로 카드를 만들고, XML은 폴백·미등록 인물 보강용
+  const matchedXmlIds = new Set();
+  let list = [];
 
-  const idbOnly = idbChars
-    .filter((c) => {
-      const cid = c.characterId || String(c.id).split('-').pop();
-      return !xmlIds.has(cid) && !xmlList.some((x) => x.name === c.name);
-    })
-    .map((c) => mergeCharacterDisplay({
-      id: c.characterId || String(c.id).split('-').pop(),
-      name: '',
-      race: '',
-      gender: '',
-      age: '',
-      occupation: '',
-      firstEpisode: '',
-      lastEpisode: '',
-      status: '',
-      description: '',
-      avatarSrc: '',
-    }, c, xmlUrl));
+  if (idbChars.length) {
+    list = idbChars.map((idb) => {
+      const cid = idb.characterId || String(idb.id).split('-').pop();
+      const xmlChar = xmlList.find((x) => x.id === cid)
+        || xmlList.find((x) => x.name && x.name === idb.name)
+        || { id: cid };
+      if (xmlChar.id) matchedXmlIds.add(xmlChar.id);
+      return mergeCharacterDisplay(xmlChar, idb, xmlUrl);
+    });
 
-  characterXmlById = new Map([...mergedFromXml, ...idbOnly].map((c) => [c.id, c]));
+    for (const xmlChar of xmlList) {
+      if (matchedXmlIds.has(xmlChar.id)) continue;
+      list.push(mergeCharacterDisplay(xmlChar, null, xmlUrl));
+    }
+  } else {
+    list = xmlList.map((xmlChar) => mergeCharacterDisplay(xmlChar, null, xmlUrl));
+  }
 
-  const list = [...mergedFromXml, ...idbOnly];
+  characterXmlById = new Map(list.map((c) => [c.id, c]));
   if (!list.length) return '<p class="xml-section-empty">인물 없음</p>';
 
   const cards = list.map((c) => {
@@ -123,7 +116,7 @@ function renderCharacterSection(doc, xmlUrl) {
           <h3>${escapeHtml(c.name)} <small>${escapeHtml(c.id)}</small> ${localTag}</h3>
           <p class="xml-card-meta">${escapeHtml(c.race)} · EP${escapeHtml(String(c.firstEpisode))}~${escapeHtml(String(c.lastEpisode))}</p>
           <p>${escapeHtml(c.description)}</p>
-          <p class="xml-card-hint">클릭 → 우측에서 PNG 등록 (XML 변경 없음 · 화면은 DB 우선)</p>
+          <p class="xml-card-hint">클릭 → 우측에서 PNG 등록 (화면은 DB 우선)</p>
         </div>
       </article>`;
   }).join('');
@@ -138,7 +131,7 @@ function renderCharacterSection(doc, xmlUrl) {
  * @param {string} xmlUrl
  */
 export function mergeCharacterDisplay(xmlChar, idb, xmlUrl = '') {
-  const id = xmlChar?.id || idb?.characterId || '';
+  const id = (idb?.characterId || xmlChar?.id || String(idb?.id || '').split('-').pop() || '');
   const pick = (idbVal, xmlVal) => {
     if (idbVal !== undefined && idbVal !== null && String(idbVal).trim() !== '') return idbVal;
     return xmlVal ?? '';
@@ -154,26 +147,26 @@ export function mergeCharacterDisplay(xmlChar, idb, xmlUrl = '') {
   const occupation = String(pick(idb?.occupation, xmlChar?.occupation) || '');
   const status = String(pick(idb?.status, xmlChar?.status) || '');
 
-  const avatarUrl = idb?.avatarDataUrl
+  const dbAvatar = idb?.avatarDataUrl
+    || (Array.isArray(idb?.images) && idb.images[0])
+    || '';
+  const avatarUrl = dbAvatar
     || (xmlChar?.avatarSrc && xmlUrl ? resolveAssetUrl(xmlChar.avatarSrc, xmlUrl) : '')
     || (xmlChar?.avatarUrl || '');
-
-  const xmlName = xmlChar?.xmlSnapshot?.name ?? xmlChar?.name ?? '';
-  const xmlDesc = xmlChar?.xmlSnapshot?.description ?? xmlChar?.description ?? '';
-  const xmlRace = xmlChar?.xmlSnapshot?.race ?? xmlChar?.race ?? '';
-
-  const textDiffers = Boolean(idb) && (
-    (idb.name && idb.name !== xmlName)
-    || (idb.description && idb.description !== xmlDesc)
-    || (idb.race && idb.race !== xmlRace)
-    || Boolean(idb.avatarDataUrl)
-  );
 
   const xmlSnapshot = xmlChar?.xmlSnapshot || {
     name: xmlChar?.name || '',
     race: xmlChar?.race || '',
     description: xmlChar?.description || '',
   };
+
+  const hasDbMedia = Boolean(dbAvatar);
+  const textDiffers = Boolean(idb) && (
+    (idb.name && idb.name !== xmlSnapshot.name)
+    || (idb.description && idb.description !== xmlSnapshot.description)
+    || (idb.race && idb.race !== xmlSnapshot.race)
+    || hasDbMedia
+  );
 
   return {
     id,
@@ -189,8 +182,8 @@ export function mergeCharacterDisplay(xmlChar, idb, xmlUrl = '') {
     avatarSrc: xmlChar?.avatarSrc || '',
     avatarUrl,
     xmlSnapshot,
-    fromIdb: !xmlName && Boolean(idb),
-    isLocal: Boolean(idb) && (textDiffers || !xmlName),
+    fromIdb: Boolean(idb),
+    isLocal: Boolean(idb) && (textDiffers || hasDbMedia || !xmlSnapshot.name),
     xmlId: xmlChar?.xmlId || xmlChar?.id || id,
   };
 }
@@ -378,6 +371,14 @@ function patchCharacterCard(root, ch) {
       empty?.replaceWith(img);
     }
     if (img) img.src = merged.avatarUrl;
+  } else {
+    const img = card.querySelector('img.xml-card-img');
+    if (img) {
+      const empty = document.createElement('div');
+      empty.className = 'xml-card-img xml-card-img--empty';
+      empty.textContent = '👤';
+      img.replaceWith(empty);
+    }
   }
 }
 
