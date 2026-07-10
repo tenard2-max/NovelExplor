@@ -68,13 +68,18 @@ body {
   max-width: 110px;
 }
 
-.nav-app-version {
+.nav-app-version,
+.nav-json-version {
   display: block;
   margin-top: 2px;
   font-size: 10px;
   color: var(--text-dim, #6b7280);
   font-variant-numeric: tabular-nums;
   letter-spacing: 0.02em;
+}
+
+.nav-json-version {
+  color: var(--text-muted, #9ca3af);
 }
 
 .nav-menu {

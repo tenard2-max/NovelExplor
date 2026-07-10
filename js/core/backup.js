@@ -5,6 +5,12 @@ import * as project from './project.js';
 import { nowIso } from './utils.js';
 import { emit, on } from './events.js';
 import { showDialog, showAlert } from '../ui/dialog.js';
+import {
+  refreshNavVersions,
+  setJsonVersionStamp,
+  stampFromBackupFilename,
+  stampFromExportedAt,
+} from '../app-version.js';
 import { writeBackupToSyncFolder, hasSyncDir, initSyncFolder } from './sync-folder.js';
 
 const BACKUP_VERSION = 1;
@@ -19,6 +25,7 @@ export function initBackup() {
   on('project:saved', () => scheduleAutoBackup());
   on('project:loaded', () => {
     refreshBackupStatus();
+    refreshNavVersions();
     const proj = project.getCurrentProject();
     const meta = readLocalBackupMeta();
     if (proj && (!meta || meta.projectId !== proj.projectId)) {
@@ -48,7 +55,8 @@ export async function offerLocalRecovery() {
   });
   if (!confirmed) return false;
 
-  await restoreFromBackup(payload);
+  await restoreFromBackup(payload, { replaceAll: true, exportedAt: meta.exportedAt });
+  refreshNavVersions();
   await showAlert('백업 복원', '로컬 백업에서 프로젝트를 복원했습니다.');
   emit('project:loaded', project.getCurrentProject());
   return true;
@@ -92,7 +100,9 @@ export async function exportTimestampedBackup({ notify = false } = {}) {
   }
 
   await saveLocalBackup();
+  setJsonVersionFromSource(filename);
   refreshBackupStatus(filename);
+  refreshNavVersions();
 
   if (notify) {
     const where = savedToFolder
@@ -109,9 +119,7 @@ export async function exportTimestampedBackup({ notify = false } = {}) {
 /** JSON 백업 파일로 프로젝트 복원 (프로젝트 열기에서 사용) */
 export async function openBackupJsonFile(file, { skipConfirm = false } = {}) {
   if (!file) return false;
-  const ok = await restoreFromBackupFile(file, { skipConfirm });
-  if (ok) refreshBackupStatus(file.name);
-  return ok;
+  return restoreFromBackupFile(file, { skipConfirm });
 }
 
 export async function restoreFromBackupFile(file, { skipConfirm = false } = {}) {
@@ -137,18 +145,33 @@ export async function restoreFromBackupFile(file, { skipConfirm = false } = {}) 
     if (!confirmed) return false;
   }
 
-  await restoreFromBackup(text);
+  await restoreFromBackup(text, { sourceFilename: file.name, exportedAt: data.exportedAt });
+  setJsonVersionFromSource(file.name, data.exportedAt);
+  refreshBackupStatus(file.name);
+  refreshNavVersions();
   emit('project:loaded', project.getCurrentProject());
   return true;
 }
 
-export async function restoreFromBackup(jsonText, { replaceAll = true } = {}) {
+export async function restoreFromBackup(jsonText, {
+  replaceAll = true,
+  sourceFilename = '',
+  exportedAt = '',
+} = {}) {
   if (replaceAll) {
     await project.clearAllProjects();
     clearLocalBackupCache();
   }
   await project.importProjectJson(jsonText);
+  if (sourceFilename || exportedAt) {
+    setJsonVersionFromSource(sourceFilename, exportedAt);
+  }
   return project.getCurrentProject();
+}
+
+function setJsonVersionFromSource(filename = '', exportedAt = '') {
+  const stamp = stampFromBackupFilename(filename) || stampFromExportedAt(exportedAt);
+  if (stamp) setJsonVersionStamp(stamp);
 }
 
 function clearLocalBackupCache() {

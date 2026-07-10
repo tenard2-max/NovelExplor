@@ -27,7 +27,7 @@ import {
 import { classifyImportFilename, FORESHADOW_GRADES } from './core/utils.js';
 import * as storage from './core/storage.js';
 import { showDialog, showAlert } from './ui/dialog.js';
-import { APP_BUILD, formatAppBuild } from './app-version.js';
+import { refreshNavVersions } from './app-version.js';
 
 async function boot() {
   initNav();
@@ -71,8 +71,7 @@ async function boot() {
 }
 
 function initAppVersion() {
-  const el = document.getElementById('nav-app-version');
-  if (el) el.textContent = formatAppBuild(APP_BUILD);
+  refreshNavVersions();
 }
 
 /** IndexedDB는 host:port(origin)별로 분리됨 — 9000 고정 안내 */
