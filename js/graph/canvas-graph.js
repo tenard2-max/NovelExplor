@@ -551,19 +551,7 @@ function draw() {
     ctx.stroke();
 
     if (mode === 'character' && (e.lineNo || e.description)) {
-      const mx = (e.from.x + e.to.x) / 2;
-      const my = (e.from.y + e.to.y) / 2;
-      const label = e.lineNo
-        ? (e.description ? `L${e.lineNo} ${truncate(e.description, 12)}` : `L${e.lineNo}`)
-        : truncate(e.description, 14);
-      ctx.font = '600 11px sans-serif';
-      ctx.textAlign = 'center';
-      ctx.textBaseline = 'middle';
-      const tw = ctx.measureText(label).width;
-      ctx.fillStyle = 'rgba(10,12,18,0.72)';
-      ctx.fillRect(mx - tw / 2 - 4, my - 8, tw + 8, 16);
-      ctx.fillStyle = e.color || '#fff';
-      ctx.fillText(label, mx, my);
+      drawEdgeLabel(e);
     }
   }
 
@@ -583,6 +571,53 @@ function draw() {
   }
 
   ctx.restore();
+}
+
+/** 관계선 라벨 — 줄 위에 올리지 않고 오른쪽으로 배치 (줄 우선) */
+function drawEdgeLabel(e) {
+  const mx = (e.from.x + e.to.x) / 2;
+  const my = (e.from.y + e.to.y) / 2;
+  const label = e.lineNo
+    ? (e.description ? `L${e.lineNo} ${truncate(e.description, 12)}` : `L${e.lineNo}`)
+    : truncate(e.description, 14);
+  ctx.font = '600 11px sans-serif';
+  ctx.textAlign = 'left';
+  ctx.textBaseline = 'middle';
+  const tw = ctx.measureText(label).width;
+  const pad = 4;
+  const gap = 8; // 선에서 오른쪽으로 띄움
+  const lx = mx + gap;
+  const ly = my;
+  ctx.fillStyle = 'rgba(10,12,18,0.72)';
+  ctx.fillRect(lx - pad, ly - 8, tw + pad * 2, 16);
+  ctx.fillStyle = e.color || '#fff';
+  ctx.fillText(label, lx, ly);
+}
+
+/** 텍스트 박스 중심이 관계선과 가까우면 true */
+function labelOverlapsEdges(cx, cy, halfW, halfH) {
+  const threshold = Math.max(6, Math.min(halfW, halfH) + 4);
+  for (const e of edges) {
+    const d = distToSegment(cx, cy, e.from.x, e.from.y, e.to.x, e.to.y);
+    if (d <= threshold) return true;
+  }
+  return false;
+}
+
+/**
+ * 이름/부제 텍스트 그리기 — 줄과 겹치면 줄 우선, 텍스트는 오른쪽으로 이동
+ * @returns {{ x: number, align: CanvasTextAlign }}
+ */
+function resolveLabelPlacement(preferredX, preferredY, text, font) {
+  ctx.font = font;
+  const tw = ctx.measureText(text).width;
+  const halfW = tw / 2;
+  const halfH = 10;
+  if (!labelOverlapsEdges(preferredX, preferredY, halfW, halfH)) {
+    return { x: preferredX, align: 'center' };
+  }
+  // 선 오른쪽으로 이동 (왼쪽 정렬로 선과 분리)
+  return { x: preferredX + halfW + 10, align: 'left' };
 }
 
 function drawNode(n) {
@@ -635,15 +670,30 @@ function drawNode(n) {
     ctx.restore();
 
     const nameY = cy + r + 16;
+    const nameText = truncate(n.label, 12);
+    const nameFont = '700 22px sans-serif';
+    const namePlace = mode === 'character'
+      ? resolveLabelPlacement(cx, nameY + 11, nameText, nameFont)
+      : { x: cx, align: 'center' };
     ctx.fillStyle = '#fff';
-    ctx.font = '700 22px sans-serif';
-    ctx.textAlign = 'center';
+    ctx.font = nameFont;
+    ctx.textAlign = namePlace.align;
     ctx.textBaseline = 'top';
-    ctx.fillText(truncate(n.label, 12), cx, nameY);
+    ctx.fillText(nameText, namePlace.x, nameY);
     if (n.sub) {
+      const subText = truncate(n.sub, 18);
+      const subFont = '16px sans-serif';
+      const subY = nameY + 28;
+      const subPlace = mode === 'character'
+        ? resolveLabelPlacement(cx, subY + 8, subText, subFont)
+        : { x: cx, align: 'center' };
+      // 이름과 부제는 같은 정렬축 유지
+      const subX = namePlace.align === 'left' ? namePlace.x : subPlace.x;
+      const subAlign = namePlace.align === 'left' ? 'left' : subPlace.align;
       ctx.fillStyle = 'rgba(255,255,255,0.7)';
-      ctx.font = '16px sans-serif';
-      ctx.fillText(truncate(n.sub, 18), cx, nameY + 28);
+      ctx.font = subFont;
+      ctx.textAlign = subAlign;
+      ctx.fillText(subText, subX, subY);
     }
     return;
   }
@@ -659,18 +709,44 @@ function drawNode(n) {
   ctx.lineWidth = strokeW;
   ctx.stroke();
 
+  const nameText = truncate(n.label, 8);
+  const nameFont = `600 ${Math.max(isCharacter ? 18 : 10, r * 0.45)}px sans-serif`;
+  // 인물 원형 노드: 관계선이 중심을 지나므로 이름은 항상 오른쪽
+  let nameX = cx;
+  let nameAlign = 'center';
+  if (isCharacter && mode === 'character') {
+    nameX = cx + r + 10;
+    nameAlign = 'left';
+  } else if (mode === 'character') {
+    const place = resolveLabelPlacement(cx, cy, nameText, nameFont);
+    nameX = place.x;
+    nameAlign = place.align;
+  }
   ctx.fillStyle = '#fff';
-  ctx.font = `600 ${Math.max(isCharacter ? 18 : 10, r * 0.45)}px sans-serif`;
-  ctx.textAlign = 'center';
+  ctx.font = nameFont;
+  ctx.textAlign = nameAlign;
   ctx.textBaseline = 'middle';
-  ctx.fillText(truncate(n.label, 8), cx, cy);
+  ctx.fillText(nameText, nameX, cy);
 
   if (n.sub) {
+    const subText = String(n.sub);
+    const subFont = `${Math.max(isCharacter ? 14 : 8, r * 0.32)}px sans-serif`;
+    const subY = Math.round(cy + r + subOffset);
+    let subX = cx;
+    let subAlign = 'center';
+    if (isCharacter && mode === 'character') {
+      subX = nameX;
+      subAlign = 'left';
+    } else if (mode === 'character') {
+      const place = resolveLabelPlacement(cx, subY + 6, subText, subFont);
+      subX = place.x;
+      subAlign = place.align;
+    }
     ctx.fillStyle = 'rgba(255,255,255,0.7)';
-    ctx.font = `${Math.max(isCharacter ? 14 : 8, r * 0.32)}px sans-serif`;
-    ctx.textAlign = 'center';
+    ctx.font = subFont;
+    ctx.textAlign = subAlign;
     ctx.textBaseline = 'top';
-    ctx.fillText(n.sub, cx, Math.round(cy + r + subOffset));
+    ctx.fillText(subText, subX, subY);
   }
 }
 
