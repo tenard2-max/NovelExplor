@@ -1,6 +1,6 @@
 /** 배포 빌드 버전 — 커밋·푸시 시 scripts/bump-version.js 로 갱신 */
 
-export const APP_BUILD = '20260710155230';
+export const APP_BUILD = '20260710161407';
 const JSON_VERSION_KEY = 'fft-json-version';
 
 /** YYYYMMDDHHMMSS → YYYY-MM-DD HH:MM:SS */
@@ -8,6 +8,14 @@ export function formatAppBuild(stamp = APP_BUILD) {
   const s = String(stamp || '');
   if (!/^\d{14}$/.test(s)) return s || '—';
   return formatStamp14(s);
+}
+
+/** JSON 버전 라벨 — GitHub 스냅샷 파일명(14자리) */
+export function formatJsonVersionNav(stamp = getJsonVersionStamp()) {
+  if (!stamp) return 'JSON: —';
+  const s = String(stamp).replace(/\.json$/i, '');
+  if (/^\d{14}$/.test(s)) return `JSON: ${s}`;
+  return `JSON: ${s}`;
 }
 
 export function formatStamp14(stamp) {
@@ -73,8 +81,22 @@ export function refreshNavVersions() {
   if (pushEl) pushEl.textContent = formatAppBuild(APP_BUILD);
 
   const jsonEl = document.getElementById('nav-json-version');
-  if (jsonEl) {
-    const label = formatJsonVersionLabel();
-    jsonEl.textContent = label === '—' ? 'JSON: —' : `JSON: ${label}`;
+  if (jsonEl) jsonEl.textContent = formatJsonVersionNav();
+}
+
+/** GitHub snapshots/latest.json 에서 JSON 버전 로드 */
+export async function refreshNavVersionsFromGithub() {
+  try {
+    const { rawGithubUrl, snapshotsDir } = await import('./core/github-config.js');
+    const url = rawGithubUrl(`${snapshotsDir()}/latest.json`);
+    const res = await fetch(`${url}?t=${Date.now()}`, { cache: 'no-store' });
+    if (res.ok) {
+      const data = await res.json();
+      const stamp = data.snapshotId || stampFromBackupFilename(data.filename || '');
+      if (stamp) setJsonVersionStamp(stamp);
+    }
+  } catch {
+    /* GitHub 미반영·오프라인 */
   }
+  refreshNavVersions();
 }

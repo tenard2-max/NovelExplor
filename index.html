@@ -321,6 +321,34 @@
       </div>
 
       <div class="upload-section">
+        <h3>GitHub</h3>
+        <p class="local-db-hint">
+          PAT(<code>repo</code>)로 저장·적용·업로드 시<br>
+          <code>data/workspace/snapshots/</code> + 자산 분리 커밋
+        </p>
+        <label class="github-field">
+          <span>Token</span>
+          <input type="password" id="github-token" class="github-input" placeholder="ghp_..." autocomplete="off">
+        </label>
+        <label class="github-field">
+          <span>Owner</span>
+          <input type="text" id="github-owner" class="github-input">
+        </label>
+        <label class="github-field">
+          <span>Repo</span>
+          <input type="text" id="github-repo" class="github-input">
+        </label>
+        <label class="github-field">
+          <span>Branch</span>
+          <input type="text" id="github-branch" class="github-input" value="main">
+        </label>
+        <button type="button" class="upload-btn full" data-action="github-save">GitHub 설정 저장</button>
+        <button type="button" class="upload-btn full" data-action="github-test">연결 테스트</button>
+        <button type="button" class="upload-btn full" data-action="github-sync-now">지금 GitHub 동기화</button>
+        <p id="github-status" class="backup-status">미연결</p>
+      </div>
+
+      <div class="upload-section">
         <h3>프로젝트</h3>
         <p class="local-db-hint">
           <strong>저장</strong> = DB 반영 + 연결 폴더에 <code>YYYYMMDDHHMMSS.json</code> 기록<br>

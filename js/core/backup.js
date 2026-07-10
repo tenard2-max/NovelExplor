@@ -12,6 +12,8 @@ import {
   stampFromExportedAt,
 } from '../app-version.js';
 import { writeBackupToSyncFolder, hasSyncDir, initSyncFolder } from './sync-folder.js';
+import { syncProjectToGithub } from './github-sync.js';
+import { hasGithubToken } from './github-config.js';
 
 const BACKUP_VERSION = 1;
 const LOCAL_KEY_PREFIX = 'fft-backup-';
@@ -104,13 +106,27 @@ export async function exportTimestampedBackup({ notify = false } = {}) {
   refreshBackupStatus(filename);
   refreshNavVersions();
 
+  let githubNote = '';
+  if (hasGithubToken()) {
+    const stamp = filename.replace(/\.json$/i, '');
+    try {
+      const gh = await syncProjectToGithub({ snapshotId: stamp, reason: 'save' });
+      if (gh) {
+        githubNote = `<br>GitHub: <code>${gh.snapshotId}.json</code> (+${Math.max(0, gh.fileCount - 2)}개 자산)`;
+      }
+    } catch (err) {
+      console.warn('[backup] GitHub 동기화 실패:', err);
+      githubNote = `<br><span style="color:var(--danger,#f87171)">GitHub 실패: ${esc(err.message)}</span>`;
+    }
+  }
+
   if (notify) {
     const where = savedToFolder
       ? '연결한 저장 폴더에 기록했습니다.'
       : 'JSON 파일을 다운로드했습니다. (폴더 연결 시 폴더에 저장됩니다)';
     await showAlert(
       '프로젝트 동기화',
-      `DB를 저장했습니다.<br><code>${esc(filename)}</code><br>${where}`
+      `DB를 저장했습니다.<br><code>${esc(filename)}</code><br>${where}${githubNote}`
     );
   }
   return filename;
@@ -146,9 +162,19 @@ export async function restoreFromBackupFile(file, { skipConfirm = false } = {}) 
   }
 
   await restoreFromBackup(text, { sourceFilename: file.name, exportedAt: data.exportedAt });
+  const stamp = stampFromBackupFilename(file.name) || stampFromExportedAt(data.exportedAt);
   setJsonVersionFromSource(file.name, data.exportedAt);
   refreshBackupStatus(file.name);
   refreshNavVersions();
+
+  if (hasGithubToken() && stamp) {
+    try {
+      await syncProjectToGithub({ snapshotId: stamp, reason: 'apply-json' });
+    } catch (err) {
+      console.warn('[backup] GitHub 적용 후 동기화 실패:', err);
+    }
+  }
+
   emit('project:loaded', project.getCurrentProject());
   return true;
 }
@@ -250,6 +276,11 @@ export function refreshBackupStatus(lastFile = '') {
 }
 
 async function buildBackupJson({ lite = false } = {}) {
+  const payload = await buildBackupPayload({ lite });
+  return payload ? JSON.stringify(payload, null, 2) : null;
+}
+
+export async function buildBackupPayload({ lite = false } = {}) {
   const proj = project.getCurrentProject();
   if (!proj) return null;
 
@@ -272,7 +303,7 @@ async function buildBackupJson({ lite = false } = {}) {
     }
   }
 
-  const payload = {
+  return {
     format: 'foreshadow-backup',
     version: BACKUP_VERSION,
     backupType: lite ? 'lite' : 'full',
@@ -288,8 +319,6 @@ async function buildBackupJson({ lite = false } = {}) {
     settings,
     exportedAt: nowIso(),
   };
-
-  return JSON.stringify(payload, null, 2);
 }
 
 function readLocalBackupMeta() {

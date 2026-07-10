@@ -27,7 +27,9 @@ import {
 import { classifyImportFilename, FORESHADOW_GRADES } from './core/utils.js';
 import * as storage from './core/storage.js';
 import { showDialog, showAlert } from './ui/dialog.js';
-import { refreshNavVersions } from './app-version.js';
+import { refreshNavVersions, refreshNavVersionsFromGithub } from './app-version.js';
+import { initGithubPanel } from './ui/github-panel.js';
+import { initGithubSync } from './core/github-sync.js';
 
 async function boot() {
   initNav();
@@ -43,6 +45,8 @@ async function boot() {
   initCharacterActions();
   initActions();
   initBackup();
+  initGithubSync();
+  initGithubPanel();
   initSearch();
   initKeyboard();
   initStatus();
@@ -66,6 +70,7 @@ async function boot() {
     }
   }
   warnIfWrongOrigin();
+  await refreshNavVersionsFromGithub();
   initAppVersion();
   switchView('master');
 }

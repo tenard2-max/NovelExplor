@@ -765,6 +765,29 @@ body {
   line-height: 1.45;
 }
 
+.github-field {
+  display: block;
+  margin-bottom: 8px;
+  font-size: 11px;
+  color: var(--text-dim);
+}
+
+.github-field span {
+  display: block;
+  margin-bottom: 2px;
+}
+
+.github-input {
+  width: 100%;
+  padding: 6px 8px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--bg-input, rgba(255, 255, 255, 0.04));
+  color: var(--text);
+  font-size: 12px;
+  box-sizing: border-box;
+}
+
 .github-sync-hint {
   margin: 0 0 8px;
   font-size: 11px;
