@@ -343,6 +343,10 @@
   color: var(--text-dim);
 }
 
+.open-proj-pick-file {
+  margin-top: 10px;
+}
+
 .candidate-list {
   max-height: 280px;
   overflow: auto;

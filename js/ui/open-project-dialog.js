@@ -1,4 +1,4 @@
-/** 프로젝트 열기 — 동기화 폴더의 YYYYMMDDHHMMSS.json 목록 + 불러오기 */
+/** 프로젝트 열기 — 동기화 폴더 목록 + JSON 직접 선택(USB 등) */
 
 import {
   initSyncFolder,
@@ -25,7 +25,7 @@ export async function showOpenProjectDialog() {
 
   titleEl.textContent = '프로젝트 열기';
   confirmBtn.textContent = '불러오기';
-  confirmBtn.disabled = true;
+  confirmBtn.disabled = false;
 
   const dbProjects = await project.listProjects();
 
@@ -39,8 +39,15 @@ export async function showOpenProjectDialog() {
           </div>
           <button type="button" class="btn-sm" id="open-proj-pick-folder">📂 폴더 연결</button>
         </div>
-        <p class="open-proj-hint">마지막에 연결한 폴더에서 <code>YYYYMMDDHHMMSS.json</code> 목록을 불러옵니다.</p>
+        <p class="open-proj-hint">
+          연결 폴더의 <code>YYYYMMDDHHMMSS.json</code> 목록입니다.<br>
+          USB·다른 경로의 파일은 아래 <strong>JSON 파일 직접 선택</strong> 또는
+          목록 미선택 시 <strong>불러오기</strong>를 누르세요.
+        </p>
         <div id="open-proj-file-list" class="open-proj-file-list" role="listbox" aria-label="동기화 파일"></div>
+        <button type="button" class="upload-btn full open-proj-pick-file" id="open-proj-pick-file">
+          📄 JSON 파일 직접 선택 (USB·다운로드 등)
+        </button>
       </section>
       <section class="open-proj-section">
         <strong>브라우저 DB</strong>
@@ -48,16 +55,28 @@ export async function showOpenProjectDialog() {
       </section>
     </div>`;
 
-  /** @type {{ type: 'file', file: File } | { type: 'db', projectId: string } | null} */
+  /** @type {{ type: 'file', file: File, name?: string } | { type: 'db', projectId: string } | null} */
   let selection = null;
 
   const fileListEl = bodyEl.querySelector('#open-proj-file-list');
   const dbListEl = bodyEl.querySelector('#open-proj-db-list');
   const folderNameEl = bodyEl.querySelector('#open-proj-folder-name');
 
+  let settled = false;
+  let resolveOuter = null;
+
+  const finish = (value) => {
+    if (settled) return;
+    settled = true;
+    cleanup();
+    dialog.close();
+    confirmBtn.textContent = '확인';
+    confirmBtn.disabled = false;
+    resolveOuter?.(value);
+  };
+
   function setSelection(next) {
     selection = next;
-    confirmBtn.disabled = !selection;
     fileListEl.querySelectorAll('.open-proj-file').forEach((el) => {
       el.classList.toggle('is-selected', selection?.type === 'file' && el.dataset.name === selection.name);
     });
@@ -125,34 +144,72 @@ export async function showOpenProjectDialog() {
     }
   });
 
+  bodyEl.querySelector('#open-proj-pick-file')?.addEventListener('click', async () => {
+    const file = await pickJsonFile();
+    if (file) finish({ type: 'file', file, name: file.name });
+  });
+
   renderDbList();
   await refreshFileList();
 
   return new Promise((resolve) => {
+    resolveOuter = resolve;
+
+    const onCancel = () => finish(null);
+
+    const onSubmit = async (e) => {
+      e.preventDefault();
+      if (selection) {
+        finish(selection);
+        return;
+      }
+      const file = await pickJsonFile();
+      if (file) finish({ type: 'file', file, name: file.name });
+    };
+
     const cleanup = () => {
       cancelBtn.removeEventListener('click', onCancel);
       form.removeEventListener('submit', onSubmit);
-      confirmBtn.textContent = '확인';
-      confirmBtn.disabled = false;
-    };
-
-    const onCancel = () => {
-      cleanup();
-      dialog.close();
-      resolve(null);
-    };
-
-    const onSubmit = (e) => {
-      e.preventDefault();
-      if (!selection) return;
-      cleanup();
-      dialog.close();
-      resolve(selection);
     };
 
     cancelBtn.addEventListener('click', onCancel);
     form.addEventListener('submit', onSubmit);
     dialog.showModal();
+  });
+}
+
+/** USB·로컬 등 임의 경로의 JSON 파일 선택 */
+async function pickJsonFile() {
+  if (window.showOpenFilePicker) {
+    try {
+      const [handle] = await window.showOpenFilePicker({
+        multiple: false,
+        types: [{
+          description: 'NovelExplor 동기화 JSON',
+          accept: { 'application/json': ['.json'] },
+        }],
+      });
+      return handle.getFile();
+    } catch (err) {
+      if (err?.name === 'AbortError') return null;
+      throw err;
+    }
+  }
+
+  return new Promise((resolve) => {
+    const input = document.getElementById('backup-file');
+    if (!input) {
+      resolve(null);
+      return;
+    }
+    const onChange = () => {
+      input.removeEventListener('change', onChange);
+      const file = input.files?.[0] || null;
+      input.value = '';
+      resolve(file);
+    };
+    input.addEventListener('change', onChange);
+    input.click();
   });
 }
 
