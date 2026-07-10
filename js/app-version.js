@@ -1,6 +1,14 @@
 /** 배포 빌드 버전 — 커밋·푸시 시 scripts/bump-version.js 로 갱신 */
 
-export const APP_BUILD = '20260711080500';
+export const APP_BUILD = '20260711081000';
+
+/**
+ * 로컬/오프라인에서도 네비에 표시할 기본 스탬프.
+ * scripts/bump-version.js 가 data/workspace 의 latest.json 기준으로 갱신한다.
+ */
+export const FALLBACK_JSON_STAMP = '20260710165959';
+export const FALLBACK_UPLOAD_STAMP = '20260710171101';
+
 const JSON_VERSION_KEY = 'fft-json-version';
 const UPLOAD_VERSION_KEY = 'fft-upload-version';
 
@@ -14,10 +22,12 @@ export function formatUploadVersionNav(stamp = getUploadVersionStamp()) {
 
 export function getUploadVersionStamp() {
   try {
-    return localStorage.getItem(UPLOAD_VERSION_KEY) || '';
+    const stored = localStorage.getItem(UPLOAD_VERSION_KEY) || '';
+    if (stored) return stored;
   } catch {
-    return '';
+    /* ignore */
   }
+  return FALLBACK_UPLOAD_STAMP || '';
 }
 
 export function setUploadVersionStamp(stamp) {
@@ -52,10 +62,12 @@ export function formatStamp14(stamp) {
 
 export function getJsonVersionStamp() {
   try {
-    return localStorage.getItem(JSON_VERSION_KEY) || '';
+    const stored = localStorage.getItem(JSON_VERSION_KEY) || '';
+    if (stored) return stored;
   } catch {
-    return '';
+    /* ignore */
   }
+  return FALLBACK_JSON_STAMP || '';
 }
 
 export function setJsonVersionStamp(stamp) {
@@ -102,15 +114,17 @@ export function stampFromBackupFilename(name = '') {
   return '';
 }
 
+function setNavText(id, text) {
+  const el = document.getElementById(id);
+  if (el) el.textContent = text;
+  return Boolean(el);
+}
+
 export function refreshNavVersions() {
-  const pushEl = document.getElementById('nav-app-version');
-  if (pushEl) pushEl.textContent = `APP: ${formatAppBuild(APP_BUILD)}`;
-
-  const jsonEl = document.getElementById('nav-json-version');
-  if (jsonEl) jsonEl.textContent = formatJsonVersionNav();
-
-  const uploadEl = document.getElementById('nav-upload-version');
-  if (uploadEl) uploadEl.textContent = formatUploadVersionNav();
+  if (typeof document === 'undefined') return;
+  setNavText('nav-app-version', `APP: ${formatAppBuild(APP_BUILD)}`);
+  setNavText('nav-json-version', formatJsonVersionNav());
+  setNavText('nav-upload-version', formatUploadVersionNav());
 }
 
 /** UPLOAD 아래 Trees 커밋 진행률 */
@@ -135,11 +149,29 @@ export function clearNavSyncProgress() {
   setNavSyncProgress('');
 }
 
+function resolveWorkspaceUrls(relPath) {
+  const urls = [];
+  try {
+    urls.push(new URL(relPath, document.baseURI).href);
+  } catch {
+    urls.push(relPath);
+  }
+  // foreshadow-engine/ 하위 진입 시 상위 data/ 경로
+  try {
+    urls.push(new URL(`../${relPath}`, document.baseURI).href);
+  } catch {
+    /* ignore */
+  }
+  urls.push(`/${relPath}`);
+  return [...new Set(urls)];
+}
+
 async function fetchJsonStamp(url) {
   const ctrl = typeof AbortController !== 'undefined' ? new AbortController() : null;
   const timer = ctrl ? setTimeout(() => ctrl.abort(), 4000) : null;
   try {
-    const res = await fetch(`${url}${url.includes('?') ? '&' : '?'}t=${Date.now()}`, {
+    const joiner = url.includes('?') ? '&' : '?';
+    const res = await fetch(`${url}${joiner}t=${Date.now()}`, {
       cache: 'no-store',
       signal: ctrl?.signal,
     });
@@ -153,8 +185,19 @@ async function fetchJsonStamp(url) {
   }
 }
 
-/** GitHub latest.json · upload-latest.json → 실패 시 로컬 data/workspace 폴백 */
+async function fetchFirstStamp(urls) {
+  for (const url of urls) {
+    const stamp = await fetchJsonStamp(url);
+    if (stamp) return stamp;
+  }
+  return '';
+}
+
+/** GitHub latest.json · upload-latest.json → 로컬 data/workspace 폴백 (상수는 이미 표시됨) */
 export async function refreshNavVersionsFromGithub() {
+  // 네트워크 전에 상수/캐시로 즉시 표시
+  refreshNavVersions();
+
   try {
     const { rawGithubUrl, snapshotsDir, overlaysDir } = await import('./core/github-config.js');
     const jsonStamp = await fetchJsonStamp(rawGithubUrl(`${snapshotsDir()}/latest.json`));
@@ -165,15 +208,24 @@ export async function refreshNavVersionsFromGithub() {
     /* GitHub 미반영·오프라인 */
   }
 
-  // 로컬 서버(127.0.0.1:9000) — 워크스페이스 파일에서 직접 읽기
-  if (!getJsonVersionStamp()) {
-    const stamp = await fetchJsonStamp('data/workspace/snapshots/latest.json');
-    if (stamp) setJsonVersionStamp(stamp);
-  }
-  if (!getUploadVersionStamp()) {
-    const stamp = await fetchJsonStamp('data/workspace/overlays/upload-latest.json');
-    if (stamp) setUploadVersionStamp(stamp);
-  }
+  // 로컬 워크스페이스 (루트·하위 경로 모두 시도)
+  const localJson = await fetchFirstStamp(resolveWorkspaceUrls('data/workspace/snapshots/latest.json'));
+  if (localJson) setJsonVersionStamp(localJson);
+  const localUpload = await fetchFirstStamp(resolveWorkspaceUrls('data/workspace/overlays/upload-latest.json'));
+  if (localUpload) setUploadVersionStamp(localUpload);
 
   refreshNavVersions();
 }
+
+/** DOM이 준비되는 즉시 네비 버전 채움 (boot 실패와 무관) */
+function paintNavVersionsWhenReady() {
+  if (typeof document === 'undefined') return;
+  const run = () => refreshNavVersions();
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', run, { once: true });
+  } else {
+    run();
+  }
+}
+
+paintNavVersionsWhenReady();

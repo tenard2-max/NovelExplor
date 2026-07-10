@@ -74,10 +74,11 @@ body {
   display: block;
   margin-top: 2px;
   font-size: 10px;
+  line-height: 1.35;
   color: var(--text-muted, #9ca3af);
   font-variant-numeric: tabular-nums;
   letter-spacing: 0.02em;
-  max-width: 130px;
+  max-width: 140px;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
