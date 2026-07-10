@@ -329,6 +329,22 @@
 .open-proj-file-stamp {
   font-size: 13px;
   font-weight: 600;
+  word-break: break-word;
+  white-space: normal;
+}
+
+.open-proj-db-title {
+  font-size: 13px;
+  font-weight: 600;
+  word-break: break-word;
+  white-space: normal;
+}
+
+.open-proj-db-meta {
+  font-size: 11px;
+  color: var(--text-dim);
+  word-break: break-all;
+  white-space: normal;
 }
 
 .open-proj-file-name {
@@ -345,6 +361,50 @@
 
 .open-proj-pick-file {
   margin-top: 10px;
+}
+
+.open-proj-preview {
+  margin-top: 4px;
+  padding-top: 12px;
+  border-top: 1px solid var(--border);
+}
+
+.open-proj-preview-card {
+  margin-top: 8px;
+  padding: 12px;
+  border: 1px solid var(--accent, #3b82f6);
+  border-radius: 8px;
+  background: rgba(59, 130, 246, 0.08);
+}
+
+.open-proj-preview-file {
+  margin: 0 0 6px;
+  font-size: 12px;
+  word-break: break-all;
+}
+
+.open-proj-preview-title {
+  margin: 0 0 8px;
+  font-size: 14px;
+}
+
+.open-proj-preview-author {
+  font-weight: normal;
+  color: var(--text-dim);
+}
+
+.open-proj-preview-stats {
+  margin: 0 0 8px;
+  padding-left: 18px;
+  font-size: 12px;
+  color: var(--text-dim);
+  line-height: 1.5;
+}
+
+.open-proj-preview-hint {
+  margin: 0;
+  font-size: 11px;
+  color: var(--text-dim);
 }
 
 .candidate-list {

@@ -1,4 +1,4 @@
-/** 프로젝트 열기 — 동기화 폴더 목록 + JSON 직접 선택(USB 등) */
+/** 프로젝트 열기 — 동기화 폴더 목록 + JSON 선택 후 미리보기·적용 */
 
 import {
   initSyncFolder,
@@ -8,10 +8,9 @@ import {
   getSyncFolderLabel,
   hasSyncDir,
 } from '../core/sync-folder.js';
-import * as project from '../core/project.js';
 
 /**
- * @returns {Promise<{ type: 'file', file: File } | { type: 'db', projectId: string } | null>}
+ * @returns {Promise<{ type: 'file', file: File, name?: string } | null>}
  */
 export async function showOpenProjectDialog() {
   await initSyncFolder();
@@ -22,12 +21,22 @@ export async function showOpenProjectDialog() {
   const form = dialog.querySelector('.dialog-form');
   const cancelBtn = document.getElementById('dialog-cancel');
   const confirmBtn = document.getElementById('dialog-confirm');
+  const actionsEl = dialog.querySelector('.dialog-actions');
 
   titleEl.textContent = '프로젝트 열기';
-  confirmBtn.textContent = '불러오기';
-  confirmBtn.disabled = false;
 
-  const dbProjects = await project.listProjects();
+  let loadBtn = document.getElementById('open-proj-load-btn');
+  if (!loadBtn) {
+    loadBtn = document.createElement('button');
+    loadBtn.type = 'button';
+    loadBtn.id = 'open-proj-load-btn';
+    loadBtn.className = 'btn-secondary';
+    actionsEl.insertBefore(loadBtn, confirmBtn);
+  }
+  loadBtn.textContent = '불러오기';
+  loadBtn.hidden = false;
+  confirmBtn.textContent = '적용';
+  confirmBtn.disabled = true;
 
   bodyEl.innerHTML = `
     <div class="open-proj">
@@ -41,48 +50,69 @@ export async function showOpenProjectDialog() {
         </div>
         <p class="open-proj-hint">
           연결 폴더의 <code>YYYYMMDDHHMMSS.json</code> 목록입니다.<br>
-          USB·다른 경로의 파일은 아래 <strong>JSON 파일 직접 선택</strong> 또는
-          목록 미선택 시 <strong>불러오기</strong>를 누르세요.
+          USB·다른 경로는 <strong>JSON 파일 직접 선택</strong> 또는 <strong>불러오기</strong>를 사용하세요.
         </p>
         <div id="open-proj-file-list" class="open-proj-file-list" role="listbox" aria-label="동기화 파일"></div>
         <button type="button" class="upload-btn full open-proj-pick-file" id="open-proj-pick-file">
           📄 JSON 파일 직접 선택 (USB·다운로드 등)
         </button>
       </section>
-      <section class="open-proj-section">
-        <strong>브라우저 DB</strong>
-        <div id="open-proj-db-list" class="open-proj-db-list"></div>
+      <section id="open-proj-preview" class="open-proj-preview" hidden>
+        <strong>선택한 JSON</strong>
+        <div id="open-proj-preview-body" class="open-proj-preview-card"></div>
       </section>
     </div>`;
 
-  /** @type {{ type: 'file', file: File, name?: string } | { type: 'db', projectId: string } | null} */
+  /** @type {{ type: 'file', file: File, name: string, meta: object } | null} */
   let selection = null;
 
   const fileListEl = bodyEl.querySelector('#open-proj-file-list');
-  const dbListEl = bodyEl.querySelector('#open-proj-db-list');
   const folderNameEl = bodyEl.querySelector('#open-proj-folder-name');
+  const previewEl = bodyEl.querySelector('#open-proj-preview');
+  const previewBodyEl = bodyEl.querySelector('#open-proj-preview-body');
 
   let settled = false;
   let resolveOuter = null;
+  let cleanup = () => {};
 
   const finish = (value) => {
     if (settled) return;
     settled = true;
     cleanup();
-    dialog.close();
+    loadBtn.hidden = true;
     confirmBtn.textContent = '확인';
     confirmBtn.disabled = false;
+    dialog.close();
     resolveOuter?.(value);
   };
 
-  function setSelection(next) {
-    selection = next;
+  async function chooseFile(file, displayName = file?.name || '') {
+    if (!file) return;
+    const meta = await peekBackupFile(file);
+    if (!meta.valid) {
+      alert(meta.error || '백업 파일을 읽을 수 없습니다.');
+      return;
+    }
+    selection = { type: 'file', file, name: displayName || file.name, meta };
+    renderPreview(selection);
+    confirmBtn.disabled = false;
     fileListEl.querySelectorAll('.open-proj-file').forEach((el) => {
-      el.classList.toggle('is-selected', selection?.type === 'file' && el.dataset.name === selection.name);
+      el.classList.toggle('is-selected', el.dataset.name === selection.name);
     });
-    dbListEl.querySelectorAll('.open-proj-db').forEach((el) => {
-      el.classList.toggle('is-selected', selection?.type === 'db' && el.dataset.id === selection.projectId);
-    });
+  }
+
+  function renderPreview(sel) {
+    const m = sel.meta;
+    previewEl.hidden = false;
+    previewBodyEl.innerHTML = `
+      <p class="open-proj-preview-file"><code>${esc(sel.name)}</code></p>
+      <p class="open-proj-preview-title"><strong>${esc(m.title)}</strong>${m.author ? ` <span class="open-proj-preview-author">— ${esc(m.author)}</span>` : ''}</p>
+      <ul class="open-proj-preview-stats">
+        <li>백업 시각: ${esc(m.exportedLabel)}</li>
+        <li>에피소드 ${m.episodes} · 인물 ${m.characters} · 소설 ${m.stories}</li>
+        <li>파일 크기: ${esc(m.sizeLabel)}</li>
+      </ul>
+      <p class="open-proj-preview-hint">내용을 확인한 뒤 <strong>적용</strong>을 누르세요.</p>`;
   }
 
   async function refreshFileList() {
@@ -109,7 +139,7 @@ export async function showOpenProjectDialog() {
           const item = files.find((x) => x.name === name);
           if (!item) return;
           const file = await readBackupFile(item.handle);
-          setSelection({ type: 'file', file, name });
+          await chooseFile(file, name);
         });
       });
     } catch (err) {
@@ -117,26 +147,12 @@ export async function showOpenProjectDialog() {
     }
   }
 
-  function renderDbList() {
-    if (!dbProjects.length) {
-      dbListEl.innerHTML = '<p class="open-proj-empty">브라우저에 저장된 프로젝트 없음</p>';
-      return;
-    }
-    dbListEl.innerHTML = dbProjects.map((p) => `
-      <button type="button" class="open-proj-db" data-id="${esc(p.id)}">
-        ${esc(p.title || '제목 없음')}
-      </button>`).join('');
-    dbListEl.querySelectorAll('.open-proj-db').forEach((btn) => {
-      btn.addEventListener('click', () => {
-        setSelection({ type: 'db', projectId: btn.dataset.id });
-      });
-    });
-  }
-
   bodyEl.querySelector('#open-proj-pick-folder')?.addEventListener('click', async () => {
     try {
       await pickSyncDirectory();
-      setSelection(null);
+      selection = null;
+      previewEl.hidden = true;
+      confirmBtn.disabled = true;
       await refreshFileList();
     } catch (err) {
       if (err?.name === 'AbortError') return;
@@ -144,35 +160,35 @@ export async function showOpenProjectDialog() {
     }
   });
 
-  bodyEl.querySelector('#open-proj-pick-file')?.addEventListener('click', async () => {
+  const onPickFile = async () => {
     const file = await pickJsonFile();
-    if (file) finish({ type: 'file', file, name: file.name });
-  });
+    if (file) await chooseFile(file, file.name);
+  };
 
-  renderDbList();
+  bodyEl.querySelector('#open-proj-pick-file')?.addEventListener('click', onPickFile);
+
   await refreshFileList();
 
   return new Promise((resolve) => {
     resolveOuter = resolve;
 
     const onCancel = () => finish(null);
+    const onLoad = () => onPickFile();
 
-    const onSubmit = async (e) => {
+    const onSubmit = (e) => {
       e.preventDefault();
-      if (selection) {
-        finish(selection);
-        return;
-      }
-      const file = await pickJsonFile();
-      if (file) finish({ type: 'file', file, name: file.name });
+      if (!selection) return;
+      finish({ type: 'file', file: selection.file, name: selection.name });
     };
 
-    const cleanup = () => {
+    cleanup = () => {
       cancelBtn.removeEventListener('click', onCancel);
+      loadBtn.removeEventListener('click', onLoad);
       form.removeEventListener('submit', onSubmit);
     };
 
     cancelBtn.addEventListener('click', onCancel);
+    loadBtn.addEventListener('click', onLoad);
     form.addEventListener('submit', onSubmit);
     dialog.showModal();
   });
@@ -213,9 +229,43 @@ async function pickJsonFile() {
   });
 }
 
+async function peekBackupFile(file) {
+  try {
+    const text = await file.text();
+    const data = JSON.parse(text);
+    if (!data.project && !data.stories && !data.episodes) {
+      return { valid: false, error: '유효하지 않은 백업 파일입니다.' };
+    }
+    const sizeKb = file.size / 1024;
+    const sizeLabel = sizeKb >= 1024
+      ? `${(sizeKb / 1024).toFixed(1)} MB`
+      : `${sizeKb.toFixed(1)} KB`;
+    return {
+      valid: true,
+      title: data.project?.title || '(제목 없음)',
+      author: data.project?.author || '',
+      exportedLabel: formatIsoLabel(data.exportedAt) || '—',
+      episodes: (data.episodes || []).length,
+      characters: (data.characters || []).length,
+      stories: (data.stories || []).length,
+      sizeLabel,
+    };
+  } catch {
+    return { valid: false, error: 'JSON 백업 파일이 아닙니다.' };
+  }
+}
+
 function folderLabel() {
   if (!hasSyncDir()) return '연결되지 않음 — 「폴더 연결」을 누르세요';
   return getSyncFolderLabel() || '연결됨';
+}
+
+function formatIsoLabel(iso) {
+  if (!iso) return '';
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return String(iso);
+  const pad = (n) => String(n).padStart(2, '0');
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`;
 }
 
 function esc(str) {

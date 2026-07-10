@@ -119,20 +119,7 @@ function initActions() {
         switchView('master');
         await showAlert(
           '프로젝트 열기',
-          `동기화 파일을 불러왔습니다.<br><code>${filename}</code>`
-        );
-        return;
-      }
-
-      if (picked.type === 'db' && picked.projectId) {
-        await project.loadProject(picked.projectId);
-        await flushPendingSave();
-        await autosave.flushSave(true);
-        const filename = await exportTimestampedBackup({ notify: false });
-        switchView('master');
-        await showAlert(
-          '프로젝트 열기',
-          `브라우저 DB에서 열었습니다.<br><code>${filename}</code>`
+          `동기화 파일을 적용했습니다.<br><code>${picked.name || filename}</code>`
         );
       }
     } catch (err) {
