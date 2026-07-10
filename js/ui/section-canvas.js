@@ -148,6 +148,9 @@ export function mergeCharacterDisplay(xmlChar, idb, xmlUrl = '') {
   const status = String(pick(idb?.status, xmlChar?.status) || '');
 
   const dbAvatar = idb?.avatarDataUrl
+    || idb?.image
+    || idb?.avatar
+    || idb?.avatarUrl
     || (Array.isArray(idb?.images) && idb.images[0])
     || '';
   const avatarUrl = dbAvatar

@@ -66,7 +66,8 @@ export function getCache() {
 
 export async function listProjects() {
 
-  return storage.getAll('projects');
+  const all = await storage.getAll('projects');
+  return all.sort((a, b) => (b.updatedAt || b.createdAt || '').localeCompare(a.updatedAt || a.createdAt || ''));
 
 }
 
@@ -949,6 +950,44 @@ export async function exportProjectJson() {
 
 
 
+/** 백업 JSON 인물 — 레거시 필드·ID 정규화 후 사진 복원 */
+function normalizeImportedCharacter(item, projectId) {
+  const characterId = item.characterId
+    || String(item.id || '').split('-').filter(Boolean).pop()
+    || String(item.id || 'CHR0000');
+
+  let avatarDataUrl = item.avatarDataUrl
+    || item.image
+    || item.avatar
+    || item.avatarUrl
+    || item.photo
+    || '';
+
+  let images = [];
+  if (Array.isArray(item.images)) images = [...item.images];
+  else if (Array.isArray(item.photos)) images = [...item.photos];
+  else if (Array.isArray(item.gallery)) images = [...item.gallery];
+
+  avatarDataUrl = String(avatarDataUrl || '').trim();
+  images = images.map((u) => String(u || '').trim()).filter(Boolean);
+
+  if (avatarDataUrl && !images.includes(avatarDataUrl)) images.unshift(avatarDataUrl);
+  if (!avatarDataUrl && images.length) avatarDataUrl = images[0];
+
+  return {
+    ...item,
+    id: `${projectId}-${characterId}`,
+    projectId,
+    characterId,
+    avatarDataUrl,
+    images,
+    updatedAt: item.updatedAt || nowIso(),
+    createdAt: item.createdAt || nowIso(),
+  };
+}
+
+
+
 export async function importProjectJson(jsonText) {
 
   const data = JSON.parse(jsonText);
@@ -971,13 +1010,23 @@ export async function importProjectJson(jsonText) {
 
   }));
 
+  const characters = (data.characters || []).map((item) => normalizeImportedCharacter(item, projectId));
+
+  const oldToNewCharId = new Map();
+  (data.characters || []).forEach((raw, i) => {
+    const norm = characters[i];
+    if (raw?.id) oldToNewCharId.set(raw.id, norm.id);
+    if (raw?.characterId) oldToNewCharId.set(raw.characterId, norm.id);
+    if (norm?.characterId) oldToNewCharId.set(norm.characterId, norm.id);
+  });
+
 
 
   await storage.bulkPut('stories', remap(data.stories, 'storyId'));
 
   await storage.bulkPut('episodes', remap(data.episodes, 'episodeId'));
 
-  await storage.bulkPut('characters', remap(data.characters, 'characterId'));
+  await storage.bulkPut('characters', characters);
 
   await storage.bulkPut('worlds', remap(data.worlds, 'worldId'));
 
@@ -994,16 +1043,6 @@ export async function importProjectJson(jsonText) {
     projectId,
 
   })));
-
-
-
-  const oldToNewCharId = new Map();
-
-  for (const ch of data.characters || []) {
-
-    oldToNewCharId.set(ch.id, `${projectId}-${ch.characterId || ch.id}`);
-
-  }
 
 
 

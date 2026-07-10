@@ -68,6 +68,15 @@ body {
   max-width: 110px;
 }
 
+.nav-app-version {
+  display: block;
+  margin-top: 2px;
+  font-size: 10px;
+  color: var(--text-dim, #6b7280);
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0.02em;
+}
+
 .nav-menu {
   flex: 1;
   overflow-y: auto;

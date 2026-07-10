@@ -171,10 +171,11 @@ function renderPanel(ch) {
   const img = document.getElementById('char-avatar-img');
   const empty = document.getElementById('char-avatar-empty');
   const actions = document.getElementById('char-avatar-actions');
-  const hasAvatar = !!ch.avatarDataUrl;
+  const avatar = ch.avatarDataUrl || ch.image || ch.avatar || '';
+  const hasAvatar = !!avatar;
 
   if (hasAvatar) {
-    img.src = ch.avatarDataUrl;
+    img.src = avatar;
     img.hidden = false;
     if (empty) empty.hidden = true;
   } else {

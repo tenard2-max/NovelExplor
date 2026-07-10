@@ -27,6 +27,7 @@ import {
 import { classifyImportFilename, FORESHADOW_GRADES } from './core/utils.js';
 import * as storage from './core/storage.js';
 import { showDialog, showAlert } from './ui/dialog.js';
+import { APP_BUILD, formatAppBuild } from './app-version.js';
 
 async function boot() {
   initNav();
@@ -65,7 +66,13 @@ async function boot() {
     }
   }
   warnIfWrongOrigin();
+  initAppVersion();
   switchView('master');
+}
+
+function initAppVersion() {
+  const el = document.getElementById('nav-app-version');
+  if (el) el.textContent = formatAppBuild(APP_BUILD);
 }
 
 /** IndexedDB는 host:port(origin)별로 분리됨 — 9000 고정 안내 */
@@ -116,7 +123,7 @@ function initActions() {
         await flushPendingSave();
         await autosave.flushSave(true);
         const filename = await exportTimestampedBackup({ notify: false });
-        switchView('master');
+        switchView('character');
         await showAlert(
           '프로젝트 열기',
           `동기화 파일을 적용했습니다.<br><code>${picked.name || filename}</code>`
