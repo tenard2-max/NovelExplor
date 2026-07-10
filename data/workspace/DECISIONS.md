@@ -4,36 +4,33 @@
 
 | 항목 | 선택 |
 |------|------|
-| **Q1** GitHub 쓰기 | **C** 하이브리드 (토큰 있으면 API, 없으면 파일) |
-| **Q2** PNG 원본 | **A** `data/workspace/assets/` + lazy download |
-| **Q3** IndexedDB | **A** XML 원본, IndexedDB는 캐시 |
-| **Q4** 소설 읽기 UI | **B** XML 데이터 + 기존 reader UI 재사용 |
+| **Q1** GitHub 쓰기 | **보류** — 일상 편집은 XML을 변경하지 않음 |
+| **Q2** PNG 원본 | Pages assets는 읽기 전용 시드, 사용자 PNG는 IndexedDB |
+| **Q3** IndexedDB | **로컬 오버레이** (XML과 독립) |
+| **Q4** 소설 읽기 UI | **B** XML 목록 + IndexedDB 병합 표시 |
 
 ---
 
-## Q4=B 구현 요지
+## 표시 모델 (2026-07-10 갱신)
 
-- 화면: `view-reader` (이전화 / 선택 / 다음화 / 글꼴)
-- 목록·본문 소스: `sections/10_reader.xml` → MD `src` lazy fetch
-- IndexedDB ST 목록은 XML이 없을 때만 폴백
-- Pages 미반영 시 IndexedDB 본문 폴백
+`
+화면 = XML(Pages 원본, 읽기 전용) + IndexedDB(이 브라우저 로컬)
+`
 
----
+- 업로드(ST/MD/TXT)·인물 PNG·DB 편집 → **IndexedDB만** 변경
+- data/workspace/**/*.xml · assets 파일 → **앱이 자동으로 쓰지 않음**
+- 같은 화/인물이 양쪽에 있으면 **로컬 DB가 화면에서 우선**
+- 다른 PC / 캐시 삭제 시 → XML 원본만 다시 보임 (로컬 오버레이는 따라오지 않음)
 
-## STEP: ST MD 하이브리드 업로드 (2026-07-10)
+### 소설 읽기 source
 
-| 항목 | 선택 |
-|------|------|
-| 토큰 저장 | **B** 세션 입력만 (메모리, localStorage 금지) |
-| 저장소 | 고정 `tenard2-max/NovelExplor` · `main` |
-| 커밋 범위 | `assets/stories/*.md` + `sections/10_reader.xml` + `workspace.xml` Assets |
-| 로컬 저장 | File System Access(`data/workspace` 폴더) 또는 다운로드 폴백 |
-| DB | IndexedDB 캐시 병행 (`importStoryFile`) |
+| source | 의미 |
+|--------|------|
+| xml | Pages XML·MD만 |
+| idb | 이 PC에만 업로드된 소설 |
+| overlay | XML에 있는 화 + 로컬 본문으로 덮어씀 |
 
-### 업로드 파이프라인
+### 인물
 
-1. IndexedDB에 ST 등록
-2. 인메모리 `10_reader.xml` / `workspace.xml` 갱신 → 리더 즉시 반영
-3. 폴더 연결 시 디스크 기록
-4. 세션 PAT 있으면 GitHub Contents API 커밋 (3파일 순차)
-5. FS·GitHub 모두 없으면 파일 다운로드
+- XML 카드 + IndexedDB 아바타/추가 인물 병합
+- PNG 등록은 캐릭터 패널 → IndexedDB (XML Avatar 미갱신)

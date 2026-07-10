@@ -75,10 +75,34 @@ function shortPath(url) {
 }
 
 function renderCharacterSection(doc, xmlUrl) {
-  const list = parseCharacters(doc);
+  const xmlList = parseCharacters(doc);
   characterXmlUrl = xmlUrl;
-  characterXmlById = new Map(list.map((c) => [c.id, c]));
+  characterXmlById = new Map(xmlList.map((c) => [c.id, c]));
 
+  const xmlIds = new Set(xmlList.map((c) => c.id));
+  const idbOnly = (project.getCache().characters || [])
+    .filter((c) => {
+      const cid = c.characterId || String(c.id).split('-').pop();
+      return !xmlIds.has(cid) && !xmlList.some((x) => x.name === c.name);
+    })
+    .map((c) => ({
+      id: c.characterId || String(c.id).split('-').pop(),
+      name: c.name || '',
+      race: c.race || '',
+      gender: c.gender || '',
+      age: String(c.age || ''),
+      occupation: c.occupation || '',
+      firstEpisode: String(c.firstEpisode || ''),
+      lastEpisode: String(c.lastEpisode || ''),
+      status: c.status || '',
+      description: c.description || '',
+      avatarSrc: '',
+      fromIdb: true,
+    }));
+
+  for (const c of idbOnly) characterXmlById.set(c.id, c);
+
+  const list = [...xmlList, ...idbOnly];
   if (!list.length) return '<p class="xml-section-empty">인물 없음</p>';
 
   const cards = list.map((c) => {
@@ -88,14 +112,15 @@ function renderCharacterSection(doc, xmlUrl) {
     const img = avatar
       ? `<img class="xml-card-img" src="${escapeHtml(avatar)}" alt="">`
       : '<div class="xml-card-img xml-card-img--empty">👤</div>';
+    const localTag = (c.fromIdb || idb?.avatarDataUrl) ? '<span class="xml-card-local">로컬</span>' : '';
     return `
       <article class="xml-card xml-card--character" data-id="${escapeHtml(c.id)}" role="button" tabindex="0" title="클릭하여 PNG 등록">
         ${img}
         <div class="xml-card-body">
-          <h3>${escapeHtml(c.name)} <small>${escapeHtml(c.id)}</small></h3>
+          <h3>${escapeHtml(c.name)} <small>${escapeHtml(c.id)}</small> ${localTag}</h3>
           <p class="xml-card-meta">${escapeHtml(c.race)} · EP${escapeHtml(c.firstEpisode)}~${escapeHtml(c.lastEpisode)}</p>
           <p>${escapeHtml(c.description)}</p>
-          <p class="xml-card-hint">클릭 → 우측에서 PNG 등록</p>
+          <p class="xml-card-hint">클릭 → 우측에서 PNG 등록 (XML 변경 없음)</p>
         </div>
       </article>`;
   }).join('');

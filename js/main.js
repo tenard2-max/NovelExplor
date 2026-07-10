@@ -16,18 +16,6 @@ import { initCharacterPanel } from './ui/character-panel.js';
 import { initCharacterActions } from './ui/character-actions.js';
 import { initBackup, offerLocalRecovery } from './core/backup.js';
 import { loadWorkspaceManifest } from './core/workspace-xml.js';
-import {
-  syncUploadedStory,
-  pickWorkspaceDirectory,
-  clearWorkspaceDirectory,
-  getWorkspaceDirHandle,
-} from './core/workspace-sync.js';
-import {
-  setSessionToken,
-  clearSessionToken,
-  hasSessionToken,
-  getRepoLabel,
-} from './core/github-api.js';
 import { searchAll } from './search/search.js';
 import {
   analyzeForeshadowCandidates,
@@ -56,7 +44,6 @@ async function boot() {
   initKeyboard();
   initStatus();
   initUploadHandler();
-  initGithubSyncUi();
 
   try {
     await loadWorkspaceManifest();
@@ -230,22 +217,8 @@ async function importTextFile(file, text, opts = {}) {
     await project.importEpisodeFile(text, file.name, classified.number);
     viewId = 'story-nav';
   } else {
-    const record = await project.importStoryFile(text, file.name, classified.number);
+    await project.importStoryFile(text, file.name, classified.number);
     viewId = 'reader';
-    try {
-      const syncResult = await syncUploadedStory({
-        number: record.number,
-        title: record.title,
-        content: text,
-        filename: file.name,
-      });
-      lastSyncSummary = formatSyncSummary(syncResult);
-      updateGithubStatusUi(lastSyncSummary);
-    } catch (err) {
-      console.warn('[upload] workspace sync 실패:', err);
-      lastSyncSummary = `IndexedDB만 저장됨 (XML 동기화 실패: ${err.message})`;
-      updateGithubStatusUi(lastSyncSummary);
-    }
   }
 
   if (!opts.batch) {
@@ -255,66 +228,6 @@ async function importTextFile(file, text, opts = {}) {
   }
 
   return viewId;
-}
-
-function formatSyncSummary(result) {
-  const parts = [
-    `${result.storyId}`,
-    `로컬:${result.local}`,
-    `GitHub:${result.github}`,
-  ];
-  if (result.githubError) parts.push(result.githubError);
-  return parts.join(' · ');
-}
-
-let lastSyncSummary = '';
-
-function initGithubSyncUi() {
-  const statusEl = document.getElementById('github-sync-status');
-  updateGithubStatusUi();
-
-  bindAction('github-token-set', async () => {
-    const token = prompt(
-      'GitHub PAT를 입력하세요 (세션만 보관, 저장소에 저장하지 않음).\n' +
-      '권한: Contents Read and write · 대상: tenard2-max/NovelExplor'
-    );
-    if (token === null) return;
-    setSessionToken(token);
-    updateGithubStatusUi(token.trim() ? '토큰이 세션에 설정되었습니다.' : '토큰이 비어 있습니다.');
-  });
-
-  bindAction('github-token-clear', () => {
-    clearSessionToken();
-    updateGithubStatusUi('토큰을 지웠습니다.');
-  });
-
-  bindAction('github-folder-link', async () => {
-    try {
-      await pickWorkspaceDirectory();
-      updateGithubStatusUi('data/workspace 폴더가 연결되었습니다 (FS 저장 활성).');
-    } catch (err) {
-      if (err?.name === 'AbortError') return;
-      alert(err.message);
-    }
-  });
-
-  bindAction('github-folder-clear', () => {
-    clearWorkspaceDirectory();
-    updateGithubStatusUi('폴더 연결을 해제했습니다.');
-  });
-
-  if (statusEl && !statusEl.dataset.bound) {
-    statusEl.dataset.bound = '1';
-  }
-}
-
-function updateGithubStatusUi(extra = '') {
-  const el = document.getElementById('github-sync-status');
-  if (!el) return;
-  const token = hasSessionToken() ? 'PAT 세션 설정됨' : 'PAT 없음';
-  const folder = getWorkspaceDirHandle() ? '폴더 연결됨' : '폴더 미연결';
-  const line = `${getRepoLabel()} · ${token} · ${folder}`;
-  el.textContent = extra ? `${line}\n최근: ${extra}` : line;
 }
 
 async function runForeshadowAnalysis() {

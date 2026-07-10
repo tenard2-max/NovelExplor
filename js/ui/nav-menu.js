@@ -38,6 +38,14 @@ export function initNav() {
   });
 
   on('project:loaded', updateBadges);
+  on('character:updated', () => {
+    updateBadges();
+    if (currentView === 'character') loadXmlCanvas('character');
+  });
+  on('character:deleted', () => {
+    updateBadges();
+    if (currentView === 'character') loadXmlCanvas('character');
+  });
 }
 
 export function switchView(viewId) {

@@ -319,14 +319,10 @@
       </div>
 
       <div class="upload-section">
-        <h3>GitHub 동기화</h3>
-        <p class="github-sync-hint">저장소 고정: tenard2-max/NovelExplor · main<br>
-          ST MD 업로드 시 assets + 10_reader.xml + workspace.xml 갱신</p>
-        <button class="upload-btn full" data-action="github-token-set">🔑 PAT 세션 입력</button>
-        <button class="upload-btn full" data-action="github-token-clear">토큰 지우기</button>
-        <button class="upload-btn full" data-action="github-folder-link" title="로컬 data/workspace 폴더 선택">📂 workspace 폴더 연결</button>
-        <button class="upload-btn full" data-action="github-folder-clear">폴더 연결 해제</button>
-        <p id="github-sync-status" class="backup-status github-sync-status">로딩…</p>
+        <h3>로컬 DB</h3>
+        <p class="github-sync-hint">업로드·인물 PNG는 <strong>이 브라우저 IndexedDB</strong>에만 저장됩니다.<br>
+          Pages의 XML·assets 파일은 변경하지 않습니다.<br>
+          화면 = XML 원본 + 로컬 DB 오버레이</p>
       </div>
 
       <div class="upload-section">
