@@ -6,12 +6,12 @@
 
 | 경로 | 역할 | 실행 |
 |------|------|------|
-| [`foreshadow-engine/`](foreshadow-engine/) | 복선·스토리·세계관 **집필 워크스페이스** (브라우저, IndexedDB) | Live Server → http://127.0.0.1:9000/index.html |
-| [`app.py`](app.py) | **웹소설 네비게이터** (Streamlit, 모바일·배포용) | `scripts/start_live_server.sh` → 포트 **8501** |
-| [`data/seed/`](data/seed/) | 공유 시드 MD · EP001~007 본문 | 두 앱 모두 참조 |
+| [`index.html`](index.html) + `js/` `css/` | **집필 워크스페이스** (GitHub Pages) | https://tenard2-max.github.io/NovelExplor/ |
+| [`data/workspace/`](data/workspace/) | **고정 XML 원본** (앱이 수정하지 않음) | Pages에서 읽기 전용 |
+| [`data/seed/`](data/seed/) | 공유 시드 MD · EP001~007 | XML이 참조 |
+| [`app.py`](app.py) | 웹소설 네비게이터 (Streamlit) | 포트 **8501** |
 
-- 집필·복선 관리·그래프: 저장소 루트 [`index.html`](index.html) → `foreshadow-engine/` 로드
-- 휴대폰에서 1~100화 읽기·인물·투자 로드맵: **Streamlit 앱**
+**데이터 정책:** 업로드·인물 PNG·DB 편집은 브라우저 IndexedDB만 사용합니다. 일상 작업 시 GitHub에서 다시 받을 필요 없습니다. PC 이동 시 앱의 백업 저장/복원을 사용하세요.
 
 ## 제공 기능 (Streamlit)
 

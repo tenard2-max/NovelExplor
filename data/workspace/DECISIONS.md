@@ -4,23 +4,24 @@
 
 | 항목 | 선택 |
 |------|------|
-| **Q1** GitHub 쓰기 | **보류** — 일상 편집은 XML을 변경하지 않음 |
+| **Q1** GitHub 쓰기 | **사용 안 함** — 일상 편집은 XML/GitHub을 건드리지 않음 |
 | **Q2** PNG 원본 | Pages assets는 읽기 전용 시드, 사용자 PNG는 IndexedDB |
 | **Q3** IndexedDB | **로컬 오버레이** (XML과 독립) |
 | **Q4** 소설 읽기 UI | **B** XML 목록 + IndexedDB 병합 표시 |
 
 ---
 
-## 표시 모델 (2026-07-10 갱신)
+## 운영 정책 (적용)
 
 `
 화면 = XML(Pages 원본, 읽기 전용) + IndexedDB(이 브라우저 로컬)
 `
 
-- 업로드(ST/MD/TXT)·인물 PNG·DB 편집 → **IndexedDB만** 변경
-- data/workspace/**/*.xml · assets 파일 → **앱이 자동으로 쓰지 않음**
-- 같은 화/인물이 양쪽에 있으면 **로컬 DB가 화면에서 우선**
-- 다른 PC / 캐시 삭제 시 → XML 원본만 다시 보임 (로컬 오버레이는 따라오지 않음)
+1. **XML은 고정** — 앱이 data/workspace/**/*.xml · assets를 자동으로 쓰지 않음
+2. **업로드·DB 편집** — IndexedDB만 변경. **GitHub에서 다시 받을 필요 없음**
+3. **Pages 접속 시** — XML/시드 MD는 읽기용으로만 fetch (원본 표시)
+4. **다른 PC로 옮길 때** — 백업 저장(JSON) → 그 PC에서 백업 복원
+5. 같은 화/인물이 양쪽에 있으면 **로컬 DB가 화면에서 우선**
 
 ### 소설 읽기 source
 

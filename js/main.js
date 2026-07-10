@@ -115,7 +115,13 @@ function initActions() {
 
   bindAction('analyze-foreshadow', runForeshadowAnalysis);
   bindAction('add-foreshadow', addForeshadowFromSelection);
-  bindAction('about', () => showAlert('NovelExplor', '인류 생존 프로젝트 — 복선·스토리·세계관 워크스페이스'));
+  bindAction('about', () => showAlert(
+    'NovelExplor',
+    '인류 생존 프로젝트 — 복선·스토리·세계관 워크스페이스<br><br>' +
+    '<strong>XML</strong>: Pages 고정 원본 (앱이 수정하지 않음)<br>' +
+    '<strong>로컬 DB</strong>: 업로드·인물 PNG는 이 브라우저에만 저장<br>' +
+    '일상 작업 시 GitHub 다운로드 불필요. PC 이동 시 백업 사용.'
+  ));
 
   const savedTheme = localStorage.getItem('fft-theme');
   if (savedTheme) document.body.dataset.theme = savedTheme;
