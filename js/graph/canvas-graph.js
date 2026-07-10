@@ -47,6 +47,10 @@ const CHARACTER_GRAPH = {
   labelGap: 24,
   subGap: 28,
 };
+/** 같은 높이로 볼 Y 오차 (이하면 직선) */
+const EDGE_Y_ALIGN_TOL = 50;
+/** 관계선 라벨을 선 위로 띄우는 거리 */
+const EDGE_LABEL_ABOVE = 14;
 
 export function initGraph() {
   canvas = document.getElementById('main-canvas');
@@ -545,13 +549,14 @@ function draw() {
     ctx.strokeStyle = e.color;
     ctx.lineWidth = e.lineWidth || 1.5;
     ctx.lineCap = 'round';
-    ctx.beginPath();
-    ctx.moveTo(e.from.x, e.from.y);
-    ctx.lineTo(e.to.x, e.to.y);
-    ctx.stroke();
-
+    ctx.lineJoin = 'round';
+    const path = mode === 'character' ? getCharacterEdgePath(e) : [
+      { x: e.from.x, y: e.from.y },
+      { x: e.to.x, y: e.to.y },
+    ];
+    drawPolyline(path);
     if (mode === 'character' && (e.lineNo || e.description)) {
-      drawEdgeLabel(e);
+      drawEdgeLabel(e, path);
     }
   }
 
@@ -559,10 +564,10 @@ function draw() {
     ctx.strokeStyle = linkAddMode ? 'rgba(147,197,253,0.9)' : 'rgba(251,191,36,0.85)';
     ctx.lineWidth = 2;
     ctx.setLineDash([6, 4]);
-    ctx.beginPath();
-    ctx.moveTo(connectingFrom.x, connectingFrom.y);
-    ctx.lineTo(connectPointer.x, connectPointer.y);
-    ctx.stroke();
+    const preview = mode === 'character'
+      ? getCharacterEdgePath({ from: connectingFrom, to: connectPointer })
+      : [{ x: connectingFrom.x, y: connectingFrom.y }, { x: connectPointer.x, y: connectPointer.y }];
+    drawPolyline(preview);
     ctx.setLineDash([]);
   }
 
@@ -573,23 +578,101 @@ function draw() {
   ctx.restore();
 }
 
-/** 관계선 라벨 — 줄 위에 올리지 않고 오른쪽으로 배치 (줄 우선) */
-function drawEdgeLabel(e) {
-  const mx = (e.from.x + e.to.x) / 2;
-  const my = (e.from.y + e.to.y) / 2;
+function nodeCardHeight(n) {
+  if (!n) return CHARACTER_GRAPH.outerR * 2;
+  return (Number(n.r) || CHARACTER_GRAPH.outerR) * 2;
+}
+
+/**
+ * 인물 관계선 경로
+ * - |dy| ≤ 50: 직선
+ * - |dy| > 카드 높이: 왼쪽 카드에서 수직으로 맞춘 뒤 오른쪽으로 꺾는 직각
+ */
+function getCharacterEdgePath(e) {
+  const a = e.from;
+  const b = e.to;
+  const dy = Math.abs(a.y - b.y);
+  if (dy <= EDGE_Y_ALIGN_TOL) {
+    // 거의 같은 높이 → 직선 (평균 Y로 살짝 수평 보정)
+    const y = (a.y + b.y) / 2;
+    return [
+      { x: a.x, y },
+      { x: b.x, y },
+    ];
+  }
+
+  const cardH = Math.max(nodeCardHeight(a), nodeCardHeight(b));
+  if (dy > cardH) {
+    // 왼쪽 노드에서 수직으로 내린(또는 올린) 뒤 오른쪽으로 수평
+    const left = a.x <= b.x ? a : b;
+    const right = a.x <= b.x ? b : a;
+    const elbow = { x: left.x, y: right.y };
+    return [
+      { x: left.x, y: left.y },
+      elbow,
+      { x: right.x, y: right.y },
+    ];
+  }
+
+  // 50 < dy ≤ 카드높이: 직선 유지
+  return [
+    { x: a.x, y: a.y },
+    { x: b.x, y: b.y },
+  ];
+}
+
+function drawPolyline(points) {
+  if (!points?.length) return;
+  ctx.beginPath();
+  ctx.moveTo(points[0].x, points[0].y);
+  for (let i = 1; i < points.length; i += 1) {
+    ctx.lineTo(points[i].x, points[i].y);
+  }
+  ctx.stroke();
+}
+
+function distToPolyline(px, py, points) {
+  let best = Infinity;
+  for (let i = 0; i < points.length - 1; i += 1) {
+    const d = distToSegment(
+      px, py,
+      points[i].x, points[i].y,
+      points[i + 1].x, points[i + 1].y
+    );
+    if (d < best) best = d;
+  }
+  return best;
+}
+
+/** 관계선 라벨 — 선과 겹치지 않게 선보다 위쪽에 표시 */
+function drawEdgeLabel(e, path) {
+  const pts = path || getCharacterEdgePath(e);
   const label = e.lineNo
     ? (e.description ? `L${e.lineNo} ${truncate(e.description, 12)}` : `L${e.lineNo}`)
     : truncate(e.description, 14);
+
+  let lx;
+  let ly;
+  if (pts.length >= 3) {
+    // 직각: 수평 구간의 중점 위
+    const h0 = pts[pts.length - 2];
+    const h1 = pts[pts.length - 1];
+    lx = (h0.x + h1.x) / 2;
+    ly = h0.y - EDGE_LABEL_ABOVE;
+  } else {
+    lx = (pts[0].x + pts[1].x) / 2;
+    ly = (pts[0].y + pts[1].y) / 2 - EDGE_LABEL_ABOVE;
+  }
+
   ctx.font = '600 11px sans-serif';
-  ctx.textAlign = 'left';
-  ctx.textBaseline = 'middle';
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'bottom';
   const tw = ctx.measureText(label).width;
-  const pad = 4;
-  const gap = 8; // 선에서 오른쪽으로 띄움
-  const lx = mx + gap;
-  const ly = my;
-  ctx.fillStyle = 'rgba(10,12,18,0.72)';
-  ctx.fillRect(lx - pad, ly - 8, tw + pad * 2, 16);
+  const padX = 5;
+  const padY = 3;
+  const boxH = 16;
+  ctx.fillStyle = 'rgba(10,12,18,0.78)';
+  ctx.fillRect(lx - tw / 2 - padX, ly - boxH + padY, tw + padX * 2, boxH);
   ctx.fillStyle = e.color || '#fff';
   ctx.fillText(label, lx, ly);
 }
@@ -598,8 +681,10 @@ function drawEdgeLabel(e) {
 function labelOverlapsEdges(cx, cy, halfW, halfH) {
   const threshold = Math.max(6, Math.min(halfW, halfH) + 4);
   for (const e of edges) {
-    const d = distToSegment(cx, cy, e.from.x, e.from.y, e.to.x, e.to.y);
-    if (d <= threshold) return true;
+    const path = mode === 'character'
+      ? getCharacterEdgePath(e)
+      : [{ x: e.from.x, y: e.from.y }, { x: e.to.x, y: e.to.y }];
+    if (distToPolyline(cx, cy, path) <= threshold) return true;
   }
   return false;
 }
@@ -616,7 +701,6 @@ function resolveLabelPlacement(preferredX, preferredY, text, font) {
   if (!labelOverlapsEdges(preferredX, preferredY, halfW, halfH)) {
     return { x: preferredX, align: 'center' };
   }
-  // 선 오른쪽으로 이동 (왼쪽 정렬로 선과 분리)
   return { x: preferredX + halfW + 10, align: 'left' };
 }
 
@@ -952,7 +1036,10 @@ function hitTestEdge(wx, wy) {
   let best = null;
   let bestDist = threshold;
   for (const e of edges) {
-    const dist = distToSegment(wx, wy, e.from.x, e.from.y, e.to.x, e.to.y);
+    const path = mode === 'character'
+      ? getCharacterEdgePath(e)
+      : [{ x: e.from.x, y: e.from.y }, { x: e.to.x, y: e.to.y }];
+    const dist = distToPolyline(wx, wy, path);
     if (dist < bestDist) {
       bestDist = dist;
       best = e;
