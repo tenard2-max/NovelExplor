@@ -126,7 +126,7 @@ function initActions() {
         switchView('character');
         await showAlert(
           '프로젝트 열기',
-          `동기화 파일을 적용했습니다.<br><code>${picked.name || filename}</code>`
+          `동기화 파일을 적용했습니다. (브라우저 DB 1개 프로젝트)<br><code>${picked.name || filename}</code>`
         );
       }
     } catch (err) {

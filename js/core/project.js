@@ -71,6 +71,59 @@ export async function listProjects() {
 
 }
 
+/** JSON 복원 전 — IndexedDB의 모든 프로젝트·연관 데이터 삭제 */
+export async function clearAllProjects() {
+  const projects = await storage.getAll('projects');
+  const projectIds = new Set(projects.map((p) => p.id || p.projectId).filter(Boolean));
+
+  const entityStores = ['stories', 'episodes', 'characters', 'worlds', 'foreshadows', 'timeline', 'files'];
+  for (const store of entityStores) {
+    const all = await storage.getAll(store);
+    for (const rec of all) {
+      if (projectIds.has(rec.projectId)) {
+        await storage.remove(store, rec.id);
+      }
+    }
+  }
+
+  const settings = await storage.getAll('settings');
+  for (const rec of settings) {
+    if (rec.projectId && projectIds.has(rec.projectId)) {
+      await storage.remove('settings', rec.id);
+    }
+  }
+
+  for (const p of projects) {
+    await storage.remove('projects', p.id);
+  }
+
+  currentProject = null;
+  cache = {
+    stories: [],
+    episodes: [],
+    characters: [],
+    worlds: [],
+    foreshadows: [],
+    timeline: [],
+    files: [],
+    characterRelations: [],
+  };
+}
+
+/** 백업 JSON 인물 중 사진(대표·갤러리)이 있는 수 */
+export function countCharactersWithPhotos(characters = []) {
+  return characters.filter((ch) => characterHasPhoto(ch)).length;
+}
+
+export function characterHasPhoto(ch) {
+  if (!ch) return false;
+  const avatar = String(ch.avatarDataUrl || ch.image || ch.avatar || ch.avatarUrl || ch.photo || '').trim();
+  if (avatar) return true;
+  if (Array.isArray(ch.images) && ch.images.some((u) => String(u || '').trim())) return true;
+  if (Array.isArray(ch.photos) && ch.photos.some((u) => String(u || '').trim())) return true;
+  return false;
+}
+
 
 
 export async function createProject(title = '새 프로젝트', useSeed = true) {

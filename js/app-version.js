@@ -1,6 +1,6 @@
 /** 배포 빌드 버전 — 커밋·푸시 시 scripts/bump-version.js 로 갱신 */
 
-export const APP_BUILD = '20260710154043';
+export const APP_BUILD = '20260710154344';
 
 /** YYYYMMDDHHMMSS → YYYY-MM-DD HH:MM:SS */
 export function formatAppBuild(stamp = APP_BUILD) {

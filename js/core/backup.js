@@ -132,7 +132,7 @@ export async function restoreFromBackupFile(file, { skipConfirm = false } = {}) 
     const confirmed = await showDialog({
       title: '프로젝트 열기 (JSON)',
       bodyHtml: `<p><strong>${esc(title)}</strong> 동기화 파일을 엽니다.</p>
-        <p>백업 시각: ${when}<br>복원 시 새 프로젝트로 추가됩니다. 계속할까요?</p>`,
+        <p>백업 시각: ${when}<br>적용 시 브라우저 DB의 기존 프로젝트는 <strong>모두 이 파일로 교체</strong>됩니다. 계속할까요?</p>`,
     });
     if (!confirmed) return false;
   }
@@ -142,9 +142,28 @@ export async function restoreFromBackupFile(file, { skipConfirm = false } = {}) 
   return true;
 }
 
-export async function restoreFromBackup(jsonText) {
+export async function restoreFromBackup(jsonText, { replaceAll = true } = {}) {
+  if (replaceAll) {
+    await project.clearAllProjects();
+    clearLocalBackupCache();
+  }
   await project.importProjectJson(jsonText);
   return project.getCurrentProject();
+}
+
+function clearLocalBackupCache() {
+  try {
+    const metaRaw = localStorage.getItem(LOCAL_META_KEY);
+    if (metaRaw) {
+      const meta = JSON.parse(metaRaw);
+      if (meta?.projectId) {
+        localStorage.removeItem(`${LOCAL_KEY_PREFIX}${meta.projectId}`);
+      }
+    }
+    localStorage.removeItem(LOCAL_META_KEY);
+  } catch {
+    /* ignore */
+  }
 }
 
 export function scheduleAutoBackup() {

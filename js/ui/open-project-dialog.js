@@ -8,6 +8,7 @@ import {
   getSyncFolderLabel,
   hasSyncDir,
 } from '../core/sync-folder.js';
+import { countCharactersWithPhotos } from '../core/project.js';
 
 /**
  * @returns {Promise<{ type: 'file', file: File, name?: string } | null>}
@@ -110,8 +111,10 @@ export async function showOpenProjectDialog() {
       <ul class="open-proj-preview-stats">
         <li>백업 시각: ${esc(m.exportedLabel)}</li>
         <li>에피소드 ${m.episodes} · 인물 ${m.characters} · 소설 ${m.stories}</li>
+        <li>인물 사진: <strong>${m.charactersWithPhotos}</strong>명</li>
         <li>파일 크기: ${esc(m.sizeLabel)}</li>
       </ul>
+      <p class="open-proj-preview-hint">적용 시 브라우저 DB의 기존 프로젝트는 <strong>모두 이 파일로 교체</strong>됩니다.</p>
       <p class="open-proj-preview-hint">내용을 확인한 뒤 <strong>적용</strong>을 누르세요.</p>`;
   }
 
@@ -247,6 +250,7 @@ async function peekBackupFile(file) {
       exportedLabel: formatIsoLabel(data.exportedAt) || '—',
       episodes: (data.episodes || []).length,
       characters: (data.characters || []).length,
+      charactersWithPhotos: countCharactersWithPhotos(data.characters || []),
       stories: (data.stories || []).length,
       sizeLabel,
     };
