@@ -1141,3 +1141,201 @@
   outline: none;
   border-color: var(--color-primary);
 }
+
+/* ── 섹션 XML 캔버스 ── */
+.xml-section-root {
+  flex: 1;
+  overflow: auto;
+  padding: 16px;
+}
+
+.xml-section-banner {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+  margin-bottom: 16px;
+  padding: 8px 12px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--bg-panel);
+  font-size: 12px;
+}
+
+.xml-section-badge {
+  font-weight: 700;
+  font-size: 10px;
+  padding: 2px 6px;
+  border-radius: 4px;
+  background: color-mix(in srgb, var(--color-primary) 25%, transparent);
+  color: var(--color-primary);
+}
+
+.xml-section-path {
+  color: var(--text-muted);
+  font-size: 11px;
+}
+
+.xml-section-loading,
+.xml-section-empty,
+.xml-section-error,
+.xml-section-note {
+  color: var(--text-muted);
+  font-size: 13px;
+}
+
+.xml-section-error {
+  color: #f87171;
+}
+
+.xml-card-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+  gap: 12px;
+}
+
+.xml-card {
+  display: flex;
+  gap: 12px;
+  padding: 12px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--bg-panel);
+}
+
+.xml-card-img {
+  width: 72px;
+  height: 72px;
+  object-fit: cover;
+  border-radius: 8px;
+  flex-shrink: 0;
+}
+
+.xml-card-img--empty {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--bg-input);
+  font-size: 28px;
+}
+
+.xml-card-body h3 {
+  margin: 0 0 4px;
+  font-size: 14px;
+}
+
+.xml-card-body h3 small {
+  color: var(--text-dim);
+  font-weight: 400;
+}
+
+.xml-card-meta {
+  margin: 0 0 6px;
+  font-size: 11px;
+  color: var(--text-muted);
+}
+
+.xml-card-body p {
+  margin: 0;
+  font-size: 12px;
+  line-height: 1.45;
+}
+
+.xml-story-list {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin-bottom: 12px;
+}
+
+.xml-story-row {
+  display: grid;
+  grid-template-columns: 64px 1fr auto;
+  gap: 8px;
+  align-items: center;
+  width: 100%;
+  padding: 8px 10px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--bg-panel);
+  color: var(--text);
+  cursor: pointer;
+  text-align: left;
+  font: inherit;
+}
+
+.xml-story-row:hover,
+.xml-story-row.active {
+  border-color: var(--color-primary);
+  background: color-mix(in srgb, var(--color-primary) 10%, transparent);
+}
+
+.xml-story-num {
+  font-size: 12px;
+  color: var(--color-primary);
+  font-weight: 600;
+}
+
+.xml-story-src {
+  font-size: 10px;
+  color: var(--text-dim);
+}
+
+.xml-reader-body {
+  margin-top: 12px;
+  padding: 16px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  white-space: pre-wrap;
+  line-height: 1.7;
+  font-size: 14px;
+  background: var(--bg-canvas);
+}
+
+.xml-fs-list,
+.xml-tl-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.xml-fs-row,
+.xml-tl-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  align-items: center;
+  padding: 8px 12px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--bg-panel);
+  font-size: 13px;
+}
+
+.xml-master-fields {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
+  gap: 10px;
+  margin-bottom: 16px;
+}
+
+.xml-field {
+  padding: 10px 12px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--bg-panel);
+}
+
+.xml-field span {
+  display: block;
+  font-size: 10px;
+  color: var(--text-muted);
+  margin-bottom: 4px;
+}
+
+.xml-doc-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 12px;
+}

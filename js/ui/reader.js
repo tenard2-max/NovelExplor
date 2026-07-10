@@ -1,14 +1,22 @@
-/** 리더 패널 — ST*.md 소설 문서 전용 */
+/** 리더 패널 — Q4=B: 기존 UI + 10_reader.xml 데이터 */
 
 import { on, emit } from '../core/events.js';
 import * as project from '../core/project.js';
 import * as autosave from '../core/autosave.js';
 import { simpleMarkdownToHtml, formatStoryReaderLabel } from '../core/utils.js';
 import { showDialog } from './dialog.js';
+import {
+  loadSectionForView,
+  resolveAssetUrl,
+  parseStories,
+} from '../core/workspace-xml.js';
 
 const LIST_VISIBLE_ROWS = 10;
 
+/** @type {Array<{ id: string, number: number, title: string, src: string, content?: string, source: 'xml'|'idb' }>} */
+let catalog = [];
 let currentStoryNum = null;
+let readerXmlUrl = '';
 
 export function initReader() {
   const select = document.getElementById('reader-episode-select');
@@ -21,6 +29,9 @@ export function initReader() {
   on('workspace:render', (viewId) => {
     if (viewId === 'reader') refreshReader();
   });
+  on('view:changed', (viewId) => {
+    if (viewId === 'reader') refreshReader();
+  });
 
   select?.addEventListener('change', () => {
     showStory(parseInt(select.value, 10), content);
@@ -31,15 +42,13 @@ export function initReader() {
   });
 
   document.querySelector('[data-action="prev-episode"]')?.addEventListener('click', () => {
-    const stories = project.getRegisteredStories();
-    const idx = stories.findIndex((s) => s.number === currentStoryNum);
-    if (idx > 0) showStory(stories[idx - 1].number, content, select);
+    const idx = catalog.findIndex((s) => s.number === currentStoryNum);
+    if (idx > 0) showStory(catalog[idx - 1].number, content, select);
   });
 
   document.querySelector('[data-action="next-episode"]')?.addEventListener('click', () => {
-    const stories = project.getRegisteredStories();
-    const idx = stories.findIndex((s) => s.number === currentStoryNum);
-    if (idx >= 0 && idx < stories.length - 1) showStory(stories[idx + 1].number, content, select);
+    const idx = catalog.findIndex((s) => s.number === currentStoryNum);
+    if (idx >= 0 && idx < catalog.length - 1) showStory(catalog[idx + 1].number, content, select);
   });
 
   document.querySelector('[data-action="delete-story"]')?.addEventListener('click', () => {
@@ -51,7 +60,6 @@ export function initReader() {
   });
 }
 
-/** 포커스 시 최대 10행 표시 + 스크롤로 100개 이상 선택 */
 function initScrollableSelect(select) {
   if (!select) return;
 
@@ -81,25 +89,55 @@ function initScrollableSelect(select) {
   });
 }
 
-export function refreshReader() {
+export async function refreshReader() {
   const select = document.getElementById('reader-episode-select');
   const content = document.getElementById('reader-content');
-  const stories = project.getRegisteredStories();
 
-  populateSelect(select, stories);
-  updateReaderNavState(stories);
+  catalog = await buildCatalog();
+  populateSelect(select, catalog);
+  updateReaderNavState(catalog);
 
-  if (!stories.length) {
+  if (!catalog.length) {
     currentStoryNum = null;
     if (content) {
-      content.innerHTML = '<p class="inspector-empty">등록된 소설이 없습니다.<br>우측 파일 패널에서 <strong>ST*.md</strong> 또는 TXT를 업로드하세요.</p>';
+      content.innerHTML = '<p class="inspector-empty">읽을 소설이 없습니다.<br><code>10_reader.xml</code> 또는 ST*.md 업로드를 확인하세요.</p>';
     }
     return;
   }
 
-  const keep = stories.some((s) => s.number === currentStoryNum);
-  const num = keep ? currentStoryNum : stories[0].number;
-  showStory(num, content, select);
+  const keep = catalog.some((s) => s.number === currentStoryNum);
+  const num = keep ? currentStoryNum : catalog[0].number;
+  await showStory(num, content, select);
+}
+
+async function buildCatalog() {
+  const fromXml = await loadXmlStories();
+  if (fromXml.length) return fromXml;
+
+  return project.getRegisteredStories().map((s) => ({
+    id: s.storyId || s.id,
+    number: s.number,
+    title: s.title || '',
+    src: '',
+    content: s.content || '',
+    source: 'idb',
+  }));
+}
+
+async function loadXmlStories() {
+  try {
+    const payload = await loadSectionForView('reader');
+    if (!payload?.doc) return [];
+    readerXmlUrl = payload.xmlUrl;
+    return parseStories(payload.doc).map((s) => ({
+      ...s,
+      content: undefined,
+      source: 'xml',
+    }));
+  } catch (err) {
+    console.warn('[reader] XML 로드 실패, IndexedDB 폴백:', err.message);
+    return [];
+  }
 }
 
 function populateSelect(select, stories) {
@@ -113,26 +151,60 @@ function populateSelect(select, stories) {
   select.disabled = false;
   select.size = 1;
   select.innerHTML = stories.map((s) => {
-    const label = formatStoryReaderLabel(s);
+    const label = s.source === 'xml'
+      ? `제${s.number}화 ${s.title}`.trim()
+      : formatStoryReaderLabel(s);
     return `<option value="${s.number}">${escapeHtml(label)}</option>`;
   }).join('');
 }
 
 function updateReaderNavState(stories) {
   const hasStories = stories.length > 0;
+  const current = stories.find((s) => s.number === currentStoryNum);
+  const canDelete = hasStories && current?.source === 'idb';
+
   document.querySelector('[data-action="prev-episode"]')?.toggleAttribute('disabled', !hasStories);
   document.querySelector('[data-action="next-episode"]')?.toggleAttribute('disabled', !hasStories);
-  document.querySelector('[data-action="delete-story"]')?.toggleAttribute('disabled', !hasStories);
-  document.querySelector('[data-action="delete-all-stories"]')?.toggleAttribute('disabled', !hasStories);
+  document.querySelector('[data-action="delete-story"]')?.toggleAttribute('disabled', !canDelete);
+  document.querySelector('[data-action="delete-all-stories"]')?.toggleAttribute(
+    'disabled',
+    !stories.some((s) => s.source === 'idb')
+  );
 }
 
-export function showStory(num, contentEl, selectEl) {
-  const story = project.getStoryByNumber(num);
-  if (!story || !contentEl) return;
+export async function showStory(num, contentEl, selectEl) {
+  const entry = catalog.find((s) => s.number === num);
+  if (!entry || !contentEl) return;
+
   currentStoryNum = num;
   if (selectEl) selectEl.value = String(num);
-  else document.getElementById('reader-episode-select').value = String(num);
-  contentEl.innerHTML = `<div class="reader-inner">${simpleMarkdownToHtml(story.content || '')}</div>`;
+  else {
+    const sel = document.getElementById('reader-episode-select');
+    if (sel) sel.value = String(num);
+  }
+
+  contentEl.innerHTML = '<p class="inspector-empty">불러오는 중…</p>';
+  updateReaderNavState(catalog);
+
+  try {
+    const markdown = await resolveStoryContent(entry);
+    contentEl.innerHTML = `<div class="reader-inner">${simpleMarkdownToHtml(markdown)}</div>`;
+  } catch (err) {
+    contentEl.innerHTML = `<p class="inspector-empty">로드 실패: ${escapeHtml(err.message)}</p>`;
+  }
+}
+
+async function resolveStoryContent(entry) {
+  if (entry.source === 'idb') {
+    return entry.content || project.getStoryByNumber(entry.number)?.content || '';
+  }
+  if (entry.content != null) return entry.content;
+
+  const url = resolveAssetUrl(entry.src, readerXmlUrl);
+  const res = await fetch(url, { cache: 'no-store' });
+  if (!res.ok) throw new Error(`${entry.src} (${res.status})`);
+  entry.content = await res.text();
+  return entry.content;
 }
 
 export function getCurrentStoryNumber() {
@@ -140,11 +212,15 @@ export function getCurrentStoryNumber() {
 }
 
 async function deleteCurrentStory() {
-  const stories = project.getRegisteredStories();
-  if (!stories.length || currentStoryNum == null) return;
-
-  const story = project.getStoryByNumber(currentStoryNum);
-  if (!story) return;
+  const entry = catalog.find((s) => s.number === currentStoryNum);
+  if (!entry || entry.source !== 'idb') {
+    await showDialog({
+      title: '삭제 불가',
+      bodyHtml: '<p>XML 원본(<code>10_reader.xml</code>) 항목은 아직 앱에서 삭제할 수 없습니다.<br>IndexedDB에 업로드한 ST 소설만 삭제됩니다.</p>',
+      onConfirm: null,
+    });
+    return;
+  }
 
   await project.deleteStory(currentStoryNum);
   autosave.markDirty();
@@ -152,12 +228,19 @@ async function deleteCurrentStory() {
 }
 
 async function deleteAllStories() {
-  const stories = project.getRegisteredStories();
-  if (!stories.length) return;
+  const idbStories = catalog.filter((s) => s.source === 'idb');
+  if (!idbStories.length) {
+    await showDialog({
+      title: '삭제 불가',
+      bodyHtml: '<p>IndexedDB에 업로드된 소설이 없습니다. XML 시드는 삭제되지 않습니다.</p>',
+      onConfirm: null,
+    });
+    return;
+  }
 
   const ok = await showDialog({
     title: '전체 소설 삭제',
-    bodyHtml: `<p>등록된 소설 <strong>${stories.length}개</strong>를 모두 삭제합니다.<br>이 작업은 되돌릴 수 없습니다. 계속할까요?</p>`,
+    bodyHtml: `<p>IndexedDB 소설 <strong>${idbStories.length}개</strong>를 삭제합니다.<br>XML(<code>10_reader.xml</code>) 항목은 유지됩니다.</p>`,
   });
   if (!ok) return;
 

@@ -15,6 +15,7 @@ import { initCanvasWallpaper } from './ui/canvas-wallpaper.js';
 import { initCharacterPanel } from './ui/character-panel.js';
 import { initCharacterActions } from './ui/character-actions.js';
 import { initBackup, offerLocalRecovery } from './core/backup.js';
+import { loadWorkspaceManifest } from './core/workspace-xml.js';
 import { searchAll } from './search/search.js';
 import {
   analyzeForeshadowCandidates,
@@ -43,6 +44,13 @@ async function boot() {
   initKeyboard();
   initStatus();
   initUploadHandler();
+
+  try {
+    await loadWorkspaceManifest();
+    console.info('[NovelExplor] workspace.xml 매니페스트 로드 완료');
+  } catch (err) {
+    console.warn('[NovelExplor] workspace.xml 없음/실패 — IndexedDB 모드만 사용:', err.message);
+  }
 
   const projects = await project.listProjects();
   if (projects.length) {

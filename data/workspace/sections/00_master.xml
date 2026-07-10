@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<Section id="master" viewId="master" title="??? DB" version="1">
+  <Meta>
+    <Field name="Title">?? ?? ????</Field>
+    <Field name="TimelineStart">2005-03-02</Field>
+    <Field name="OriginalTimeline">2080</Field>
+    <Field name="StoryStatus">EP001~EP007</Field>
+  </Meta>
+  <Doc src="../../seed/99_Master_DB.md" mime="text/markdown"/>
+</Section>

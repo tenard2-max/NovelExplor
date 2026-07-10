@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<Section id="timeline" viewId="timeline" title="????" version="1">
+  <Events>
+    <Event id="TL0001" episode="1" date="2080-12-31" title="??? 1? / ??"/>
+    <Event id="TL0002" episode="2" date="2005-03-15" title="?? ?? ??"/>
+    <Event id="TL0003" episode="3" date="2005-03-20" title="??? ??"/>
+    <Event id="TL0004" episode="4" date="2005-04-01" title="AI ?? ??"/>
+    <Event id="TL0005" episode="6" date="2005-05-01" title="?? ?? ??"/>
+    <Event id="TL0006" episode="7" date="2005-06-01" title="??? ??"/>
+  </Events>
+</Section>

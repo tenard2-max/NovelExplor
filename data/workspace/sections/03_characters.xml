@@ -1,0 +1,41 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<Section id="character" viewId="character" title="??" version="1">
+  <Characters>
+    <Character id="CHR0001" name="???" race="??" gender="M" age="20" occupation="???"
+               firstEpisode="1" lastEpisode="7" status="Alive">
+      <Description>100? ?? ??, ?? ?? ??</Description>
+      <Avatar src="../assets/characters/CHR0001/avatar.png" mime="image/png"/>
+      <Gallery/>
+    </Character>
+    <Character id="CHR0002" name="AI ?" race="AI" gender="F" age="0" occupation="?? AI"
+               firstEpisode="1" lastEpisode="7" status="Alive">
+      <Description>2080? ???? AI, ?? ?? ??</Description>
+      <Avatar src="" mime="image/png"/>
+      <Gallery/>
+    </Character>
+    <Character id="CHR0003" name="??" race="??" gender="M" age="20" occupation="???"
+               firstEpisode="2" lastEpisode="7" status="Alive">
+      <Description>???, ?? ?? ??</Description>
+      <Avatar src="" mime="image/png"/>
+      <Gallery/>
+    </Character>
+    <Character id="CHR0004" name="??" race="??" gender="F" age="20" occupation="???"
+               firstEpisode="3" lastEpisode="7" status="Alive">
+      <Description>???, ??? ? ??? ??</Description>
+      <Avatar src="" mime="image/png"/>
+      <Gallery/>
+    </Character>
+    <Character id="CHR0005" name="??" race="??" gender="F" age="20" occupation="???"
+               firstEpisode="4" lastEpisode="7" status="Alive">
+      <Description>??? ??, ?? ?? ???</Description>
+      <Avatar src="" mime="image/png"/>
+      <Gallery/>
+    </Character>
+    <Character id="CHR0006" name="???" race="??" gender="M" age="55" occupation="?? ??"
+               firstEpisode="7" lastEpisode="7" status="Alive">
+      <Description>???? ??, ??? 58.7? ??</Description>
+      <Avatar src="" mime="image/png"/>
+      <Gallery/>
+    </Character>
+  </Characters>
+</Section>

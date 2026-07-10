@@ -3,21 +3,28 @@
 import { emit, on } from '../core/events.js';
 import * as project from '../core/project.js';
 import { hideGraph } from '../graph/canvas-graph.js';
+import { getSectionMeta } from '../core/workspace-xml.js';
+import { renderSectionCanvas, bindSectionCanvasActions } from './section-canvas.js';
 
 const VIEW_META = {
-  master: { title: '마스터 DB', subtitle: '00_MASTER.md' },
-  'story-bible': { title: 'Story Bible', subtitle: '01_STORY_BIBLE.md' },
-  world: { title: '세계관', subtitle: '00_*.md · 설정' },
-  reader: { title: '소설 읽기', subtitle: 'ST*.md · Novel' },
-  'story-nav': { title: '스토리 네비게이터', subtitle: 'EP*.md · Episode Editor' },
-  foreshadow: { title: '떡밥 회수', subtitle: 'Foreshadow DB' },
-  character: { title: '인물', subtitle: 'Character DB' },
-  timeline: { title: '타임라인', subtitle: 'Timeline' },
-  editor: { title: '에디터', subtitle: 'Markdown / TXT' },
+  master: { title: '마스터 DB', subtitle: 'sections/00_master.xml' },
+  'story-bible': { title: 'Story Bible', subtitle: 'sections/01_story_bible.xml' },
+  world: { title: '세계관', subtitle: 'sections/02_world.xml' },
+  reader: { title: '소설 읽기', subtitle: 'sections/10_reader.xml' },
+  'story-nav': { title: '스토리 네비게이터', subtitle: 'sections/11_story_nav.xml' },
+  foreshadow: { title: '떡밥 회수', subtitle: 'sections/04_foreshadows.xml' },
+  character: { title: '인물', subtitle: 'sections/03_characters.xml' },
+  timeline: { title: '타임라인', subtitle: 'sections/05_timeline.xml' },
+  editor: { title: '에디터', subtitle: 'sections/12_editor.xml' },
   'graph-foreshadow': { title: '복선 그래프', subtitle: 'Canvas' },
   'graph-character': { title: '인물 관계도', subtitle: 'Canvas' },
   'graph-timeline': { title: '타임라인 그래프', subtitle: 'Canvas' },
 };
+
+/** XML 섹션 캔버스 뷰 — reader는 기존 view-reader(Q4=B) 사용 */
+const XML_CANVAS_VIEWS = new Set([
+  'master', 'story-bible', 'world', 'foreshadow', 'character', 'timeline',
+]);
 
 let currentView = 'master';
 
@@ -58,11 +65,38 @@ export function switchView(viewId) {
   hideGraph();
   emit('view:changed', viewId);
 
-  if (viewId === 'reader') showView('view-reader');
-  else if (viewId === 'story-nav' || viewId === 'editor') showView('view-story-nav');
+  const xmlMeta = getSectionMeta(viewId);
+  if (XML_CANVAS_VIEWS.has(viewId) && xmlMeta?.src) {
+    showView('view-xml-section');
+    const sub = document.getElementById('canvas-subtitle');
+    if (sub) sub.textContent = xmlMeta.src;
+    loadXmlCanvas(viewId);
+    return;
+  }
+
+  if (viewId === 'reader') {
+    showView('view-reader');
+    const sub = document.getElementById('canvas-subtitle');
+    if (sub) sub.textContent = xmlMeta?.src || 'sections/10_reader.xml';
+    emit('workspace:render', viewId);
+    return;
+  }
+
+  if (viewId === 'story-nav' || viewId === 'editor') showView('view-story-nav');
   else showView('view-list');
 
   emit('workspace:render', viewId);
+}
+
+async function loadXmlCanvas(viewId) {
+  const root = document.getElementById('xml-section-root');
+  if (!root) return;
+  try {
+    await renderSectionCanvas(viewId, root);
+    bindSectionCanvasActions(root);
+  } catch (err) {
+    root.innerHTML = `<p class="xml-section-error">${err.message}</p>`;
+  }
 }
 
 export function getCurrentView() {

@@ -1,0 +1,25 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<Workspace
+  version="1"
+  projectTitle="인류 생존 프로젝트"
+  updatedAt="2026-07-10T04:50:00Z"
+  schema="novelexplor-workspace/v1">
+
+  <Sections>
+    <Section id="master"      viewId="master"      title="마스터 DB"     src="sections/00_master.xml"/>
+    <Section id="story-bible" viewId="story-bible" title="Story Bible"   src="sections/01_story_bible.xml"/>
+    <Section id="world"       viewId="world"       title="세계관"        src="sections/02_world.xml"/>
+    <Section id="reader"      viewId="reader"      title="소설 읽기"     src="sections/10_reader.xml"/>
+    <Section id="story-nav"   viewId="story-nav"   title="스토리 네비"   src="sections/11_story_nav.xml"/>
+    <Section id="foreshadow"  viewId="foreshadow"  title="떡밥 회수"     src="sections/04_foreshadows.xml"/>
+    <Section id="character"   viewId="character"   title="인물"          src="sections/03_characters.xml"/>
+    <Section id="timeline"    viewId="timeline"    title="타임라인"      src="sections/05_timeline.xml"/>
+    <Section id="editor"      viewId="editor"      title="에디터"        src="sections/12_editor.xml"/>
+  </Sections>
+
+  <Assets root="assets/">
+    <File id="chr0001-avatar" path="assets/characters/CHR0001/avatar.png" mime="image/png"/>
+    <File id="st999-probe" path="assets/stories/ST999.md" mime="text/markdown"/>
+  </Assets>
+
+</Workspace>

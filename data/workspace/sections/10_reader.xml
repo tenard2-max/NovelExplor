@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<Section id="reader" viewId="reader" title="?? ??" version="1">
+  <Stories>
+    <Story id="ST001" number="1" title="??? 1? · ?? · AI? ???"
+           src="../../seed/episodes/EP001.md" mime="text/markdown"/>
+    <Story id="ST002" number="2" title="?? ???? ?? · ?? ??? ??"
+           src="../../seed/episodes/EP002.md" mime="text/markdown"/>
+    <Story id="ST003" number="3" title="??? ?? · ???? ??? ??"
+           src="../../seed/episodes/EP003.md" mime="text/markdown"/>
+    <Story id="ST004" number="4" title="AI? ?? ?? · ? ?? ??"
+           src="../../seed/episodes/EP004.md" mime="text/markdown"/>
+    <Story id="ST005" number="5" title="??? ??? · AI? ??? ???"
+           src="../../seed/episodes/EP005.md" mime="text/markdown"/>
+    <Story id="ST006" number="6" title="AI? ?? ?? ?? · ?? ?? ???? ??"
+           src="../../seed/episodes/EP006.md" mime="text/markdown"/>
+    <Story id="ST007" number="7" title="????? ??? ?? · ? ?? ??"
+           src="../../seed/episodes/EP007.md" mime="text/markdown"/>
+    <Story id="ST999" number="999" title="??? ?? ???"
+           src="../assets/stories/ST999.md" mime="text/markdown"/>
+  </Stories>
+</Section>

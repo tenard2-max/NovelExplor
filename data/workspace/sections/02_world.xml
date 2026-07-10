@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<Section id="world" viewId="world" title="???" version="1">
+  <Docs>
+    <Doc id="world" src="../../seed/00_World.md" mime="text/markdown"/>
+    <Doc id="ai" src="../../seed/02_AI.md" mime="text/markdown"/>
+    <Doc id="gate" src="../../seed/06_Gate.md" mime="text/markdown"/>
+    <Doc id="bosses" src="../../seed/07_Bosses.md" mime="text/markdown"/>
+  </Docs>
+</Section>

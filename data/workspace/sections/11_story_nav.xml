@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<Section id="story-nav" viewId="story-nav" title="??? ?????" version="1">
+  <Episodes>
+    <Episode id="EP001" number="1" title="??? 1? · ?? · AI? ???"
+             src="../../seed/episodes/EP001.md" mime="text/markdown"/>
+    <Episode id="EP002" number="2" title="?? ???? ?? · ?? ??? ??"
+             src="../../seed/episodes/EP002.md" mime="text/markdown"/>
+    <Episode id="EP003" number="3" title="??? ?? · ???? ??? ??"
+             src="../../seed/episodes/EP003.md" mime="text/markdown"/>
+    <Episode id="EP004" number="4" title="AI? ?? ?? · ? ?? ??"
+             src="../../seed/episodes/EP004.md" mime="text/markdown"/>
+    <Episode id="EP005" number="5" title="??? ??? · AI? ??? ???"
+             src="../../seed/episodes/EP005.md" mime="text/markdown"/>
+    <Episode id="EP006" number="6" title="AI? ?? ?? ?? · ?? ?? ???? ??"
+             src="../../seed/episodes/EP006.md" mime="text/markdown"/>
+    <Episode id="EP007" number="7" title="????? ??? ?? · ? ?? ??"
+             src="../../seed/episodes/EP007.md" mime="text/markdown"/>
+  </Episodes>
+</Section>

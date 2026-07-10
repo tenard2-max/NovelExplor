@@ -1,0 +1,4 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<Section id="story-bible" viewId="story-bible" title="Story Bible" version="1">
+  <Doc src="../../seed/Novel_Story_Summary.md" mime="text/markdown"/>
+</Section>
