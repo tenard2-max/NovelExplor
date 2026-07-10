@@ -15,6 +15,8 @@ import { initCanvasWallpaper } from './ui/canvas-wallpaper.js';
 import { initCharacterPanel } from './ui/character-panel.js';
 import { initCharacterActions } from './ui/character-actions.js';
 import { initBackup, offerLocalRecovery, exportTimestampedBackup, openBackupJsonFile } from './core/backup.js';
+import { initSyncFolder } from './core/sync-folder.js';
+import { showOpenProjectDialog } from './ui/open-project-dialog.js';
 import { loadWorkspaceManifest } from './core/workspace-xml.js';
 import { searchAll } from './search/search.js';
 import {
@@ -44,6 +46,7 @@ async function boot() {
   initKeyboard();
   initStatus();
   initUploadHandler();
+  initSyncFolder().catch(() => {});
 
   try {
     await loadWorkspaceManifest();
@@ -103,64 +106,43 @@ function initActions() {
   });
 
   bindAction('open-project', async () => {
-    const list = await project.listProjects();
-    const lines = list.length
-      ? list.map((p, i) => `${i + 1}. ${p.title}`).join('\n')
-      : '(브라우저에 저장된 프로젝트 없음)';
-    const pick = prompt(
-      `프로젝트를 여세요.\n\n` +
-      `· 번호 입력 → 브라우저 DB에서 열기\n` +
-      `· J 입력 → JSON 동기화 파일에서 열기 (깃허브/다른 PC)\n\n${lines}`
-    );
-    if (pick === null) return;
+    try {
+      const picked = await showOpenProjectDialog();
+      if (!picked) return;
 
-    const key = String(pick).trim().toLowerCase();
-    if (key === 'j' || key === 'json') {
-      document.getElementById('backup-file')?.click();
-      return;
-    }
-
-    const idx = parseInt(pick, 10) - 1;
-    if (idx >= 0 && idx < list.length) {
-      try {
-        await project.loadProject(list[idx].id);
+      if (picked.type === 'file') {
+        const ok = await openBackupJsonFile(picked.file, { skipConfirm: true });
+        if (!ok) return;
         await flushPendingSave();
         await autosave.flushSave(true);
         const filename = await exportTimestampedBackup({ notify: false });
         switchView('master');
         await showAlert(
           '프로젝트 열기',
-          `프로젝트를 열고 동기화 파일을 저장했습니다.<br><code>${filename}</code>`
+          `동기화 파일을 불러왔습니다.<br><code>${filename}</code>`
         );
-      } catch (err) {
-        alert(`프로젝트 열기 실패: ${err.message}`);
+        return;
       }
+
+      if (picked.type === 'db' && picked.projectId) {
+        await project.loadProject(picked.projectId);
+        await flushPendingSave();
+        await autosave.flushSave(true);
+        const filename = await exportTimestampedBackup({ notify: false });
+        switchView('master');
+        await showAlert(
+          '프로젝트 열기',
+          `브라우저 DB에서 열었습니다.<br><code>${filename}</code>`
+        );
+      }
+    } catch (err) {
+      alert(`프로젝트 열기 실패: ${err.message}`);
     }
   });
 
   bindAction('save', () => saveCurrentProject());
   bindAction('save-project', () => saveCurrentProject());
   bindAction('export-json', exportJson);
-
-  document.getElementById('backup-file')?.addEventListener('change', async (e) => {
-    const file = e.target.files?.[0];
-    e.target.value = '';
-    if (!file) return;
-    try {
-      const ok = await openBackupJsonFile(file);
-      if (!ok) return;
-      await flushPendingSave();
-      await autosave.flushSave(true);
-      const filename = await exportTimestampedBackup({ notify: false });
-      switchView('master');
-      await showAlert(
-        '프로젝트 열기',
-        `JSON에서 복원한 뒤 동기화 파일을 저장했습니다.<br><code>${filename}</code>`
-      );
-    } catch (err) {
-      alert(`JSON 열기 실패: ${err.message}`);
-    }
-  });
 
   bindAction('toggle-theme', () => {
     const next = document.body.dataset.theme === 'dark' ? 'light' : 'dark';
@@ -174,8 +156,8 @@ function initActions() {
     'NovelExplor',
     '인류 생존 프로젝트 — 복선·스토리·세계관 워크스페이스<br><br>' +
     '<strong>XML</strong>: Pages 고정 원본<br>' +
-    '<strong>프로젝트 저장</strong>: 브라우저 DB + YYYYMMDDHHMMSS.json 동기화 파일<br>' +
-    '<strong>프로젝트 열기</strong>: DB 목록 또는 JSON 파일 복원'
+    '<strong>프로젝트 저장</strong>: 브라우저 DB + 저장 폴더에 YYYYMMDDHHMMSS.json<br>' +
+    '<strong>프로젝트 열기</strong>: 저장 폴더 목록에서 불러오기'
   ));
 
   const savedTheme = localStorage.getItem('fft-theme');

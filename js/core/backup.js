@@ -5,6 +5,7 @@ import * as project from './project.js';
 import { nowIso } from './utils.js';
 import { emit, on } from './events.js';
 import { showDialog, showAlert } from '../ui/dialog.js';
+import { writeBackupToSyncFolder, hasSyncDir, initSyncFolder } from './sync-folder.js';
 
 const BACKUP_VERSION = 1;
 const LOCAL_KEY_PREFIX = 'fft-backup-';
@@ -67,37 +68,53 @@ export function timestampBackupFilename(date = new Date()) {
 }
 
 /**
- * 프로젝트 동기화 스냅샷: JSON 다운로드 + 브라우저 로컬 백업 갱신
- * (깃허브에 올릴 수 있는 휴대용 DB 파일)
+ * 프로젝트 동기화 스냅샷: 저장 폴더 기록(가능 시) + JSON 다운로드 + 로컬 백업
  */
 export async function exportTimestampedBackup({ notify = false } = {}) {
   const json = await buildBackupJson();
   if (!json) throw new Error('열린 프로젝트가 없습니다.');
 
   const filename = timestampBackupFilename();
-  downloadText(json, filename);
+  await initSyncFolder();
+
+  let savedToFolder = false;
+  if (hasSyncDir()) {
+    try {
+      savedToFolder = await writeBackupToSyncFolder(filename, json);
+    } catch (err) {
+      console.warn('[backup] 동기화 폴더 저장 실패:', err);
+    }
+  }
+
+  // 폴더에 못 썼으면 다운로드로 확보
+  if (!savedToFolder) {
+    downloadText(json, filename);
+  }
+
   await saveLocalBackup();
   refreshBackupStatus(filename);
 
   if (notify) {
+    const where = savedToFolder
+      ? '연결한 저장 폴더에 기록했습니다.'
+      : 'JSON 파일을 다운로드했습니다. (폴더 연결 시 폴더에 저장됩니다)';
     await showAlert(
       '프로젝트 동기화',
-      `DB를 저장하고 백업 파일을 받았습니다.<br><code>${esc(filename)}</code><br>` +
-      '이 JSON을 깃허브에 올리면 다른 PC에서 「프로젝트 열기」로 복원할 수 있습니다.'
+      `DB를 저장했습니다.<br><code>${esc(filename)}</code><br>${where}`
     );
   }
   return filename;
 }
 
 /** JSON 백업 파일로 프로젝트 복원 (프로젝트 열기에서 사용) */
-export async function openBackupJsonFile(file) {
+export async function openBackupJsonFile(file, { skipConfirm = false } = {}) {
   if (!file) return false;
-  const ok = await restoreFromBackupFile(file);
+  const ok = await restoreFromBackupFile(file, { skipConfirm });
   if (ok) refreshBackupStatus(file.name);
   return ok;
 }
 
-export async function restoreFromBackupFile(file) {
+export async function restoreFromBackupFile(file, { skipConfirm = false } = {}) {
   const text = await file.text();
   let data;
   try {
@@ -109,18 +126,18 @@ export async function restoreFromBackupFile(file) {
     throw new Error('유효하지 않은 백업 파일입니다.');
   }
 
-  const title = data.project?.title || file.name;
-  const when = formatBackupTime(data.exportedAt);
-
-  const confirmed = await showDialog({
-    title: '프로젝트 열기 (JSON)',
-    bodyHtml: `<p><strong>${esc(title)}</strong> 동기화 파일을 엽니다.</p>
-      <p>백업 시각: ${when}<br>복원 시 새 프로젝트로 추가됩니다. 계속할까요?</p>`,
-  });
-  if (!confirmed) return false;
+  if (!skipConfirm) {
+    const title = data.project?.title || file.name;
+    const when = formatBackupTime(data.exportedAt);
+    const confirmed = await showDialog({
+      title: '프로젝트 열기 (JSON)',
+      bodyHtml: `<p><strong>${esc(title)}</strong> 동기화 파일을 엽니다.</p>
+        <p>백업 시각: ${when}<br>복원 시 새 프로젝트로 추가됩니다. 계속할까요?</p>`,
+    });
+    if (!confirmed) return false;
+  }
 
   await restoreFromBackup(text);
-  await showAlert('백업 복원', '백업을 복원했습니다.');
   emit('project:loaded', project.getCurrentProject());
   return true;
 }
