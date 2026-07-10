@@ -9,6 +9,9 @@ const MANIFEST_URL = new URL('data/workspace/workspace.xml', APP_BASE).href;
 /** @type {{ version: string, projectTitle: string, sections: Map<string, SectionMeta> } | null} */
 let manifest = null;
 
+/** 매니페스트 원문 (연속 업로드 시 네트워크 stale 방지) */
+let manifestXmlText = null;
+
 /** viewId → 파싱된 섹션 문서 캐시 */
 const sectionCache = new Map();
 
@@ -45,6 +48,7 @@ export async function loadWorkspaceManifest() {
     projectTitle: root.getAttribute('projectTitle') || '',
     sections,
   };
+  manifestXmlText = text;
 
   emit('workspace-xml:manifest', manifest);
   return manifest;
@@ -105,6 +109,56 @@ export async function loadSectionForView(viewId) {
 export function invalidateSection(viewId) {
   if (viewId) sectionCache.delete(viewId);
   else sectionCache.clear();
+}
+
+/** 업로드 직후 메모리 섹션 교체 (Pages 반영 전에도 리더 갱신) */
+export function replaceSectionCache(viewId, doc, xmlUrl) {
+  const meta = getSectionMeta(viewId) || {
+    id: viewId,
+    viewId,
+    title: viewId,
+    src: '',
+  };
+  const payload = { meta, doc, xmlUrl };
+  sectionCache.set(viewId, payload);
+  emit('workspace-xml:section', { viewId, ...payload });
+  return payload;
+}
+
+export function getManifestXmlUrl() {
+  return MANIFEST_URL;
+}
+
+export function getManifestXmlText() {
+  return manifestXmlText;
+}
+
+/** 매니페스트 XML 텍스트로 인메모리 매니페스트 갱신 */
+export function replaceManifestText(xmlText) {
+  const doc = new DOMParser().parseFromString(xmlText, 'application/xml');
+  if (doc.querySelector('parsererror')) throw new Error('workspace.xml 파싱 오류');
+
+  const root = doc.documentElement;
+  const sections = new Map();
+  doc.querySelectorAll('Sections > Section').forEach((el) => {
+    const viewId = el.getAttribute('viewId') || el.getAttribute('id');
+    if (!viewId) return;
+    sections.set(viewId, {
+      id: el.getAttribute('id') || viewId,
+      viewId,
+      title: el.getAttribute('title') || viewId,
+      src: el.getAttribute('src') || '',
+    });
+  });
+
+  manifest = {
+    version: root.getAttribute('version') || '1',
+    projectTitle: root.getAttribute('projectTitle') || '',
+    sections,
+  };
+  manifestXmlText = xmlText;
+  emit('workspace-xml:manifest', manifest);
+  return manifest;
 }
 
 /**

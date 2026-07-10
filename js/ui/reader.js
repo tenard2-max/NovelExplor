@@ -129,11 +129,15 @@ async function loadXmlStories() {
     const payload = await loadSectionForView('reader');
     if (!payload?.doc) return [];
     readerXmlUrl = payload.xmlUrl;
-    return parseStories(payload.doc).map((s) => ({
-      ...s,
-      content: undefined,
-      source: 'xml',
-    }));
+    return parseStories(payload.doc).map((s) => {
+      const idb = project.getStoryByNumber(s.number);
+      return {
+        ...s,
+        // Pages 반영 전·오프라인: IndexedDB 본문으로 즉시 표시
+        content: idb?.content,
+        source: 'xml',
+      };
+    });
   } catch (err) {
     console.warn('[reader] XML 로드 실패, IndexedDB 폴백:', err.message);
     return [];
@@ -198,13 +202,20 @@ async function resolveStoryContent(entry) {
   if (entry.source === 'idb') {
     return entry.content || project.getStoryByNumber(entry.number)?.content || '';
   }
-  if (entry.content != null) return entry.content;
 
   const url = resolveAssetUrl(entry.src, readerXmlUrl);
-  const res = await fetch(url, { cache: 'no-store' });
-  if (!res.ok) throw new Error(`${entry.src} (${res.status})`);
-  entry.content = await res.text();
-  return entry.content;
+  try {
+    const res = await fetch(url, { cache: 'no-store' });
+    if (!res.ok) throw new Error(`${entry.src} (${res.status})`);
+    entry.content = await res.text();
+    return entry.content;
+  } catch (err) {
+    const fallback = entry.content
+      || project.getStoryByNumber(entry.number)?.content
+      || '';
+    if (fallback) return fallback;
+    throw err;
+  }
 }
 
 export function getCurrentStoryNumber() {
