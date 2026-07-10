@@ -2,11 +2,19 @@
 
 import { on } from '../core/events.js';
 import * as project from '../core/project.js';
+import * as autosave from '../core/autosave.js';
 import { openCharacterPanel, openImageLightbox } from '../ui/character-panel.js';
+import { showDialog, showAlert } from '../ui/dialog.js';
 
 const GRADE_COLORS = {
   F: '#6b7280', D: '#60a5fa', C: '#4ade80', B: '#facc15',
   A: '#fb923c', S: '#c084fc', SS: '#f472b6', SSS: '#f87171',
+};
+
+const RELATION_COLORS = {
+  neutral: '#ffffff',
+  ally: '#93c5fd',
+  enemy: '#f87171',
 };
 
 let canvas, ctx;
@@ -20,15 +28,19 @@ let dragNode = null;
 let connectingFrom = null;
 let connectPointer = null;
 let pointerState = null;
+let linkAddMode = false;
+let linkPickFirst = null;
 const avatarImages = new Map();
+/** 드래그로 옮긴 좌표 — rebuild 시에도 유지, 「위치 저장」으로 DB 반영 */
+const sessionPositions = new Map();
 const CLICK_THRESHOLD = 6;
 const DBLCLICK_MS = 280;
-const AVATAR_NODE_R = 150; // 이미지 등록된 노드: 300x300
+const AVATAR_NODE_R = 105; // 300×300 → 30% 축소 = 210×210
 let pendingClickTimer = null;
 let lastClick = { id: null, time: 0 };
 const CHARACTER_GRAPH = {
-  centerR: 56,
-  outerR: 48,
+  centerR: 39,
+  outerR: 34,
   layoutScale: 0.58,
   labelGap: 24,
   subGap: 28,
@@ -79,6 +91,11 @@ export function initGraph() {
   document.querySelector('[data-action="graph-zoom-out"]')?.addEventListener('click', () => { zoom /= 1.15; draw(); });
   document.querySelector('[data-action="graph-reset"]')?.addEventListener('click', () => { zoom = 1; panX = 0; panY = 0; buildAndDraw(); });
 
+  document.querySelector('[data-action="graph-save-layout"]')
+    ?.addEventListener('click', () => saveCharacterLayout().catch(console.error));
+  document.querySelector('[data-action="graph-add-link"]')
+    ?.addEventListener('click', () => toggleLinkAddMode());
+
   document.getElementById('graph-filter')?.addEventListener('change', buildAndDraw);
 }
 
@@ -93,7 +110,8 @@ function showGraphLayer(show) {
   const filter = document.getElementById('graph-filter');
   if (graphLayer) graphLayer.hidden = !show;
   if (workspaceLayer) workspaceLayer.hidden = show;
-  if (filter) filter.hidden = !show;
+  if (filter) filter.hidden = !(show && mode === 'foreshadow');
+  if (!show) cancelLinkAddMode();
   if (show) { resizeCanvas(); buildAndDraw(); }
 }
 
@@ -119,16 +137,20 @@ function buildAndDraw() {
   if (mode === 'foreshadow') {
     buildForeshadowGraph(cache, filter);
     renderLegend('복선 등급별 노드 · 인물 연결선');
+    draw();
+    updateStatus();
   } else if (mode === 'character') {
-    const legend = buildCharacterGraph(cache);
-    renderLegend(legend);
+    buildCharacterGraph(cache).then((legend) => {
+      renderLegend(legend);
+      draw();
+      updateStatus();
+    }).catch(console.error);
   } else if (mode === 'timeline') {
     buildTimelineGraph(cache);
     renderLegend('화수 순 타임라인 · 사건 노드');
+    draw();
+    updateStatus();
   }
-
-  draw();
-  updateStatus();
 }
 
 function buildForeshadowGraph(cache, filter) {
@@ -283,7 +305,7 @@ function collectEpisodeRangePairs(characters) {
   return pairs;
 }
 
-function buildCharacterGraph(cache) {
+async function buildCharacterGraph(cache) {
   const characters = cache.characters || [];
   const cx = canvas.clientWidth / 2;
   const cy = canvas.clientHeight / 2;
@@ -312,18 +334,38 @@ function buildCharacterGraph(cache) {
     source = 'episode-range';
   }
 
+  // 등장 순서대로 자동 관계선 반영 (기본: 아군·두께3·설명빈칸)
+  const orderedPairs = [...pairs.keys()].map((key) => key.split('|'));
+  await project.upsertAutoCharacterRelations(orderedPairs);
+  await project.ensureCharacterRelationsNormalized();
+
+  const layout = await project.getCharacterLayout();
+  const saved = layout.positions || {};
+
   const protagonist = characters.find((ch) => ch.name === '주인공')
     || characters.find((ch) => (ch.name || '').includes('주인공'))
     || characters[0];
 
   const others = characters.filter((ch) => ch.id !== protagonist.id);
+
+  function resolvePos(id, fallbackX, fallbackY) {
+    const session = sessionPositions.get(id);
+    if (session) return session;
+    const stored = saved[id];
+    if (stored && Number.isFinite(stored.x) && Number.isFinite(stored.y)) {
+      return { x: stored.x, y: stored.y };
+    }
+    return { x: fallbackX, y: fallbackY };
+  }
+
+  const pPos = resolvePos(protagonist.id, cx, cy);
   nodes.push({
     id: protagonist.id,
     label: protagonist.name,
     sub: protagonist.occupation || '',
     color: protagonist.status === 'Dead' ? '#f87171' : '#6c8cff',
-    x: cx,
-    y: cy,
+    x: pPos.x,
+    y: pPos.y,
     r: protagonist.avatarDataUrl ? AVATAR_NODE_R : CHARACTER_GRAPH.centerR,
     shape: protagonist.avatarDataUrl ? 'square' : 'circle',
     data: protagonist,
@@ -332,13 +374,18 @@ function buildCharacterGraph(cache) {
 
   others.forEach((ch, i) => {
     const angle = (i / Math.max(others.length, 1)) * Math.PI * 2 - Math.PI / 2;
+    const pos = resolvePos(
+      ch.id,
+      cx + Math.cos(angle) * radius,
+      cy + Math.sin(angle) * radius
+    );
     nodes.push({
       id: ch.id,
       label: ch.name,
       sub: ch.occupation || '',
       color: ch.status === 'Dead' ? '#f87171' : '#6c8cff',
-      x: cx + Math.cos(angle) * radius,
-      y: cy + Math.sin(angle) * radius,
+      x: pos.x,
+      y: pos.y,
       r: ch.avatarDataUrl ? AVATAR_NODE_R : CHARACTER_GRAPH.outerR,
       shape: ch.avatarDataUrl ? 'square' : 'circle',
       data: ch,
@@ -346,45 +393,37 @@ function buildCharacterGraph(cache) {
     });
   });
 
-  for (const [key, weight] of pairs) {
-    const [idA, idB] = key.split('|');
-    const na = nodes.find((n) => n.id === idA);
-    const nb = nodes.find((n) => n.id === idB);
-    if (!na || !nb) continue;
-    if (hasEdgeBetween(na.id, nb.id)) continue;
-    edges.push({
-      from: na,
-      to: nb,
-      color: `rgba(139,92,246,${Math.min(0.3 + weight * 0.12, 0.85)})`,
-      lineWidth: Math.min(1 + weight * 0.6, 4),
-      weight,
-      manual: false,
-    });
-  }
+  const relations = [...(project.getCache().characterRelations || [])]
+    .sort((a, b) => (a.lineNo || 0) - (b.lineNo || 0));
 
-  for (const rel of cache.characterRelations || []) {
+  for (const rel of relations) {
     const na = nodes.find((n) => n.id === rel.fromId);
     const nb = nodes.find((n) => n.id === rel.toId);
     if (!na || !nb) continue;
     if (hasEdgeBetween(na.id, nb.id)) continue;
+    const type = rel.type || 'ally';
     edges.push({
       from: na,
       to: nb,
-      color: 'rgba(251,191,36,0.75)',
-      lineWidth: 2.5,
-      manual: true,
+      color: RELATION_COLORS[type] || RELATION_COLORS.ally,
+      lineWidth: Math.min(10, Math.max(1, Number(rel.lineWidth) || 3)),
+      lineNo: rel.lineNo || 0,
+      description: rel.description || '',
+      relationType: type,
+      manual: !!rel.manual,
+      rel,
     });
   }
 
   for (const n of nodes) preloadAvatar(n);
 
-  const manualCount = (cache.characterRelations || []).length;
-  const baseLegend = manualCount
-    ? `클릭: 상세·이미지 · 더블클릭: 원본 · Shift+드래그: 연결 (수동 ${manualCount})`
-    : '클릭: 상세·이미지 · 더블클릭: 원본 · Shift+드래그: 연결';
+  const linkHint = linkAddMode
+    ? '줄 추가 모드: 카드 두 개를 순서대로 클릭'
+    : '줄 추가 버튼 또는 Shift+드래그로 연결 · 선 클릭: 편집';
+  const baseLegend = `드래그: 이동 · ${linkHint} · 중립=흰 / 아군=화이트블루 / 적군=레드`;
 
   if (!edges.length) {
-    return `${baseLegend} · 자동 연결 데이터 없음`;
+    return `${baseLegend} · 연결 없음`;
   }
 
   if (source === 'timeline') return `${baseLegend} · 타임라인 공동 등장`;
@@ -477,14 +516,31 @@ function draw() {
   for (const e of edges) {
     ctx.strokeStyle = e.color;
     ctx.lineWidth = e.lineWidth || 1.5;
+    ctx.lineCap = 'round';
     ctx.beginPath();
     ctx.moveTo(e.from.x, e.from.y);
     ctx.lineTo(e.to.x, e.to.y);
     ctx.stroke();
+
+    if (mode === 'character' && (e.lineNo || e.description)) {
+      const mx = (e.from.x + e.to.x) / 2;
+      const my = (e.from.y + e.to.y) / 2;
+      const label = e.lineNo
+        ? (e.description ? `L${e.lineNo} ${truncate(e.description, 12)}` : `L${e.lineNo}`)
+        : truncate(e.description, 14);
+      ctx.font = '600 11px sans-serif';
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      const tw = ctx.measureText(label).width;
+      ctx.fillStyle = 'rgba(10,12,18,0.72)';
+      ctx.fillRect(mx - tw / 2 - 4, my - 8, tw + 8, 16);
+      ctx.fillStyle = e.color || '#fff';
+      ctx.fillText(label, mx, my);
+    }
   }
 
   if (connectingFrom && connectPointer) {
-    ctx.strokeStyle = 'rgba(251,191,36,0.85)';
+    ctx.strokeStyle = linkAddMode ? 'rgba(147,197,253,0.9)' : 'rgba(251,191,36,0.85)';
     ctx.lineWidth = 2;
     ctx.setLineDash([6, 4]);
     ctx.beginPath();
@@ -613,6 +669,23 @@ function onMouseDown(e) {
   const wy = (e.clientY - rect.top - panY) / zoom;
   const hit = hitTest(wx, wy);
 
+  if (linkAddMode && mode === 'character') {
+    if (hit && hit.type === 'character') {
+      if (!linkPickFirst) {
+        linkPickFirst = hit;
+        connectingFrom = hit;
+        connectPointer = { x: wx, y: wy };
+        draw();
+      } else if (hit.id !== linkPickFirst.id) {
+        finishLinkAdd(linkPickFirst, hit).catch(console.error);
+      }
+    }
+    dragNode = null;
+    dragging = null;
+    pointerState = null;
+    return;
+  }
+
   if (hit && mode === 'character' && hit.type === 'character' && e.shiftKey) {
     connectingFrom = hit;
     connectPointer = { x: wx, y: wy };
@@ -620,6 +693,16 @@ function onMouseDown(e) {
     dragging = null;
     pointerState = null;
     return;
+  }
+
+  if (!hit && mode === 'character') {
+    const edgeHit = hitTestEdge(wx, wy);
+    if (edgeHit) {
+      pointerState = { sx: e.clientX, sy: e.clientY, edge: edgeHit };
+      dragNode = null;
+      dragging = null;
+      return;
+    }
   }
 
   if (hit) {
@@ -648,6 +731,9 @@ function onMouseMove(e) {
   if (dragNode) {
     dragNode.x = wx;
     dragNode.y = wy;
+    if (mode === 'character' && dragNode.type === 'character') {
+      sessionPositions.set(dragNode.id, { x: wx, y: wy });
+    }
     draw();
   } else if (dragging) {
     panX = e.clientX - dragging.x;
@@ -657,6 +743,11 @@ function onMouseMove(e) {
 }
 
 async function onMouseUp(e) {
+  if (linkAddMode) {
+    // 클릭 처리는 mousedown에서 완료
+    return;
+  }
+
   if (connectingFrom) {
     const rect = canvas.getBoundingClientRect();
     const wx = (e.clientX - rect.left - panX) / zoom;
@@ -664,9 +755,7 @@ async function onMouseUp(e) {
     const target = hitTest(wx, wy);
 
     if (target && target.type === 'character' && target.id !== connectingFrom.id) {
-      const added = await project.addCharacterRelation(connectingFrom.id, target.id);
-      if (added) buildAndDraw();
-      else draw();
+      await openRelationDialog(connectingFrom, target);
     } else {
       draw();
     }
@@ -676,6 +765,16 @@ async function onMouseUp(e) {
     dragNode = null;
     pointerState = null;
     dragging = null;
+    return;
+  }
+
+  if (pointerState?.edge && mode === 'character') {
+    const dx = e.clientX - pointerState.sx;
+    const dy = e.clientY - pointerState.sy;
+    if (dx * dx + dy * dy <= CLICK_THRESHOLD * CLICK_THRESHOLD) {
+      await editRelationDialog(pointerState.edge);
+    }
+    pointerState = null;
     return;
   }
 
@@ -735,4 +834,199 @@ function hitTest(wx, wy) {
     }
   }
   return null;
+}
+
+function hitTestEdge(wx, wy) {
+  const threshold = 8 / zoom;
+  let best = null;
+  let bestDist = threshold;
+  for (const e of edges) {
+    const dist = distToSegment(wx, wy, e.from.x, e.from.y, e.to.x, e.to.y);
+    if (dist < bestDist) {
+      bestDist = dist;
+      best = e;
+    }
+  }
+  return best;
+}
+
+function distToSegment(px, py, x1, y1, x2, y2) {
+  const dx = x2 - x1;
+  const dy = y2 - y1;
+  const len2 = dx * dx + dy * dy;
+  if (len2 === 0) return Math.hypot(px - x1, py - y1);
+  let t = ((px - x1) * dx + (py - y1) * dy) / len2;
+  t = Math.max(0, Math.min(1, t));
+  return Math.hypot(px - (x1 + t * dx), py - (y1 + t * dy));
+}
+
+function toggleLinkAddMode() {
+  linkAddMode = !linkAddMode;
+  linkPickFirst = null;
+  connectingFrom = null;
+  connectPointer = null;
+  const btn = document.querySelector('[data-action="graph-add-link"]');
+  if (btn) btn.classList.toggle('is-active', linkAddMode);
+  if (isGraphVisible() && mode === 'character') buildAndDraw();
+  else draw();
+}
+
+function cancelLinkAddMode() {
+  linkAddMode = false;
+  linkPickFirst = null;
+  connectingFrom = null;
+  connectPointer = null;
+  document.querySelector('[data-action="graph-add-link"]')?.classList.remove('is-active');
+}
+
+async function finishLinkAdd(fromNode, toNode) {
+  connectingFrom = null;
+  connectPointer = null;
+  linkPickFirst = null;
+  await openRelationDialog(fromNode, toNode);
+  cancelLinkAddMode();
+}
+
+function relationFormHtml(defaults = {}) {
+  const type = defaults.type || 'ally';
+  const width = Math.min(10, Math.max(1, Number(defaults.lineWidth) || 3));
+  const lineNo = defaults.lineNo || '';
+  const desc = defaults.description || '';
+  const widthOpts = Array.from({ length: 10 }, (_, i) => {
+    const v = i + 1;
+    return `<option value="${v}"${v === width ? ' selected' : ''}>${v}</option>`;
+  }).join('');
+
+  return `
+    <label class="char-form-field">
+      <span class="char-form-label">라인 번호 (1~100)</span>
+      <input type="number" id="rel-line-no" class="char-form-input" min="1" max="100" value="${lineNo}" placeholder="자동">
+    </label>
+    <label class="char-form-field">
+      <span class="char-form-label">관계 유형</span>
+      <select id="rel-type" class="char-form-input">
+        <option value="neutral"${type === 'neutral' ? ' selected' : ''}>중립 (흰색)</option>
+        <option value="ally"${type === 'ally' ? ' selected' : ''}>아군 (화이트블루)</option>
+        <option value="enemy"${type === 'enemy' ? ' selected' : ''}>적군 (레드)</option>
+      </select>
+    </label>
+    <label class="char-form-field">
+      <span class="char-form-label">라인 두께 (1~10)</span>
+      <select id="rel-width" class="char-form-input">${widthOpts}</select>
+    </label>
+    <label class="char-form-field">
+      <span class="char-form-label">관계 설명</span>
+      <input type="text" id="rel-desc" class="char-form-input" maxlength="80" value="${escAttr(desc)}" placeholder="예: 대학 동기">
+    </label>`;
+}
+
+function readRelationForm() {
+  const lineNoRaw = document.getElementById('rel-line-no')?.value;
+  return {
+    lineNo: lineNoRaw ? Number(lineNoRaw) : undefined,
+    type: document.getElementById('rel-type')?.value || 'ally',
+    lineWidth: Number(document.getElementById('rel-width')?.value) || 3,
+    description: document.getElementById('rel-desc')?.value?.trim() || '',
+  };
+}
+
+function escAttr(str) {
+  return String(str)
+    .replace(/&/g, '&amp;')
+    .replace(/"/g, '&quot;')
+    .replace(/</g, '&lt;');
+}
+
+async function openRelationDialog(fromNode, toNode) {
+  let form = {};
+  const confirmed = await showDialog({
+    title: '관계선 추가',
+    bodyHtml: `<p class="autoadd-desc"><strong>${escHtml(fromNode.label)}</strong> ↔ <strong>${escHtml(toNode.label)}</strong></p>${relationFormHtml({ type: 'ally', lineWidth: 3 })}`,
+    onConfirm: () => { form = readRelationForm(); },
+  });
+  if (!confirmed) {
+    draw();
+    return;
+  }
+
+  if (form.lineNo != null && (form.lineNo < 1 || form.lineNo > 100 || Number.isNaN(form.lineNo))) {
+    await showAlert('관계선', '라인 번호는 1~100 사이여야 합니다.');
+    return;
+  }
+
+  const added = await project.addCharacterRelation(fromNode.id, toNode.id, {
+    ...form,
+    manual: true,
+  });
+  if (!added) {
+    await showAlert('관계선', '이미 연결된 인물이거나 라인 번호가 가득 찼습니다.');
+    draw();
+    return;
+  }
+  autosave.markDirty();
+  buildAndDraw();
+}
+
+async function editRelationDialog(edge) {
+  const rel = edge.rel || {};
+  let form = {};
+  let remove = false;
+  const confirmed = await showDialog({
+    title: `관계선 편집 · L${rel.lineNo || '?'}`,
+    bodyHtml: `
+      <p class="autoadd-desc"><strong>${escHtml(edge.from.label)}</strong> ↔ <strong>${escHtml(edge.to.label)}</strong></p>
+      ${relationFormHtml(rel)}
+      <label class="autoadd-row" style="margin-top:12px">
+        <input type="checkbox" id="rel-remove">
+        <span class="autoadd-name">이 관계선 삭제</span>
+      </label>`,
+    onConfirm: () => {
+      remove = !!document.getElementById('rel-remove')?.checked;
+      form = readRelationForm();
+    },
+  });
+  if (!confirmed) return;
+
+  if (remove) {
+    await project.removeCharacterRelation(edge.from.id, edge.to.id);
+    autosave.markDirty();
+    buildAndDraw();
+    return;
+  }
+
+  if (form.lineNo != null && (form.lineNo < 1 || form.lineNo > 100 || Number.isNaN(form.lineNo))) {
+    await showAlert('관계선', '라인 번호는 1~100 사이여야 합니다.');
+    return;
+  }
+
+  await project.updateCharacterRelation(edge.from.id, edge.to.id, form);
+  autosave.markDirty();
+  buildAndDraw();
+}
+
+async function saveCharacterLayout() {
+  if (mode !== 'character') {
+    await showAlert('위치 저장', '인물 관계도 화면에서만 저장할 수 있습니다.');
+    return;
+  }
+  const positions = {};
+  for (const n of nodes) {
+    if (n.type !== 'character') continue;
+    positions[n.id] = { x: n.x, y: n.y };
+    sessionPositions.set(n.id, { x: n.x, y: n.y });
+  }
+  const ok = await project.saveCharacterLayout(positions);
+  if (!ok) {
+    await showAlert('위치 저장', '저장에 실패했습니다.');
+    return;
+  }
+  autosave.markDirty();
+  await showAlert('위치 저장', `인물 ${Object.keys(positions).length}명의 좌표를 저장했습니다.`);
+}
+
+function escHtml(str) {
+  return String(str || '')
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;');
 }

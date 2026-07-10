@@ -24,6 +24,8 @@ export function initCharacterActions() {
 function toggleControls(viewId) {
   const el = document.getElementById('character-controls');
   if (el) el.hidden = !CHARACTER_VIEWS.has(viewId);
+  const graphControls = document.getElementById('graph-relation-controls');
+  if (graphControls) graphControls.hidden = viewId !== 'graph-character';
 }
 
 async function runAddCharacter() {

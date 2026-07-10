@@ -267,6 +267,22 @@ body {
   display: none;
 }
 
+.graph-relation-controls {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.graph-relation-controls[hidden] {
+  display: none;
+}
+
+.btn-sm.is-active {
+  border-color: var(--color-primary, #3b82f6);
+  background: rgba(59, 130, 246, 0.25);
+  color: #fff;
+}
+
 .wp-gauge {
   display: inline-flex;
   align-items: center;

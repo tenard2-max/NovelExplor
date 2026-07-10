@@ -354,6 +354,8 @@ export async function loadProject(projectId) {
 
   };
 
+  cache.characterRelations = (cache.characterRelations || []).map((rel) => normalizeCharacterRelation(rel));
+
 
 
   if (syncStoriesFromFiles(cache, projectId)) {
@@ -871,21 +873,213 @@ function relationPairKey(fromId, toId) {
   return fromId < toId ? `${fromId}|${toId}` : `${toId}|${fromId}`;
 }
 
-export async function addCharacterRelation(fromId, toId) {
+const RELATION_TYPES = {
+  neutral: { label: '중립', color: '#ffffff' },
+  ally: { label: '아군', color: '#93c5fd' },
+  enemy: { label: '적군', color: '#f87171' },
+};
+
+const RELATION_DEFAULTS = {
+  type: 'ally',
+  lineWidth: 3,
+  description: '',
+};
+
+export function getRelationTypeMeta(type) {
+  return RELATION_TYPES[type] || RELATION_TYPES.ally;
+}
+
+export function normalizeCharacterRelation(rel = {}) {
+  const type = RELATION_TYPES[rel.type] ? rel.type : RELATION_DEFAULTS.type;
+  const lineWidth = Math.min(10, Math.max(1, Number(rel.lineWidth) || RELATION_DEFAULTS.lineWidth));
+  const lineNo = Math.min(100, Math.max(1, Number(rel.lineNo) || 0));
+  return {
+    fromId: rel.fromId,
+    toId: rel.toId,
+    manual: !!rel.manual,
+    lineNo: lineNo || 0,
+    type,
+    lineWidth,
+    description: typeof rel.description === 'string' ? rel.description : '',
+  };
+}
+
+async function persistCharacterRelations() {
   const proj = getCurrentProject();
-  if (!proj || !fromId || !toId || fromId === toId) return false;
-
-  const key = relationPairKey(fromId, toId);
-  if (!cache.characterRelations) cache.characterRelations = [];
-  if (cache.characterRelations.some((e) => relationPairKey(e.fromId, e.toId) === key)) {
-    return false;
-  }
-
-  cache.characterRelations.push({ fromId, toId, manual: true });
+  if (!proj) return false;
   await storage.put('settings', {
     id: `${proj.projectId}-character-relations`,
     projectId: proj.projectId,
-    edges: cache.characterRelations,
+    edges: cache.characterRelations || [],
+    updatedAt: nowIso(),
+  });
+  return true;
+}
+
+function nextRelationLineNo(edges = cache.characterRelations || []) {
+  const used = new Set(
+    edges.map((e) => Number(e.lineNo)).filter((n) => n >= 1 && n <= 100)
+  );
+  for (let i = 1; i <= 100; i += 1) {
+    if (!used.has(i)) return i;
+  }
+  return 0;
+}
+
+/** 자동/수동 관계선을 정규화하고, 번호가 없으면 등장 순서대로 1~100 부여 */
+export async function ensureCharacterRelationsNormalized() {
+  if (!cache.characterRelations) cache.characterRelations = [];
+  let changed = false;
+  const normalized = cache.characterRelations.map((rel) => {
+    const next = normalizeCharacterRelation(rel);
+    if (
+      next.type !== rel.type
+      || next.lineWidth !== rel.lineWidth
+      || next.description !== (rel.description || '')
+      || next.lineNo !== (rel.lineNo || 0)
+    ) {
+      changed = true;
+    }
+    return next;
+  });
+
+  for (const rel of normalized) {
+    if (!rel.lineNo) {
+      rel.lineNo = nextRelationLineNo(normalized);
+      changed = true;
+    }
+  }
+
+  cache.characterRelations = normalized;
+  if (changed) await persistCharacterRelations();
+  return cache.characterRelations;
+}
+
+/**
+ * 자동 감지된 페어를 관계선으로 반영한다.
+ * 이미 있으면 유지하고, 없으면 기본값(아군·두께3·설명빈칸)으로 추가한다.
+ * @param {Array<[string, string]>} pairs - [idA, idB] 등장 순서
+ */
+export async function upsertAutoCharacterRelations(pairs = []) {
+  if (!cache.characterRelations) cache.characterRelations = [];
+  await ensureCharacterRelationsNormalized();
+
+  let changed = false;
+  for (const [idA, idB] of pairs) {
+    if (!idA || !idB || idA === idB) continue;
+    const key = relationPairKey(idA, idB);
+    const exists = cache.characterRelations.some(
+      (e) => relationPairKey(e.fromId, e.toId) === key
+    );
+    if (exists) continue;
+
+    const lineNo = nextRelationLineNo();
+    if (!lineNo) break;
+
+    cache.characterRelations.push(normalizeCharacterRelation({
+      fromId: idA,
+      toId: idB,
+      manual: false,
+      lineNo,
+      ...RELATION_DEFAULTS,
+    }));
+    changed = true;
+  }
+
+  if (changed) await persistCharacterRelations();
+  return changed;
+}
+
+export async function addCharacterRelation(fromId, toId, options = {}) {
+  const proj = getCurrentProject();
+  if (!proj || !fromId || !toId || fromId === toId) return null;
+
+  if (!cache.characterRelations) cache.characterRelations = [];
+  await ensureCharacterRelationsNormalized();
+
+  const key = relationPairKey(fromId, toId);
+  const existing = cache.characterRelations.find(
+    (e) => relationPairKey(e.fromId, e.toId) === key
+  );
+  if (existing) return existing;
+
+  const lineNo = Number(options.lineNo) || nextRelationLineNo();
+  if (!lineNo) return null;
+
+  const record = normalizeCharacterRelation({
+    fromId,
+    toId,
+    manual: options.manual !== false,
+    lineNo,
+    type: options.type || RELATION_DEFAULTS.type,
+    lineWidth: options.lineWidth ?? RELATION_DEFAULTS.lineWidth,
+    description: options.description ?? RELATION_DEFAULTS.description,
+  });
+
+  cache.characterRelations.push(record);
+  await persistCharacterRelations();
+  return record;
+}
+
+export async function updateCharacterRelation(fromId, toId, patch = {}) {
+  if (!cache.characterRelations) return null;
+  const key = relationPairKey(fromId, toId);
+  const idx = cache.characterRelations.findIndex(
+    (e) => relationPairKey(e.fromId, e.toId) === key
+  );
+  if (idx < 0) return null;
+
+  const updated = normalizeCharacterRelation({
+    ...cache.characterRelations[idx],
+    ...patch,
+    fromId: cache.characterRelations[idx].fromId,
+    toId: cache.characterRelations[idx].toId,
+  });
+
+  // lineNo 중복 방지
+  if (updated.lineNo) {
+    const clash = cache.characterRelations.some(
+      (e, i) => i !== idx && Number(e.lineNo) === updated.lineNo
+    );
+    if (clash) {
+      updated.lineNo = cache.characterRelations[idx].lineNo || nextRelationLineNo();
+    }
+  }
+
+  cache.characterRelations[idx] = updated;
+  await persistCharacterRelations();
+  return updated;
+}
+
+export async function removeCharacterRelation(fromId, toId) {
+  if (!cache.characterRelations?.length) return false;
+  const key = relationPairKey(fromId, toId);
+  const before = cache.characterRelations.length;
+  cache.characterRelations = cache.characterRelations.filter(
+    (e) => relationPairKey(e.fromId, e.toId) !== key
+  );
+  if (cache.characterRelations.length === before) return false;
+  await persistCharacterRelations();
+  return true;
+}
+
+export async function getCharacterLayout() {
+  const proj = getCurrentProject();
+  if (!proj) return { positions: {} };
+  const row = await storage.get('settings', `${proj.projectId}-character-layout`);
+  return {
+    positions: row?.positions && typeof row.positions === 'object' ? row.positions : {},
+    updatedAt: row?.updatedAt || null,
+  };
+}
+
+export async function saveCharacterLayout(positions = {}) {
+  const proj = getCurrentProject();
+  if (!proj) return false;
+  await storage.put('settings', {
+    id: `${proj.projectId}-character-layout`,
+    projectId: proj.projectId,
+    positions,
     updatedAt: nowIso(),
   });
   return true;
@@ -978,6 +1172,7 @@ export async function exportProjectJson() {
   if (!currentProject) return null;
 
   const wallpaper = await storage.get('settings', `${currentProject.projectId}-canvas-wallpaper`);
+  const layout = await storage.get('settings', `${currentProject.projectId}-character-layout`);
 
   return JSON.stringify({
 
@@ -992,6 +1187,8 @@ export async function exportProjectJson() {
     settings: {
 
       canvasWallpaper: wallpaper || null,
+
+      characterLayout: layout || null,
 
     },
 
@@ -1143,7 +1340,20 @@ export async function importProjectJson(jsonText) {
 
   }
 
-
+  const layout = data.settings?.characterLayout;
+  if (layout?.positions) {
+    const remapped = {};
+    for (const [oldId, pos] of Object.entries(layout.positions)) {
+      const newId = oldToNewCharId.get(oldId) || oldId;
+      remapped[newId] = pos;
+    }
+    await storage.put('settings', {
+      id: `${projectId}-character-layout`,
+      projectId,
+      positions: remapped,
+      updatedAt: nowIso(),
+    });
+  }
 
   await loadProject(projectId);
 
