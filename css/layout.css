@@ -74,14 +74,17 @@ body {
   display: block;
   margin-top: 2px;
   font-size: 10px;
-  color: var(--text-dim, #6b7280);
+  color: var(--text-muted, #9ca3af);
   font-variant-numeric: tabular-nums;
   letter-spacing: 0.02em;
+  max-width: 130px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
-.nav-json-version,
-.nav-upload-version {
-  color: var(--text-muted, #9ca3af);
+.nav-app-version {
+  color: var(--text-dim, #6b7280);
 }
 
 .nav-sync-progress {

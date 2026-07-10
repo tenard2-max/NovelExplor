@@ -74,6 +74,7 @@ async function boot() {
     }
   }
   warnIfWrongOrigin();
+  refreshNavVersions();
   await refreshNavVersionsFromGithub();
   initAppVersion();
   switchView('master');

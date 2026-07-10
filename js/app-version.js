@@ -1,6 +1,6 @@
 /** 배포 빌드 버전 — 커밋·푸시 시 scripts/bump-version.js 로 갱신 */
 
-export const APP_BUILD = '20260710171340';
+export const APP_BUILD = '20260711080500';
 const JSON_VERSION_KEY = 'fft-json-version';
 const UPLOAD_VERSION_KEY = 'fft-upload-version';
 
@@ -104,7 +104,7 @@ export function stampFromBackupFilename(name = '') {
 
 export function refreshNavVersions() {
   const pushEl = document.getElementById('nav-app-version');
-  if (pushEl) pushEl.textContent = formatAppBuild(APP_BUILD);
+  if (pushEl) pushEl.textContent = `APP: ${formatAppBuild(APP_BUILD)}`;
 
   const jsonEl = document.getElementById('nav-json-version');
   if (jsonEl) jsonEl.textContent = formatJsonVersionNav();
@@ -135,26 +135,45 @@ export function clearNavSyncProgress() {
   setNavSyncProgress('');
 }
 
-/** GitHub latest.json · upload-latest.json 에서 버전 로드 */
+async function fetchJsonStamp(url) {
+  const ctrl = typeof AbortController !== 'undefined' ? new AbortController() : null;
+  const timer = ctrl ? setTimeout(() => ctrl.abort(), 4000) : null;
+  try {
+    const res = await fetch(`${url}${url.includes('?') ? '&' : '?'}t=${Date.now()}`, {
+      cache: 'no-store',
+      signal: ctrl?.signal,
+    });
+    if (!res.ok) return '';
+    const data = await res.json();
+    return data.snapshotId || data.uploadId || stampFromBackupFilename(data.filename || '') || '';
+  } catch {
+    return '';
+  } finally {
+    if (timer) clearTimeout(timer);
+  }
+}
+
+/** GitHub latest.json · upload-latest.json → 실패 시 로컬 data/workspace 폴백 */
 export async function refreshNavVersionsFromGithub() {
   try {
     const { rawGithubUrl, snapshotsDir, overlaysDir } = await import('./core/github-config.js');
-    const jsonUrl = rawGithubUrl(`${snapshotsDir()}/latest.json`);
-    const jsonRes = await fetch(`${jsonUrl}?t=${Date.now()}`, { cache: 'no-store' });
-    if (jsonRes.ok) {
-      const data = await jsonRes.json();
-      const stamp = data.snapshotId || stampFromBackupFilename(data.filename || '');
-      if (stamp) setJsonVersionStamp(stamp);
-    }
-    const uploadUrl = rawGithubUrl(`${overlaysDir()}/upload-latest.json`);
-    const uploadRes = await fetch(`${uploadUrl}?t=${Date.now()}`, { cache: 'no-store' });
-    if (uploadRes.ok) {
-      const data = await uploadRes.json();
-      const stamp = data.uploadId || data.snapshotId || '';
-      if (stamp) setUploadVersionStamp(stamp);
-    }
+    const jsonStamp = await fetchJsonStamp(rawGithubUrl(`${snapshotsDir()}/latest.json`));
+    if (jsonStamp) setJsonVersionStamp(jsonStamp);
+    const uploadStamp = await fetchJsonStamp(rawGithubUrl(`${overlaysDir()}/upload-latest.json`));
+    if (uploadStamp) setUploadVersionStamp(uploadStamp);
   } catch {
     /* GitHub 미반영·오프라인 */
   }
+
+  // 로컬 서버(127.0.0.1:9000) — 워크스페이스 파일에서 직접 읽기
+  if (!getJsonVersionStamp()) {
+    const stamp = await fetchJsonStamp('data/workspace/snapshots/latest.json');
+    if (stamp) setJsonVersionStamp(stamp);
+  }
+  if (!getUploadVersionStamp()) {
+    const stamp = await fetchJsonStamp('data/workspace/overlays/upload-latest.json');
+    if (stamp) setUploadVersionStamp(stamp);
+  }
+
   refreshNavVersions();
 }

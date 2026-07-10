@@ -33,6 +33,8 @@ let linkPickFirst = null;
 const avatarImages = new Map();
 /** 드래그로 옮긴 좌표 — rebuild 시에도 유지, 「위치 저장」으로 DB 반영 */
 const sessionPositions = new Map();
+/** 비동기 build 경쟁 방지 — 최신 요청만 노드/엣지를 반영 */
+let buildGeneration = 0;
 const CLICK_THRESHOLD = 6;
 const DBLCLICK_MS = 280;
 const AVATAR_NODE_R = 105; // 300×300 → 30% 축소 = 210×210
@@ -61,10 +63,13 @@ export function initGraph() {
   });
 
   on('character:updated', () => {
+    // 드래그 중 rebuild 하면 고아 노드·복제 카드가 생김
+    if (dragNode) return;
     if (isGraphVisible() && mode === 'character') buildAndDraw();
   });
 
   on('character:deleted', () => {
+    if (dragNode) return;
     if (isGraphVisible() && mode === 'character') buildAndDraw();
   });
 
@@ -130,23 +135,36 @@ function resizeCanvas() {
 
 function buildAndDraw() {
   const cache = project.getCache();
-  nodes = [];
-  edges = [];
   const filter = document.getElementById('graph-filter')?.value || 'all';
+  const gen = ++buildGeneration;
 
   if (mode === 'foreshadow') {
+    nodes = [];
+    edges = [];
     buildForeshadowGraph(cache, filter);
+    if (gen !== buildGeneration) return;
     renderLegend('복선 등급별 노드 · 인물 연결선');
     draw();
     updateStatus();
   } else if (mode === 'character') {
-    buildCharacterGraph(cache).then((legend) => {
-      renderLegend(legend);
+    buildCharacterGraph(cache, gen).then((result) => {
+      if (!result || result.gen !== buildGeneration) return;
+      nodes = result.nodes;
+      edges = result.edges;
+      // 드래그 중이면 포인터가 가리키는 노드 참조를 새 배열에 맞춤
+      if (dragNode) {
+        const live = nodes.find((n) => n.id === dragNode.id);
+        if (live) dragNode = live;
+      }
+      renderLegend(result.legend);
       draw();
       updateStatus();
     }).catch(console.error);
   } else if (mode === 'timeline') {
+    nodes = [];
+    edges = [];
     buildTimelineGraph(cache);
+    if (gen !== buildGeneration) return;
     renderLegend('화수 순 타임라인 · 사건 노드');
     draw();
     updateStatus();
@@ -305,8 +323,18 @@ function collectEpisodeRangePairs(characters) {
   return pairs;
 }
 
-async function buildCharacterGraph(cache) {
-  const characters = cache.characters || [];
+async function buildCharacterGraph(cache, gen) {
+  const nextNodes = [];
+  const nextEdges = [];
+
+  // id 기준 중복 제거 (동일 인물이 두 번 들어오면 카드가 복제됨)
+  const seenIds = new Set();
+  const characters = (cache.characters || []).filter((ch) => {
+    if (!ch?.id || seenIds.has(ch.id)) return false;
+    seenIds.add(ch.id);
+    return true;
+  });
+
   const cx = canvas.clientWidth / 2;
   const cy = canvas.clientHeight / 2;
   const hasAvatars = characters.some((c) => c.avatarDataUrl);
@@ -314,7 +342,7 @@ async function buildCharacterGraph(cache) {
   const index = buildCharacterIndex(characters);
 
   if (!characters.length) {
-    return '인물 데이터가 없습니다 — Character DB를 확인하세요.';
+    return { gen, nodes: nextNodes, edges: nextEdges, legend: '인물 데이터가 없습니다 — Character DB를 확인하세요.' };
   }
 
   const timelinePairs = collectTimelinePairs(cache.timeline, index);
@@ -337,9 +365,12 @@ async function buildCharacterGraph(cache) {
   // 등장 순서대로 자동 관계선 반영 (기본: 아군·두께3·설명빈칸)
   const orderedPairs = [...pairs.keys()].map((key) => key.split('|'));
   await project.upsertAutoCharacterRelations(orderedPairs);
+  if (gen !== buildGeneration) return null;
   await project.ensureCharacterRelationsNormalized();
+  if (gen !== buildGeneration) return null;
 
   const layout = await project.getCharacterLayout();
+  if (gen !== buildGeneration) return null;
   const saved = layout.positions || {};
 
   const protagonist = characters.find((ch) => ch.name === '주인공')
@@ -359,7 +390,7 @@ async function buildCharacterGraph(cache) {
   }
 
   const pPos = resolvePos(protagonist.id, cx, cy);
-  nodes.push({
+  nextNodes.push({
     id: protagonist.id,
     label: protagonist.name,
     sub: protagonist.occupation || '',
@@ -379,7 +410,7 @@ async function buildCharacterGraph(cache) {
       cx + Math.cos(angle) * radius,
       cy + Math.sin(angle) * radius
     );
-    nodes.push({
+    nextNodes.push({
       id: ch.id,
       label: ch.name,
       sub: ch.occupation || '',
@@ -397,12 +428,13 @@ async function buildCharacterGraph(cache) {
     .sort((a, b) => (a.lineNo || 0) - (b.lineNo || 0));
 
   for (const rel of relations) {
-    const na = nodes.find((n) => n.id === rel.fromId);
-    const nb = nodes.find((n) => n.id === rel.toId);
+    const na = nextNodes.find((n) => n.id === rel.fromId);
+    const nb = nextNodes.find((n) => n.id === rel.toId);
     if (!na || !nb) continue;
-    if (hasEdgeBetween(na.id, nb.id)) continue;
+    const key = pairKey(na.id, nb.id);
+    if (nextEdges.some((e) => pairKey(e.from.id, e.to.id) === key)) continue;
     const type = rel.type || 'ally';
-    edges.push({
+    nextEdges.push({
       from: na,
       to: nb,
       color: RELATION_COLORS[type] || RELATION_COLORS.ally,
@@ -415,25 +447,21 @@ async function buildCharacterGraph(cache) {
     });
   }
 
-  for (const n of nodes) preloadAvatar(n);
+  for (const n of nextNodes) preloadAvatar(n);
 
   const linkHint = linkAddMode
     ? '줄 추가 모드: 카드 두 개를 순서대로 클릭'
     : '줄 추가 버튼 또는 Shift+드래그로 연결 · 선 클릭: 편집';
   const baseLegend = `드래그: 이동 · ${linkHint} · 중립=흰 / 아군=화이트블루 / 적군=레드`;
 
-  if (!edges.length) {
-    return `${baseLegend} · 연결 없음`;
+  let legend = `${baseLegend} · 연결 없음`;
+  if (nextEdges.length) {
+    if (source === 'timeline') legend = `${baseLegend} · 타임라인 공동 등장`;
+    else if (source === 'episode') legend = `${baseLegend} · EP/ST 본문 공동 등장`;
+    else legend = `${baseLegend} · 등장 화수 겹침`;
   }
 
-  if (source === 'timeline') return `${baseLegend} · 타임라인 공동 등장`;
-  if (source === 'episode') return `${baseLegend} · EP/ST 본문 공동 등장`;
-  return `${baseLegend} · 등장 화수 겹침`;
-}
-
-function hasEdgeBetween(idA, idB) {
-  const key = pairKey(idA, idB);
-  return edges.some((e) => pairKey(e.from.id, e.to.id) === key);
+  return { gen, nodes: nextNodes, edges: nextEdges, legend };
 }
 
 function preloadAvatar(node) {
@@ -733,6 +761,13 @@ function onMouseMove(e) {
     dragNode.y = wy;
     if (mode === 'character' && dragNode.type === 'character') {
       sessionPositions.set(dragNode.id, { x: wx, y: wy });
+      // 배열 안 동일 id 노드도 동기화 (rebuild 직후 참조 어긋남 방지)
+      const live = nodes.find((n) => n.id === dragNode.id);
+      if (live && live !== dragNode) {
+        live.x = wx;
+        live.y = wy;
+        dragNode = live;
+      }
     }
     draw();
   } else if (dragging) {
