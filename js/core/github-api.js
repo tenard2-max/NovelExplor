@@ -1,6 +1,7 @@
 /** GitHub REST API — Contents 읽기 + Git Trees 단일 커밋 */
 
 import { getGithubConfig, rawGithubUrl } from './github-config.js';
+import { emit } from './events.js';
 
 const API = 'https://api.github.com';
 const DEFAULT_TIMEOUT_MS = 45000;
@@ -12,6 +13,45 @@ const DIR_CACHE_PREFIX = 'ne-gh-dir:';
 
 /** @type {Map<string, { at: number, entries: object[] }>} */
 const dirMemoryCache = new Map();
+
+/** @type {{ limit?: number, remaining?: number, resetAt?: Date } | null} */
+let rateLimitCache = null;
+
+function updateRateLimitFromHeaders(res) {
+  const limit = res.headers.get('X-RateLimit-Limit');
+  const remaining = res.headers.get('X-RateLimit-Remaining');
+  const reset = res.headers.get('X-RateLimit-Reset');
+  if (limit == null && remaining == null && reset == null) return;
+
+  const next = { ...(rateLimitCache || {}) };
+  if (limit != null && !Number.isNaN(Number(limit))) next.limit = Number(limit);
+  if (remaining != null && !Number.isNaN(Number(remaining))) next.remaining = Number(remaining);
+  if (reset != null && !Number.isNaN(Number(reset))) {
+    next.resetAt = new Date(Number(reset) * 1000);
+  }
+  rateLimitCache = next;
+  emit('github:rate-limit', getGithubRateLimit());
+}
+
+/** @returns {{ limit?: number, remaining?: number, resetAt?: Date } | null} */
+export function getGithubRateLimit() {
+  if (!rateLimitCache) return null;
+  return { ...rateLimitCache };
+}
+
+/** GET /rate_limit — 연결 테스트 등에서 헤더 없이도 한도 표시 */
+export async function fetchGithubRateLimit() {
+  const data = await githubRequest('/rate_limit');
+  if (data?.rate) {
+    rateLimitCache = {
+      limit: data.rate.limit,
+      remaining: data.rate.remaining,
+      resetAt: new Date(data.rate.reset * 1000),
+    };
+    emit('github:rate-limit', getGithubRateLimit());
+  }
+  return getGithubRateLimit();
+}
 
 function formatGithubApiError(status, detail) {
   const d = String(detail || '');
@@ -61,6 +101,8 @@ async function githubRequest(path, {
         body: body ? JSON.stringify(body) : undefined,
         signal: controller.signal,
       });
+
+      updateRateLimitFromHeaders(res);
 
       if (res.status === 404 && allow404) return null;
 
@@ -421,6 +463,13 @@ export async function putRepoFiles(files, messagePrefix = 'NovelExplor sync') {
 export async function testGithubConnection() {
   const { owner, repo } = getGithubConfig();
   const data = await githubRequest(`/repos/${owner}/${repo}`, { allowPublic: true });
+  if (getGithubConfig().token?.trim()) {
+    try {
+      await fetchGithubRateLimit();
+    } catch {
+      /* repo 테스트는 성공 — rate_limit 은 부가 정보 */
+    }
+  }
   return { fullName: data.full_name, defaultBranch: data.default_branch };
 }
 

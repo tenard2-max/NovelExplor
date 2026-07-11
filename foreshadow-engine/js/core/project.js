@@ -847,11 +847,23 @@ export async function exportProjectJson() {
 
   if (!currentProject) return null;
 
+  const wallpaper = await storage.get('settings', `${currentProject.projectId}-canvas-wallpaper`);
+
   return JSON.stringify({
+
+    format: 'foreshadow-backup',
+
+    version: 1,
 
     project: currentProject,
 
     ...cache,
+
+    settings: {
+
+      canvasWallpaper: wallpaper || null,
+
+    },
 
     exportedAt: nowIso(),
 
@@ -906,6 +918,62 @@ export async function importProjectJson(jsonText) {
     projectId,
 
   })));
+
+
+
+  const oldToNewCharId = new Map();
+
+  for (const ch of data.characters || []) {
+
+    oldToNewCharId.set(ch.id, `${projectId}-${ch.characterId || ch.id}`);
+
+  }
+
+
+
+  const relations = (data.characterRelations || []).map((e) => ({
+
+    ...e,
+
+    fromId: oldToNewCharId.get(e.fromId) || e.fromId,
+
+    toId: oldToNewCharId.get(e.toId) || e.toId,
+
+  }));
+
+  if (relations.length) {
+
+    await storage.put('settings', {
+
+      id: `${projectId}-character-relations`,
+
+      projectId,
+
+      edges: relations,
+
+      updatedAt: nowIso(),
+
+    });
+
+  }
+
+
+
+  const wallpaper = data.settings?.canvasWallpaper;
+
+  if (wallpaper) {
+
+    await storage.put('settings', {
+
+      ...wallpaper,
+
+      id: `${projectId}-canvas-wallpaper`,
+
+      projectId,
+
+    });
+
+  }
 
 
 

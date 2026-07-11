@@ -368,13 +368,9 @@
 
       <div class="upload-section">
         <h3>GitHub</h3>
-        <p class="local-db-hint">
-          PAT(<code>repo</code>)로 Push/Pull<br>
-          <code>snapshots/</code> + <code>overlays/</code> + section XML<br>
-          (한 커밋에 묶어서 반영)
-        </p>
+        <p class="local-db-hint">PAT(<code>repo</code>)로 Push/Pull</p>
         <label class="github-field">
-          <span>Token</span>
+          <span class="github-field-label">Token<span id="github-rate-quota" class="github-field-meta"></span></span>
           <input type="password" id="github-token" class="github-input" placeholder="ghp_..." autocomplete="off">
         </label>
         <label class="github-field">
@@ -386,7 +382,7 @@
           <input type="text" id="github-repo" class="github-input">
         </label>
         <label class="github-field">
-          <span>Branch</span>
+          <span class="github-field-label">Branch<span id="github-rate-reset" class="github-field-meta"></span></span>
           <input type="text" id="github-branch" class="github-input" value="main">
         </label>
         <button type="button" class="upload-btn full" data-action="github-save">GitHub 설정 저장</button>

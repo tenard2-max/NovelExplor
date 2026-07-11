@@ -13,7 +13,8 @@ import { initInspector } from './ui/inspector.js';
 import { initCanvasLayout } from './ui/canvas-layout.js';
 import { initCanvasWallpaper } from './ui/canvas-wallpaper.js';
 import { initCharacterPanel } from './ui/character-panel.js';
-import { initCharacterAutoAdd } from './ui/character-autoadd.js';
+import { initCharacterActions } from './ui/character-actions.js';
+import { initBackup, offerLocalRecovery } from './core/backup.js';
 import { searchAll } from './search/search.js';
 import {
   analyzeForeshadowCandidates,
@@ -35,8 +36,9 @@ async function boot() {
   initCanvasLayout();
   initCanvasWallpaper();
   initCharacterPanel();
-  initCharacterAutoAdd();
+  initCharacterActions();
   initActions();
+  initBackup();
   initSearch();
   initKeyboard();
   initStatus();
@@ -46,7 +48,10 @@ async function boot() {
   if (projects.length) {
     await project.loadProject(projects[0].id);
   } else {
-    await project.createProject('인류 생존 프로젝트', true);
+    const recovered = await offerLocalRecovery();
+    if (!recovered) {
+      await project.createProject('인류 생존 프로젝트', true);
+    }
   }
   warnIfWrongOrigin();
   switchView('master');

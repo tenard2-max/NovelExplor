@@ -9,6 +9,7 @@ import { showDialog } from './dialog.js';
 const AVATAR_MAX_PX = 1200;
 
 let currentId = null;
+let isEditing = false;
 
 export function initCharacterPanel() {
   const panel = document.getElementById('character-panel');
@@ -23,6 +24,12 @@ export function initCharacterPanel() {
     ?.addEventListener('click', closeCharacterPanel);
   document.querySelector('[data-action="char-delete"]')
     ?.addEventListener('click', () => onDeleteCharacter());
+  document.querySelector('[data-action="char-edit"]')
+    ?.addEventListener('click', () => startEdit());
+  document.querySelector('[data-action="char-edit-save"]')
+    ?.addEventListener('click', () => saveEdit().catch(console.error));
+  document.querySelector('[data-action="char-edit-cancel"]')
+    ?.addEventListener('click', () => cancelEdit());
   document.querySelector('[data-action="char-avatar-register"]')
     ?.addEventListener('click', () => triggerPicker(repInput));
   document.querySelector('[data-action="char-avatar-delete"]')
@@ -72,6 +79,7 @@ export function initCharacterPanel() {
 export async function openCharacterPanel(character) {
   if (!character) return;
   currentId = character.id;
+  isEditing = false;
   // 대표 이미지와 갤러리 정합성 정리 후 최신 데이터로 렌더
   await project.ensureCharacterImages(character.id);
   const ch = getCurrentCharacter() || character;
@@ -86,6 +94,7 @@ export function closeCharacterPanel() {
   const panel = document.getElementById('character-panel');
   if (panel) panel.hidden = true;
   currentId = null;
+  isEditing = false;
   emit('character:selection', { id: null, name: '' });
 }
 
@@ -156,6 +165,9 @@ function refresh() {
 function renderPanel(ch) {
   document.getElementById('char-panel-name').textContent = ch.name || '캐릭터';
 
+  const editBtn = document.querySelector('[data-action="char-edit"]');
+  if (editBtn) editBtn.hidden = isEditing;
+
   const img = document.getElementById('char-avatar-img');
   const empty = document.getElementById('char-avatar-empty');
   const actions = document.getElementById('char-avatar-actions');
@@ -168,27 +180,127 @@ function renderPanel(ch) {
     img.removeAttribute('src');
     img.hidden = true;
   }
-  // "끌어다 놓거나 클릭해서 등록" 안내는 더 이상 사용하지 않으므로 항상 숨긴다.
   empty.hidden = true;
   actions.hidden = hasAvatar;
 
   renderGallery(ch);
+  renderInfoSection(ch);
+}
+
+function renderInfoSection(ch) {
+  const viewEl = document.getElementById('char-panel-desc');
+  const formEl = document.getElementById('char-panel-form');
+  if (!viewEl || !formEl) return;
+
+  if (isEditing) {
+    viewEl.hidden = true;
+    formEl.hidden = false;
+    fillEditForm(ch);
+    return;
+  }
+
+  viewEl.hidden = false;
+  formEl.hidden = true;
 
   const rows = [
     ['종족', ch.race],
-    ['성별', ch.gender],
+    ['성별', formatGender(ch.gender)],
     ['나이', ch.age ? `${ch.age}세` : ''],
     ['직업', ch.occupation],
-    ['상태', ch.status],
+    ['상태', formatStatus(ch.status)],
     ['등장', ch.firstEpisode ? `EP${ch.firstEpisode} ~ EP${ch.lastEpisode || ch.firstEpisode}` : ''],
   ].filter(([, v]) => v);
 
-  const dl = document.getElementById('char-panel-desc');
-  dl.innerHTML =
+  viewEl.innerHTML =
     rows.map(([k, v]) => `<div class="char-desc-row"><dt>${k}</dt><dd>${esc(v)}</dd></div>`).join('')
     + (ch.description
       ? `<div class="char-desc-row char-desc-full"><dt>설명</dt><dd>${esc(ch.description)}</dd></div>`
       : '');
+}
+
+function fillEditForm(ch) {
+  document.getElementById('char-edit-name').value = ch.name || '';
+  document.getElementById('char-edit-race').value = ch.race || '';
+  document.getElementById('char-edit-gender').value = ch.gender || '';
+  document.getElementById('char-edit-age').value = ch.age ? String(ch.age) : '';
+  document.getElementById('char-edit-occupation').value = ch.occupation || '';
+  document.getElementById('char-edit-status').value = ch.status || 'Alive';
+  document.getElementById('char-edit-first-ep').value = ch.firstEpisode ? String(ch.firstEpisode) : '';
+  document.getElementById('char-edit-last-ep').value = ch.lastEpisode ? String(ch.lastEpisode) : '';
+  document.getElementById('char-edit-desc').value = ch.description || '';
+}
+
+function startEdit() {
+  if (!currentId) return;
+  isEditing = true;
+  const ch = getCurrentCharacter();
+  if (ch) renderPanel(ch);
+}
+
+function cancelEdit() {
+  isEditing = false;
+  const ch = getCurrentCharacter();
+  if (ch) renderPanel(ch);
+}
+
+async function saveEdit() {
+  const ch = getCurrentCharacter();
+  if (!ch) return;
+
+  const name = document.getElementById('char-edit-name')?.value?.trim() || '';
+  if (!name) {
+    alert('이름을 입력하세요.');
+    return;
+  }
+
+  const dup = project.getCache().characters.some((c) => c.id !== ch.id && c.name === name);
+  if (dup) {
+    alert(`「${name}」은(는) 이미 등록된 인물입니다.`);
+    return;
+  }
+
+  const ageRaw = document.getElementById('char-edit-age')?.value;
+  const firstEpRaw = document.getElementById('char-edit-first-ep')?.value;
+  const lastEpRaw = document.getElementById('char-edit-last-ep')?.value;
+
+  const updated = {
+    ...ch,
+    name,
+    race: document.getElementById('char-edit-race')?.value?.trim() || '',
+    gender: document.getElementById('char-edit-gender')?.value || '',
+    age: ageRaw ? Number(ageRaw) : 0,
+    occupation: document.getElementById('char-edit-occupation')?.value?.trim() || '',
+    status: document.getElementById('char-edit-status')?.value || 'Alive',
+    firstEpisode: firstEpRaw ? Number(firstEpRaw) : 0,
+    lastEpisode: lastEpRaw ? Number(lastEpRaw) : 0,
+    description: document.getElementById('char-edit-desc')?.value?.trim() || '',
+    updatedAt: new Date().toISOString(),
+  };
+
+  if (updated.lastEpisode && updated.firstEpisode && updated.lastEpisode < updated.firstEpisode) {
+    alert('마지막 EP는 첫 등장 EP보다 작을 수 없습니다.');
+    return;
+  }
+
+  await project.updateCharacter(updated);
+  isEditing = false;
+  autosave.markDirty();
+  renderPanel(updated);
+  emit('character:selection', { id: updated.id, name: updated.name });
+}
+
+function formatGender(value) {
+  if (value === 'M') return '남';
+  if (value === 'F') return '여';
+  if (value === 'O') return '기타';
+  return value || '';
+}
+
+function formatStatus(value) {
+  if (value === 'Alive') return '생존';
+  if (value === 'Dead') return '사망';
+  if (value === 'Unknown') return '불명';
+  return value || '';
 }
 
 function renderGallery(ch) {

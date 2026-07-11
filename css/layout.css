@@ -847,6 +847,21 @@ body.role-user .upload-panel {
   margin-bottom: 2px;
 }
 
+.github-field-label {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 6px;
+  margin-bottom: 2px;
+}
+
+.github-field-meta {
+  font-size: 10px;
+  font-weight: normal;
+  color: var(--text-dim);
+  white-space: nowrap;
+}
+
 .github-input {
   width: 100%;
   padding: 6px 8px;
