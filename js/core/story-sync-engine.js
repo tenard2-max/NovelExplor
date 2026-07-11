@@ -4,7 +4,8 @@
 export const TIMELINE_KEYWORDS = [
   '붕괴', '회귀', '투자', '만남', '재회', '멸망', '게이트', '진동', '균열',
   '경고', '도망', '생존', '프로젝트', '지진', '무너', '금이', '동기화',
-  '전투', '위험', '프로토콜', '자본', '상한가',
+  '전투', '위험', '프로토콜', '자본', '상한가', '시험', '스마트폰', '공학관',
+  '벽', '하늘', '돈', '쓰임', '스무 살',
 ];
 
 /**
@@ -278,5 +279,65 @@ ${relRows || '| - | - | - | - | - |'}
 
 ## 대표 이미지
 \`overlays/characters/${cid}.png\`
+`;
+}
+
+/** 타임라인 → 05_TIMELINE.md */
+export function buildTimelineMarkdown(timeline = []) {
+  const rows = [...timeline]
+    .sort((a, b) => (a.episode - b.episode) || String(a.title).localeCompare(String(b.title)))
+    .map((t) => {
+      const ep = `EP${String(t.episode).padStart(2, '0')}`;
+      const kw = (t.keywords || []).length ? ` · ${(t.keywords || []).join('/')}` : '';
+      const desc = t.description ? `\n  - ${String(t.description).replace(/\s+/g, ' ').slice(0, 120)}` : '';
+      return `${ep} — ${t.title || '사건'}${kw}${desc}`;
+    });
+
+  return `# 05_TIMELINE
+
+> 스토리 동기화로 자동 갱신 · ${new Date().toISOString()}
+
+${rows.join('\n') || '(사건 없음)'}
+`;
+}
+
+/** 에피소드 본문에서 짧은 요약 생성 (로컬, API 없음) */
+export function buildEpisodeSummary(content = '', title = '') {
+  const raw = String(content || '')
+    .replace(/^---[\s\S]*?---\s*/m, '')
+    .replace(/^#+\s+.+$/gm, '')
+    .replace(/\r/g, '')
+    .trim();
+  if (!raw) return title ? `${title} 요약 없음` : '요약 없음';
+
+  const paras = raw
+    .split(/\n{2,}/)
+    .map((p) => p.replace(/\s+/g, ' ').trim())
+    .filter((p) => p.length >= 12);
+
+  const pick = paras.slice(0, 3).join(' ');
+  const text = pick || raw.replace(/\s+/g, ' ');
+  return text.length > 280 ? `${text.slice(0, 279)}…` : text;
+}
+
+/** 스토리 네비 → 11_STORY_NAV.md */
+export function buildStoryNavMarkdown(episodes = []) {
+  const blocks = [...episodes]
+    .sort((a, b) => a.number - b.number)
+    .map((ep) => {
+      const id = `EP${String(ep.number).padStart(3, '0')}`;
+      const summary = ep.summary || buildEpisodeSummary(ep.content, ep.title);
+      return `## ${id} · ${ep.title || id}
+
+- 파일: \`${ep.textFile || `${id}.md`}\`
+- 요약: ${summary}
+`;
+    });
+
+  return `# 11_STORY_NAV
+
+> ST→EP 동기화 · 에피소드 요약 · ${new Date().toISOString()}
+
+${blocks.join('\n') || '(에피소드 없음)'}
 `;
 }

@@ -1093,7 +1093,7 @@ function nextTimelineEventId() {
   return `TL${String(next).padStart(4, '0')}`;
 }
 
-export async function addTimelineEvent(data = {}) {
+export async function addTimelineEvent(data = {}, opts = {}) {
   const proj = getCurrentProject();
   if (!proj) return null;
 
@@ -1117,7 +1117,7 @@ export async function addTimelineEvent(data = {}) {
   cache.timeline.push(record);
   cache.timeline.sort((a, b) => (a.episode - b.episode) || String(a.eventId).localeCompare(String(b.eventId)));
   await storage.put('timeline', record);
-  emit('timeline:updated', record);
+  if (!opts.silent) emit('timeline:updated', record);
   return record;
 }
 
@@ -1141,10 +1141,48 @@ export async function replaceStorySyncTimeline(candidates = []) {
     const rec = await addTimelineEvent({
       ...c,
       source: 'story-sync',
-    });
+    }, { silent: true });
     if (rec) added += 1;
   }
+  emit('timeline:updated', { count: added, source: 'story-sync' });
   return added;
+}
+
+/** IndexedDB files 에 MD 문서 등록 (GitHub overlays/stories 로 동기화) */
+export async function upsertWorkspaceMarkdown(path, markdown, meta = {}) {
+  const proj = getCurrentProject();
+  if (!proj || !path) return null;
+
+  const record = {
+    id: `${proj.projectId}-file-${path}`,
+    projectId: proj.projectId,
+    path,
+    folder: meta.folder || path.split('/')[0] || 'NovelMD',
+    content: String(markdown || ''),
+    updatedAt: nowIso(),
+    ...meta,
+  };
+
+  const idx = cache.files.findIndex((f) => f.path === path);
+  if (idx >= 0) cache.files[idx] = { ...cache.files[idx], ...record };
+  else cache.files.push(record);
+  await storage.put('files', record);
+  return record;
+}
+
+/** 에피소드 요약 필드 갱신 */
+export async function updateEpisodeSummary(episodeId, summary) {
+  const ep = cache.episodes.find((e) => e.id === episodeId);
+  if (!ep) return null;
+  const updated = {
+    ...ep,
+    summary: String(summary || '').trim(),
+    updatedAt: nowIso(),
+  };
+  const idx = cache.episodes.findIndex((e) => e.id === episodeId);
+  if (idx >= 0) cache.episodes[idx] = updated;
+  await storage.put('episodes', updated);
+  return updated;
 }
 
 /** 인물 카드 MD를 IndexedDB files에 등록 (GitHub overlays/characters 로 동기화) */

@@ -7,10 +7,14 @@ import { showDialog, showAlert } from './dialog.js';
 import {
   analyzeStorySync,
   buildCharacterCardMarkdown,
+  buildTimelineMarkdown,
+  buildStoryNavMarkdown,
+  buildEpisodeSummary,
 } from '../core/story-sync-engine.js';
 import { scheduleGithubSync } from '../core/github-sync.js';
 
 const TIMELINE_VIEWS = new Set(['timeline', 'graph-timeline']);
+const STORY_NAV_VIEWS = new Set(['story-nav']);
 
 export function initStorySync() {
   document.querySelectorAll('[data-action="story-sync"]').forEach((btn) => {
@@ -21,19 +25,45 @@ export function initStorySync() {
     btn.addEventListener('click', () => runTimelineSync({ interactive: true }).catch(console.error));
   });
 
-  // 스토리(ST)·에피소드(EP) 등록 후 타임라인 자동 반영
-  on('upload:committed', (payload) => {
-    if (!payload?.storyOrEpisodeCount) return;
-    runTimelineSync({ interactive: false, fromUpload: true }).catch(console.error);
+  document.querySelectorAll('[data-action="story-nav-sync"]').forEach((btn) => {
+    btn.addEventListener('click', () => runStoryNavSync({ interactive: true }).catch(console.error));
   });
 
-  on('view:changed', (viewId) => toggleTimelineControls(viewId));
+  // 스토리(ST)·에피소드(EP) 등록 후 타임라인·네비 자동 반영
+  on('upload:committed', (payload) => {
+    if (!payload?.storyOrEpisodeCount) return;
+    (async () => {
+      await runTimelineSync({ interactive: false, fromUpload: true });
+      await runStoryNavSync({ interactive: false, fromUpload: true });
+    })().catch(console.error);
+  });
+
+  on('view:changed', (viewId) => {
+    toggleTimelineControls(viewId);
+    toggleStoryNavControls(viewId);
+  });
   toggleTimelineControls('master');
+  toggleStoryNavControls('master');
 }
 
 function toggleTimelineControls(viewId) {
   const el = document.getElementById('timeline-controls');
   if (el) el.hidden = !TIMELINE_VIEWS.has(viewId);
+}
+
+function toggleStoryNavControls(viewId) {
+  const el = document.getElementById('story-nav-controls');
+  if (el) el.hidden = !STORY_NAV_VIEWS.has(viewId);
+}
+
+async function persistTimelineMarkdown() {
+  const md = buildTimelineMarkdown(project.getCache().timeline || []);
+  await project.upsertWorkspaceMarkdown('05_TIMELINE.md', md, { folder: 'NovelMD', docType: 'timeline' });
+}
+
+async function persistStoryNavMarkdown() {
+  const md = buildStoryNavMarkdown(project.getCache().episodes || []);
+  await project.upsertWorkspaceMarkdown('11_STORY_NAV.md', md, { folder: 'NovelMD', docType: 'story-nav' });
 }
 
 /**
@@ -89,13 +119,16 @@ export async function runTimelineSync(opts = {}) {
   if (!selected.length) return { added: 0, candidates: candidates.length };
 
   const added = await project.replaceStorySyncTimeline(selected);
+  await persistTimelineMarkdown();
   autosave.markDirty();
-  emit('timeline:updated', { count: added });
   emit('project:loaded', proj);
   scheduleGithubSync(fromUpload ? 'file-upload-timeline' : 'timeline-sync');
 
   if (interactive) {
-    await showAlert('타임라인 업데이트 완료', `사건 ${added}건을 반영했습니다.`);
+    await showAlert(
+      '타임라인 업데이트 완료',
+      `사건 ${added}건 반영 · 05_TIMELINE.md 갱신 · GitHub 동기화 예약`
+    );
   } else if (fromUpload && added > 0) {
     await showAlert(
       '타임라인 자동 반영',
@@ -104,6 +137,50 @@ export async function runTimelineSync(opts = {}) {
   }
 
   return { added, candidates: candidates.length };
+}
+
+/**
+ * ST→EP 덮어쓰기 + 에피소드 요약 생성 + 네비 MD
+ */
+export async function runStoryNavSync(opts = {}) {
+  const { interactive = false, fromUpload = false } = opts;
+  const proj = project.getCurrentProject();
+  if (!proj) {
+    if (interactive) await showAlert('스토리 네비 업데이트', '열린 프로젝트가 없습니다.');
+    return { episodes: 0 };
+  }
+
+  const cache = project.getCache();
+  if (!(cache.stories || []).length && !(cache.episodes || []).length) {
+    if (interactive) {
+      await showAlert('스토리 네비 업데이트', '등록된 스토리(ST) 또는 에피소드가 없습니다.');
+    }
+    return { episodes: 0 };
+  }
+
+  await project.ensureEpisodesFromStories(cache, proj.projectId);
+
+  let updated = 0;
+  for (const ep of [...(project.getCache().episodes || [])]) {
+    const summary = buildEpisodeSummary(ep.content, ep.title);
+    const rec = await project.updateEpisodeSummary(ep.id, summary);
+    if (rec) updated += 1;
+  }
+
+  await persistStoryNavMarkdown();
+  autosave.markDirty();
+  emit('story-nav:updated', { episodes: updated });
+  emit('project:loaded', proj);
+  scheduleGithubSync(fromUpload ? 'file-upload-story-nav' : 'story-nav-sync');
+
+  if (interactive) {
+    await showAlert(
+      '스토리 네비 업데이트 완료',
+      `EP ${updated}화 요약 갱신 · 11_STORY_NAV.md 저장 · GitHub 동기화 예약`
+    );
+  }
+
+  return { episodes: updated };
 }
 
 function buildTimelinePreviewHtml(candidates) {
@@ -309,7 +386,15 @@ async function applySelection(selected) {
 
   if (selected.timeline.length) {
     timeline = await project.replaceStorySyncTimeline(selected.timeline);
+    await persistTimelineMarkdown();
   }
+
+  // ST→EP 후 네비 요약·MD도 갱신
+  for (const ep of [...(project.getCache().episodes || [])]) {
+    const summary = buildEpisodeSummary(ep.content, ep.title);
+    await project.updateEpisodeSummary(ep.id, summary);
+  }
+  await persistStoryNavMarkdown();
 
   // 관계 반영 후 MD 재생성 (관계 표 포함)
   const chars = project.getCache().characters || [];

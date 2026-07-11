@@ -23,8 +23,9 @@ export function showDialog({ title, bodyHtml, onConfirm }) {
     const onSubmit = (e) => {
       e.preventDefault();
       cleanup();
-      dialog.close();
+      // close 전에 선택값을 읽어야 함 (method=dialog 닫힌 뒤 DOM이 비는 경우 대비)
       if (onConfirm) onConfirm();
+      dialog.close();
       resolve(true);
     };
 

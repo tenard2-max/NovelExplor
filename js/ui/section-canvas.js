@@ -248,15 +248,18 @@ function renderTimelineSectionFromIdb(doc) {
     .sort((a, b) => (a.episode - b.episode) || String(a.title).localeCompare(String(b.title)));
   if (idb.length) {
     const rows = idb.map((t) => `
-      <div class="xml-tl-row">
-        <span>EP${escapeHtml(String(t.episode).padStart(3, '0'))}</span>
-        <strong>${escapeHtml(t.title)}</strong>
-        <small>${escapeHtml(t.source === 'story-sync' ? (t.keywords || []).join('·') : (t.date || ''))}</small>
-      </div>`).join('');
+      <article class="xml-tl-row xml-tl-row--rich">
+        <div class="xml-tl-row-main">
+          <span>EP${escapeHtml(String(t.episode).padStart(3, '0'))}</span>
+          <strong>${escapeHtml(t.title)}</strong>
+          <small>${escapeHtml(t.source === 'story-sync' ? (t.keywords || []).join('·') : (t.date || ''))}</small>
+        </div>
+        ${t.description ? `<p class="xml-tl-desc">${escapeHtml(t.description)}</p>` : ''}
+      </article>`).join('');
     return `<div class="xml-tl-list">${rows}</div>`;
   }
   if (doc) return renderTimelineSection(doc);
-  return '<p class="xml-section-empty">이벤트 없음 · 스토리 동기화로 생성할 수 있습니다.</p>';
+  return '<p class="xml-section-empty">이벤트 없음 · 상단 「타임라인 업데이트」로 생성할 수 있습니다.</p>';
 }
 
 function renderStoryNavSection(doc, xmlUrl) {
@@ -275,20 +278,31 @@ function renderStoryNavSection(doc, xmlUrl) {
   return `<div class="xml-tl-list">${rows}</div>`;
 }
 
-/** 스토리 네비: IndexedDB episodes 우선 */
+/** 스토리 네비: IndexedDB episodes 우선 · 클릭 시 요약 펼침 */
 function renderStoryNavSectionFromIdb(doc, xmlUrl) {
   const eps = [...(project.getCache().episodes || [])].sort((a, b) => a.number - b.number);
   if (eps.length) {
-    const rows = eps.map((e) => `
-      <div class="xml-tl-row">
-        <span>EP${escapeHtml(String(e.number).padStart(3, '0'))}</span>
-        <strong>${escapeHtml(e.title || '')}</strong>
-        <code>${escapeHtml(e.textFile || '')}</code>
-      </div>`).join('');
-    return `<div class="xml-tl-list">${rows}</div>`;
+    const rows = eps.map((e) => {
+      const summary = e.summary
+        || (e.content ? String(e.content).replace(/\s+/g, ' ').trim().slice(0, 280) : '')
+        || '요약 없음 · 「네비 업데이트」를 실행하세요.';
+      return `
+      <article class="xml-nav-ep" data-ep-id="${escapeHtml(e.id)}" tabindex="0" role="button"
+               aria-expanded="false" title="클릭하여 요약 보기">
+        <div class="xml-tl-row xml-nav-ep-head">
+          <span>EP${escapeHtml(String(e.number).padStart(3, '0'))}</span>
+          <strong>${escapeHtml(e.title || '')}</strong>
+          <code>${escapeHtml(e.textFile || '')}</code>
+        </div>
+        <div class="xml-nav-ep-summary" hidden>
+          <p>${escapeHtml(summary)}</p>
+        </div>
+      </article>`;
+    }).join('');
+    return `<div class="xml-tl-list xml-nav-list">${rows}</div>`;
   }
   if (doc) return renderStoryNavSection(doc, xmlUrl);
-  return '<p class="xml-section-empty">에피소드 없음 · ST 업로드 후 스토리 동기화를 실행하세요.</p>';
+  return '<p class="xml-section-empty">에피소드 없음 · ST 업로드 후 「네비 업데이트」를 실행하세요.</p>';
 }
 
 function renderMasterSection(doc, xmlUrl) {
@@ -355,6 +369,24 @@ export function bindSectionCanvasActions(mountEl) {
         body.textContent = await res.text();
       } catch (err) {
         body.textContent = `로드 실패: ${err.message}`;
+      }
+    });
+  });
+
+  mountEl.querySelectorAll('.xml-nav-ep').forEach((row) => {
+    const toggle = () => {
+      const open = row.getAttribute('aria-expanded') === 'true';
+      const next = !open;
+      row.setAttribute('aria-expanded', String(next));
+      row.classList.toggle('is-open', next);
+      const summary = row.querySelector('.xml-nav-ep-summary');
+      if (summary) summary.hidden = !next;
+    };
+    row.addEventListener('click', toggle);
+    row.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter' || e.key === ' ') {
+        e.preventDefault();
+        toggle();
       }
     });
   });

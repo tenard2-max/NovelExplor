@@ -257,7 +257,8 @@ body {
 
 .wallpaper-controls,
 .character-controls,
-.timeline-controls {
+.timeline-controls,
+.story-nav-controls {
   display: flex;
   align-items: center;
   gap: 8px;
@@ -269,7 +270,8 @@ body {
 }
 
 .character-controls[hidden],
-.timeline-controls[hidden] {
+.timeline-controls[hidden],
+.story-nav-controls[hidden] {
   display: none;
 }
 

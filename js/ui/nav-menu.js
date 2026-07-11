@@ -47,6 +47,9 @@ export function initNav() {
   on('timeline:updated', () => {
     if (currentView === 'timeline') loadXmlCanvas('timeline');
   });
+  on('story-nav:updated', () => {
+    if (currentView === 'story-nav') loadXmlCanvas('story-nav');
+  });
   on('character:updated', () => {
     updateBadges();
     if (currentView === 'character') loadXmlCanvas('character');
