@@ -18,7 +18,7 @@ const VIEW_META = {
   editor: { title: '에디터', subtitle: 'sections/12_editor.xml' },
   'graph-foreshadow': { title: '복선 그래프', subtitle: 'Canvas' },
   'graph-character': { title: '인물 관계도', subtitle: 'Canvas' },
-  'graph-timeline': { title: '타임라인 그래프', subtitle: 'Canvas' },
+  'graph-timeline': { title: '멀티버스', subtitle: '스토리 등장 EP · 등장 횟수 순' },
 };
 
 /** XML 섹션 캔버스 뷰 — reader는 기존 view-reader(Q4=B) 사용 */

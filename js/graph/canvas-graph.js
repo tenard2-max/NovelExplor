@@ -5,7 +5,7 @@ import * as project from '../core/project.js';
 import * as autosave from '../core/autosave.js';
 import { openCharacterPanel, openImageLightbox } from '../ui/character-panel.js';
 import { showDialog, showAlert } from '../ui/dialog.js';
-import { dedupeTimelineByEpisode, timelineDisplayParts } from '../core/story-sync-engine.js';
+import { collectMultiverseRows } from '../core/story-sync-engine.js';
 
 const GRADE_COLORS = {
   F: '#6b7280', D: '#60a5fa', C: '#4ade80', B: '#facc15',
@@ -194,9 +194,9 @@ function buildAndDraw() {
   } else if (mode === 'timeline') {
     nodes = [];
     edges = [];
-    buildTimelineGraph(cache);
+    buildMultiverseGraph(cache);
     if (gen !== buildGeneration) return;
-    renderLegend('화수 순 타임라인 · 사건 노드');
+    renderLegend('멀티버스 · 스토리 등장 EP · 등장 횟수 순');
     draw();
     updateStatus();
   }
@@ -618,31 +618,57 @@ function truncate(text, max) {
   return s.length > max ? `${s.slice(0, max - 1)}…` : s;
 }
 
-function buildTimelineGraph(cache) {
-  const w = canvas.clientWidth;
-  const h = canvas.clientHeight;
-  const padding = 60;
-  const items = dedupeTimelineByEpisode(cache.timeline || []);
-  const step = items.length > 1 ? (w - padding * 2) / (items.length - 1) : 0;
+/**
+ * 멀티버스 — 인물별 스토리 등장 EP (등장 횟수 순)
+ * 예: 투자 - EP1~EP11, EP14~EP16
+ */
+function buildMultiverseGraph(cache) {
+  const rows = collectMultiverseRows(cache);
+  const w = canvas.clientWidth || 800;
+  const padX = 28;
+  const padY = 28;
+  const rowH = 46;
+  const gap = 8;
+  const boxW = Math.max(320, Math.min(w - padX * 2, 780));
 
-  items.forEach((ev, i) => {
-    const { date, title } = timelineDisplayParts(ev);
+  if (!rows.length) {
     nodes.push({
-      id: ev.id,
-      label: `${date} ${truncate(title, 10)}`,
-      sub: `EP${ev.episode}`,
-      color: '#34d399',
-      x: padding + step * i,
-      y: h / 2 + (i % 2 === 0 ? -50 : 50),
-      r: 20,
-      data: ev,
-      type: 'timeline',
+      id: 'multiverse-empty',
+      label: '등록된 인물이 없습니다',
+      sub: '스토리 동기화 후 다시 열어주세요',
+      shape: 'rect',
+      type: 'multiverse',
+      w: boxW,
+      h: rowH,
+      x: padX + boxW / 2,
+      y: padY + rowH / 2,
+      bg: '#111827',
+      fg: '#e5e7eb',
+      border: '#6b7280',
+      r: rowH / 2,
+      data: { count: 0 },
+    });
+    return;
+  }
+
+  rows.forEach((row, i) => {
+    nodes.push({
+      id: row.id,
+      label: row.name,
+      sub: row.rangesLabel,
+      shape: 'rect',
+      type: 'multiverse',
+      w: boxW,
+      h: rowH,
+      x: padX + boxW / 2,
+      y: padY + i * (rowH + gap) + rowH / 2,
+      bg: i % 2 === 0 ? '#0c1929' : '#0f172a',
+      fg: '#f8fafc',
+      border: '#38bdf8',
+      r: rowH / 2,
+      data: row,
     });
   });
-
-  for (let i = 0; i < nodes.length - 1; i++) {
-    edges.push({ from: nodes[i], to: nodes[i + 1], color: 'rgba(52,211,153,0.5)' });
-  }
 }
 
 function draw() {
@@ -1072,7 +1098,8 @@ function drawNode(n, labelLayout = null) {
   const r = n.r;
 
   if (isRect) {
-    drawForeshadowRectNode(n, cx, cy);
+    if (n.type === 'multiverse') drawMultiverseRectNode(n, cx, cy);
+    else drawForeshadowRectNode(n, cx, cy);
     return;
   }
 
@@ -1145,6 +1172,64 @@ function drawNode(n, labelLayout = null) {
     ctx.textBaseline = 'top';
     ctx.fillText(n.sub, cx, Math.round(cy + r + 10));
   }
+}
+
+/** 멀티버스 행: `이름 - EP1~EP11, EP14` + 등장 횟수 */
+function drawMultiverseRectNode(n, cx, cy) {
+  const w = n.w || 480;
+  const h = n.h || 46;
+  const x = cx - w / 2;
+  const y = cy - h / 2;
+  const corner = 6;
+  const pad = 12;
+  const count = Number(n.data?.count) || 0;
+  const countText = count > 0 ? `${count}회` : '';
+  const main = n.sub && n.sub !== '—'
+    ? `${n.label} - ${n.sub}`
+    : `${n.label} - —`;
+
+  ctx.save();
+  roundRectPath(x, y, w, h, corner);
+  ctx.fillStyle = n.bg || '#0f172a';
+  ctx.fill();
+  ctx.strokeStyle = n.border || '#38bdf8';
+  ctx.lineWidth = 1.5;
+  ctx.stroke();
+
+  roundRectPath(x + 1, y + 1, w - 2, h - 2, Math.max(2, corner - 1));
+  ctx.clip();
+
+  ctx.fillStyle = n.fg || '#f8fafc';
+  ctx.textBaseline = 'middle';
+
+  let countW = 0;
+  if (countText) {
+    ctx.font = '600 12px sans-serif';
+    countW = measureTextSize(countText, ctx.font).w + 10;
+    ctx.textAlign = 'right';
+    ctx.fillStyle = '#7dd3fc';
+    ctx.fillText(countText, x + w - pad, cy);
+  }
+
+  const maxMainW = w - pad * 2 - countW;
+  let fontSize = 14;
+  let text = main;
+  let font = `700 ${fontSize}px sans-serif`;
+  while (fontSize >= 10) {
+    font = `700 ${fontSize}px sans-serif`;
+    text = main;
+    while (text.length > 4 && measureTextSize(text, font).w > maxMainW) {
+      text = `${text.slice(0, Math.max(3, text.length - 2))}…`;
+    }
+    if (measureTextSize(text, font).w <= maxMainW) break;
+    fontSize -= 1;
+  }
+
+  ctx.font = font;
+  ctx.fillStyle = n.fg || '#f8fafc';
+  ctx.textAlign = 'left';
+  ctx.fillText(text, x + pad, cy);
+  ctx.restore();
 }
 
 /** 복선 그래프용 직사각형 노드 — 텍스트가 박스 밖으로 나가지 않음 */

@@ -165,6 +165,85 @@ function buildCharacterDescription(name, epNums, count) {
   return `스토리 동기화 · ${range} · 언급 ${count}회`;
 }
 
+/** 연속 EP를 EP1~EP11, EP14 형식으로 압축 */
+export function formatEpisodeRanges(epNums = []) {
+  const sorted = [...new Set(epNums.map(Number).filter((n) => n > 0))].sort((a, b) => a - b);
+  if (!sorted.length) return '—';
+  const parts = [];
+  let start = sorted[0];
+  let prev = sorted[0];
+  for (let i = 1; i < sorted.length; i += 1) {
+    if (sorted[i] === prev + 1) {
+      prev = sorted[i];
+      continue;
+    }
+    parts.push(start === prev ? `EP${start}` : `EP${start}~EP${prev}`);
+    start = prev = sorted[i];
+  }
+  parts.push(start === prev ? `EP${start}` : `EP${start}~EP${prev}`);
+  return parts.join(', ');
+}
+
+/** 스토리(ST/EP) 본문 기준 인물별 등장 EP · 등장 횟수 순 */
+export function collectMultiverseRows(cache) {
+  const sources = getStoryScanSources(cache);
+  const characters = cache.characters || [];
+  const known = collectKnownNames(characters);
+  const stats = scanNameStats(sources, known);
+
+  return characters
+    .filter((ch) => ch?.name)
+    .map((ch) => {
+      const names = [ch.name, ...(ch.alias || [])].filter(Boolean);
+      let count = 0;
+      const eps = new Set();
+      for (const name of names) {
+        const st = stats.get(name);
+        if (!st) continue;
+        count += st.count;
+        for (const e of st.episodes) eps.add(e);
+      }
+      if (!eps.size) {
+        const a = Number(ch.firstEpisode) || 0;
+        const b = Number(ch.lastEpisode) || a;
+        if (a > 0) {
+          for (let i = a; i <= b; i += 1) eps.add(i);
+          count = Math.max(count, eps.size);
+        }
+      }
+      const episodes = [...eps].sort((a, b) => a - b);
+      return {
+        id: ch.id,
+        name: ch.name,
+        count,
+        episodes,
+        rangesLabel: formatEpisodeRanges(episodes),
+        data: ch,
+      };
+    })
+    .sort((a, b) => (b.count - a.count) || a.name.localeCompare(b.name, 'ko'));
+}
+
+/** ST·EP 중 더 긴 본문을 화수별로 선택 */
+function getStoryScanSources(cache) {
+  const byNum = new Map();
+  for (const st of cache.stories || []) {
+    const num = Number(st.number) || 0;
+    if (!num) continue;
+    byNum.set(num, { number: num, content: st.content || '' });
+  }
+  for (const ep of cache.episodes || []) {
+    const num = Number(ep.number) || 0;
+    if (!num) continue;
+    const prev = byNum.get(num);
+    const epContent = ep.content || '';
+    if (!prev || epContent.length >= (prev.content || '').length) {
+      byNum.set(num, { number: num, content: epContent });
+    }
+  }
+  return [...byNum.values()].sort((a, b) => a.number - b.number);
+}
+
 function collectCooccurrencePairs(episodes, characters, nameStats) {
   const names = new Set(characters.map((c) => c.name).filter(Boolean));
   for (const [name, stat] of nameStats) {
