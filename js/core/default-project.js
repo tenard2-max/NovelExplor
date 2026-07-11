@@ -4,7 +4,7 @@ import * as storage from './storage.js';
 import { nowIso } from './utils.js';
 import { canSetDefaultProject, getCurrentUser, isMaster } from './auth.js';
 import { getGithubConfig, snapshotsDir, hasGithubToken, rawGithubUrl } from './github-config.js';
-import { getRepoFileJson, listRepoDir, deleteRepoPaths, commitRepoFiles } from './github-api.js';
+import { getRepoFileJson, listRepoDir, deleteRepoPaths, commitRepoFiles, isGithubRateLimitError } from './github-api.js';
 import { pullProjectFromGithub } from './github-pull.js';
 import { syncProjectToGithub, waitUntilGithubIdle } from './github-sync.js';
 import { exportTimestampedBackup, buildBackupJson, restoreFromBackup } from './backup.js';
@@ -109,13 +109,20 @@ export async function listGithubProjectsDetailed() {
     const chunk = list.slice(i, i + batch);
     const metas = await Promise.all(chunk.map(async (s) => {
       try {
-        // raw 우선 (API 쿼터 절약)
-        let data = null;
-        try {
-          const res = await fetch(rawGithubUrl(`${snapDir}/${s.name}`), { cache: 'no-store' });
-          if (res.ok) data = JSON.parse(await res.text());
-        } catch { /* */ }
-        if (!data) data = await getRepoFileJson(`${snapDir}/${s.name}`);
+        // raw 만 사용 — Contents API 추가 호출로 한도를 소모하지 않음
+        const res = await fetch(rawGithubUrl(`${snapDir}/${s.name}`), { cache: 'no-store' });
+        if (!res.ok) {
+          return {
+            ...s,
+            title: s.label || s.name,
+            author: '',
+            writers: [],
+            writerUsernames: [],
+            ownerId: '',
+            exportedAt: '',
+          };
+        }
+        const data = JSON.parse(await res.text());
         const project = data?.project || {};
         return {
           ...s,
@@ -142,6 +149,9 @@ export async function listGithubProjectsDetailed() {
   }
   return out;
 }
+
+export { isGithubRateLimitError };
+
 
 function formatStampLabel(stamp) {
   const s = String(stamp || '').slice(0, 14);

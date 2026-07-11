@@ -7,6 +7,24 @@ const DEFAULT_TIMEOUT_MS = 45000;
 const BLOB_TIMEOUT_MS = 90000;
 const MAX_RETRIES = 2;
 const BLOB_BATCH = 4;
+const DIR_CACHE_TTL_MS = 5 * 60 * 1000;
+const DIR_CACHE_PREFIX = 'ne-gh-dir:';
+
+/** @type {Map<string, { at: number, entries: object[] }>} */
+const dirMemoryCache = new Map();
+
+function formatGithubApiError(status, detail) {
+  const d = String(detail || '');
+  if (status === 403 || status === 429 || /rate limit/i.test(d)) {
+    return 'GitHub API 호출 한도 초과. 우측 패널에 PAT를 연결하면 한도가 크게 늘어납니다.';
+  }
+  return d || `GitHub API 오류 (${status})`;
+}
+
+export function isGithubRateLimitError(err) {
+  const msg = String(err?.message || err || '');
+  return /한도 초과|rate limit/i.test(msg);
+}
 
 async function githubRequest(path, {
   method = 'GET',
@@ -54,12 +72,13 @@ async function githubRequest(path, {
         } catch {
           /* ignore */
         }
-        // rate limit / secondary rate — 재시도
-        if ((res.status === 403 || res.status === 429) && attempt < retries) {
-          await sleep(1000 * (attempt + 1));
+        const isRate = res.status === 403 || res.status === 429 || /rate limit/i.test(detail);
+        // rate limit 은 재시도해도 거의 동일 — 한 번만 짧게 재시도
+        if (isRate && attempt < retries && attempt === 0) {
+          await sleep(1200);
           continue;
         }
-        throw new Error(detail || `GitHub API 오류 (${res.status})`);
+        throw new Error(formatGithubApiError(res.status, detail));
       }
 
       if (res.status === 204) return null;
@@ -67,6 +86,9 @@ async function githubRequest(path, {
       return text ? JSON.parse(text) : null;
     } catch (err) {
       lastError = err;
+      if (err?.message && /한도 초과|rate limit|토큰/i.test(err.message)) {
+        throw err;
+      }
       const aborted = err?.name === 'AbortError';
       const network = err instanceof TypeError;
       if ((aborted || network) && attempt < retries) {
@@ -140,10 +162,28 @@ export async function getRepoFileContent(repoPath) {
 
 /**
  * 디렉터리 목록 (공개 저장소는 PAT 없이 가능)
+ * 5분 세션 캐시로 중복 Contents API 호출을 줄임
  * @returns {Promise<{ name: string, path: string, type: string, size: number, sha: string }[]>}
  */
 export async function listRepoDir(repoPath) {
   const { owner, repo, branch } = getGithubConfig();
+  const cacheKey = `${DIR_CACHE_PREFIX}${owner}/${repo}/${branch}:${repoPath}`;
+
+  const mem = dirMemoryCache.get(cacheKey);
+  if (mem && Date.now() - mem.at < DIR_CACHE_TTL_MS) {
+    return mem.entries;
+  }
+  try {
+    const raw = sessionStorage.getItem(cacheKey);
+    if (raw) {
+      const parsed = JSON.parse(raw);
+      if (parsed?.at && Date.now() - parsed.at < DIR_CACHE_TTL_MS && Array.isArray(parsed.entries)) {
+        dirMemoryCache.set(cacheKey, parsed);
+        return parsed.entries;
+      }
+    }
+  } catch { /* private mode 등 */ }
+
   const data = await githubRequest(
     `/repos/${owner}/${repo}/contents/${encodeRepoPath(repoPath)}?ref=${encodeURIComponent(branch)}`,
     { allow404: true, allowPublic: true }
@@ -152,13 +192,20 @@ export async function listRepoDir(repoPath) {
   if (!Array.isArray(data)) {
     throw new Error(`디렉터리가 아닙니다: ${repoPath}`);
   }
-  return data.map((item) => ({
+  const entries = data.map((item) => ({
     name: item.name,
     path: item.path,
     type: item.type,
     size: item.size || 0,
     sha: item.sha,
   }));
+
+  const payload = { at: Date.now(), entries };
+  dirMemoryCache.set(cacheKey, payload);
+  try {
+    sessionStorage.setItem(cacheKey, JSON.stringify(payload));
+  } catch { /* quota */ }
+  return entries;
 }
 
 export async function getRepoFileText(repoPath) {
