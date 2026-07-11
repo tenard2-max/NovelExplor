@@ -183,10 +183,14 @@ export async function showStory(num, contentEl, selectEl) {
   }
 }
 
-async function resolveStoryContent(entry) {
+function resolveStoryContentSync(entry) {
   return entry.content
     || project.getStoryByNumber(entry.number)?.content
     || '';
+}
+
+async function resolveStoryContent(entry) {
+  return resolveStoryContentSync(entry);
 }
 
 export function getCurrentStoryNumber() {
@@ -196,11 +200,13 @@ export function getCurrentStoryNumber() {
 export function getCurrentStoryMarkdownSync() {
   const entry = catalog.find((s) => s.number === currentStoryNum);
   if (!entry) return '';
-  return resolveStoryContent(entry);
+  return resolveStoryContentSync(entry);
 }
 
 export async function getCurrentStoryMarkdown() {
-  return getCurrentStoryMarkdownSync();
+  const entry = catalog.find((s) => s.number === currentStoryNum);
+  if (!entry) return '';
+  return resolveStoryContent(entry);
 }
 
 async function deleteCurrentStory() {

@@ -6,6 +6,7 @@ import { getCurrentStoryMarkdownSync, tagReaderBlocksForTts } from './reader.js'
 import { setTtsWallpaper } from './canvas-wallpaper.js';
 
 const synth = typeof window !== 'undefined' ? window.speechSynthesis : null;
+const TTS_MAX_CHUNK = 200;
 
 let voicesReady = false;
 let koreanVoice = null;
@@ -19,6 +20,7 @@ let statusTimer = null;
 let statusRestore = '';
 let keepAliveTimer = null;
 let startGuardTimer = null;
+let heardAnySpeech = false;
 
 /** @type {SpeechSynthesisUtterance | null} */
 let currentUtterance = null;
@@ -66,41 +68,60 @@ function initVoices() {
   }
 }
 
-/** 클릭 제스처 컨텍스트 안에서 첫 speak() 호출을 보장 */
+/** 클릭 제스처 컨텍스트 안에서 synthesis 큐를 깨우고, warm utterance 종료까지 대기 */
 function primeSpeechOnGesture() {
-  if (!synth) return;
-  if (synth.paused) synth.resume();
+  if (!synth) return Promise.resolve();
+
   initVoices();
-  const warm = new SpeechSynthesisUtterance('\u200b');
-  warm.volume = 0;
-  warm.lang = 'ko-KR';
-  if (koreanVoice) warm.voice = koreanVoice;
-  synth.speak(warm);
+  if (synth.paused) synth.resume();
+
+  return new Promise((resolve) => {
+    let settled = false;
+    const done = () => {
+      if (settled) return;
+      settled = true;
+      resolve();
+    };
+
+    const warm = new SpeechSynthesisUtterance('\u200b');
+    warm.volume = 0.01;
+    warm.lang = 'ko-KR';
+    if (koreanVoice) warm.voice = koreanVoice;
+    warm.onend = done;
+    warm.onerror = done;
+    window.setTimeout(done, 180);
+    synth.speak(warm);
+  });
 }
 
 function start() {
   if (!synth) {
-    showStatus('이 브라우저는 음성 읽기를 지원하지 않습니다.');
+    showStatus('이 브라우저는 음성 읽기를 지원하지 않습니다.', { persist: true });
     return;
   }
 
   initVoices();
 
-  const markdown = getCurrentStoryMarkdownSync();
-  const plain = markdownToSpeakableText(markdown);
-  if (!plain.trim()) {
-    showStatus('읽을 내용이 없습니다.');
+  const inner = document.querySelector('#reader-content .reader-inner');
+  tagReaderBlocksForTts(inner);
+  chunks = buildTtsChunksFromReaderDom(inner);
+
+  if (!chunks.length) {
+    const markdown = getCurrentStoryMarkdownSync();
+    if (markdown != null && typeof markdown === 'object' && typeof markdown.then === 'function') {
+      showStatus('소설 본문을 불러오지 못했습니다. 페이지를 새로고침 후 다시 시도해 주세요.', { persist: true });
+      return;
+    }
+    const plain = markdownToSpeakableText(markdown);
+    chunks = chunkSpeakableText(plain);
+  }
+
+  if (!chunks.length) {
+    showStatus('읽을 내용이 없습니다.', { persist: true });
     return;
   }
 
   nameEntries = buildCharacterNameEntries(project.getCache().characters || []);
-  chunks = chunkSpeakableText(plain);
-  if (!chunks.length) {
-    showStatus('읽을 내용이 없습니다.');
-    return;
-  }
-
-  tagReaderBlocksForTts(document.querySelector('#reader-content .reader-inner'));
 
   const needsCancel = playing || synth.speaking || synth.pending;
   resetPlaybackState({ silent: true });
@@ -108,18 +129,23 @@ function start() {
   playing = true;
   paused = false;
   chunkIndex = 0;
+  heardAnySpeech = false;
   updateButtons();
-  showStatus('준비 중…');
+  showStatus('준비 중…', { persist: true });
 
-  const begin = () => {
+  const begin = async () => {
     if (!playing) return;
-    primeSpeechOnGesture();
-    speakNextChunk();
+    await primeSpeechOnGesture();
+    if (!playing) return;
+    showStatus(`음성 준비 ${chunks.length}구간`, { persist: true });
+    window.setTimeout(() => {
+      if (playing) speakNextChunk();
+    }, 50);
   };
 
   if (needsCancel) {
     synth.cancel();
-    window.setTimeout(begin, 60);
+    window.setTimeout(begin, 80);
   } else {
     begin();
   }
@@ -146,14 +172,18 @@ function speakNextChunk() {
   utterance.rate = 1;
   utterance.pitch = 1;
 
+  let chunkStarted = false;
+
   clearTimeout(startGuardTimer);
   startGuardTimer = window.setTimeout(() => {
-    if (!playing || paused || currentUtterance !== utterance) return;
+    if (!playing || paused || currentUtterance !== utterance || chunkStarted) return;
     handleSpeakFailure('음성 재생이 시작되지 않았습니다. 다시 시도해 주세요.');
   }, 4500);
 
   utterance.onstart = () => {
     if (!playing) return;
+    chunkStarted = true;
+    heardAnySpeech = true;
     clearTimeout(startGuardTimer);
     startKeepAlive();
     updateButtons();
@@ -163,6 +193,10 @@ function speakNextChunk() {
   utterance.onend = () => {
     if (!playing) return;
     clearTimeout(startGuardTimer);
+    if (!chunkStarted) {
+      handleSpeakFailure('음성 재생이 시작되지 않았습니다. 다시 시도해 주세요.');
+      return;
+    }
     chunkIndex += 1;
     speakNextChunk();
   };
@@ -224,11 +258,12 @@ function handleSpeakFailure(message) {
   playing = false;
   paused = false;
   currentUtterance = null;
+  heardAnySpeech = false;
   stopKeepAlive();
   clearHighlight();
   synth?.cancel();
   updateButtons();
-  showStatus(message);
+  showStatus(message, { persist: true });
 }
 
 function resetPlaybackState(opts = {}) {
@@ -238,6 +273,7 @@ function resetPlaybackState(opts = {}) {
   chunkIndex = 0;
   chunks = [];
   currentUtterance = null;
+  heardAnySpeech = false;
   clearTimeout(startGuardTimer);
   stopKeepAlive();
   clearHighlight();
@@ -284,9 +320,15 @@ function resume() {
 }
 
 function finish() {
+  if (playing && chunks.length > 0 && !heardAnySpeech) {
+    handleSpeakFailure('음성 재생이 시작되지 않았습니다. 다시 시도해 주세요.');
+    return;
+  }
+
   playing = false;
   paused = false;
   currentUtterance = null;
+  heardAnySpeech = false;
   clearTimeout(startGuardTimer);
   stopKeepAlive();
   clearHighlight();
@@ -333,7 +375,7 @@ function updateButtons() {
   }
 }
 
-function showStatus(message) {
+function showStatus(message, opts = {}) {
   const el = document.getElementById('reader-tts-status');
   if (!el) return;
 
@@ -343,6 +385,8 @@ function showStatus(message) {
   el.textContent = message;
   el.classList.add('is-visible');
 
+  if (opts.persist) return;
+
   statusTimer = setTimeout(() => {
     el.textContent = statusRestore;
     el.classList.remove('is-visible');
@@ -350,8 +394,32 @@ function showStatus(message) {
   }, 3200);
 }
 
+/** DOM에 표시된 블록(p/h1)과 동일한 순서·인덱스로 TTS 구간 생성 */
+export function buildTtsChunksFromReaderDom(inner) {
+  if (!inner) return [];
+
+  const blocks = [...inner.querySelectorAll('[data-tts-idx]')].sort(
+    (a, b) => Number(a.dataset.ttsIdx) - Number(b.dataset.ttsIdx)
+  );
+
+  const result = [];
+  for (const el of blocks) {
+    const paraIndex = parseInt(el.dataset.ttsIdx, 10);
+    if (Number.isNaN(paraIndex)) continue;
+
+    const text = (el.textContent || '').replace(/\s+/g, ' ').trim();
+    if (!text) continue;
+
+    for (const piece of splitLongSpeakableText(text, TTS_MAX_CHUNK)) {
+      result.push({ text: piece, paraIndex });
+    }
+  }
+  return result;
+}
+
 export function markdownToSpeakableText(md) {
   if (!md) return '';
+  if (typeof md === 'object' && typeof md.then === 'function') return '';
 
   let text = String(md);
   text = text.replace(/```[\s\S]*?```/g, ' ');
@@ -371,38 +439,56 @@ export function markdownToSpeakableText(md) {
   return text.trim();
 }
 
+function splitLongSpeakableText(text, maxLen) {
+  if (text.length <= maxLen) return [text];
+
+  const sentences = text.split(/(?<=[.!?。！？…])\s+/).filter(Boolean);
+  if (sentences.length <= 1) {
+    return splitByLength(text, maxLen);
+  }
+
+  const result = [];
+  let buf = '';
+  for (const sentence of sentences) {
+    const next = buf ? `${buf} ${sentence}` : sentence;
+    if (next.length > maxLen && buf) {
+      result.push(buf);
+      buf = sentence;
+    } else if (next.length > maxLen) {
+      result.push(...splitByLength(sentence, maxLen));
+      buf = '';
+    } else {
+      buf = next;
+    }
+  }
+  if (buf) result.push(buf);
+  return result;
+}
+
+function splitByLength(text, maxLen) {
+  const parts = [];
+  for (let i = 0; i < text.length; i += maxLen) {
+    parts.push(text.slice(i, i + maxLen));
+  }
+  return parts;
+}
+
 /** @returns {Array<{ text: string, paraIndex: number }>} */
 export function chunkSpeakableText(text) {
   const paragraphs = text.split(/\n\s*\n/).map((p) => p.replace(/\s+/g, ' ').trim()).filter(Boolean);
   if (!paragraphs.length) {
     const trimmed = text.trim();
-    return trimmed ? [{ text: trimmed, paraIndex: 0 }] : [];
+    return trimmed
+      ? splitLongSpeakableText(trimmed, TTS_MAX_CHUNK).map((t) => ({ text: t, paraIndex: 0 }))
+      : [];
   }
 
   const result = [];
-  const maxLen = 280;
-
   for (let paraIndex = 0; paraIndex < paragraphs.length; paraIndex += 1) {
-    const para = paragraphs[paraIndex];
-    if (para.length <= maxLen) {
-      result.push({ text: para, paraIndex });
-      continue;
+    for (const piece of splitLongSpeakableText(paragraphs[paraIndex], TTS_MAX_CHUNK)) {
+      result.push({ text: piece, paraIndex });
     }
-
-    const sentences = para.split(/(?<=[.!?。！？…])\s+/).filter(Boolean);
-    let buf = '';
-    for (const sentence of sentences) {
-      const next = buf ? `${buf} ${sentence}` : sentence;
-      if (next.length > maxLen && buf) {
-        result.push({ text: buf, paraIndex });
-        buf = sentence;
-      } else {
-        buf = next;
-      }
-    }
-    if (buf) result.push({ text: buf, paraIndex });
   }
-
   return result;
 }
 
