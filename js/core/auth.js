@@ -49,16 +49,31 @@ export function isMaster(user = currentUser) {
   return user?.role === ROLES.MASTER;
 }
 
+/** writers 배열 정규화 */
+export function normalizeWriters(writers) {
+  if (!Array.isArray(writers)) return [];
+  return [...new Set(writers.map((id) => String(id || '').trim()).filter(Boolean))];
+}
+
+/** 쓰기 권한 부여 대상(소설가·개발자). 마스터는 항상 쓰기 가능하므로 목록에서 제외 */
+export function canBeProjectWriter(user) {
+  if (!user) return false;
+  return user.role === ROLES.NOVELIST || user.role === ROLES.DEVELOPER;
+}
+
 /**
  * 프로젝트 콘텐츠 관리(파일·소설·인물·관계도 등) 가능 여부
  * - 마스터: 모든 프로젝트
- * - 개발자·소설가: 본인 소유(ownerId) 프로젝트만
+ * - 개발자·소설가: project.writers 에 포함된 경우만
+ * - writers 없는 레거시: ownerId 와 일치하면 허용
  * - 일반 사용자: 불가(열람만)
  */
 export function canManageProjectContent(project, user = currentUser) {
   if (!user || user.role === ROLES.USER) return false;
   if (!project) return false;
   if (user.role === ROLES.MASTER) return true;
+  const writers = normalizeWriters(project.writers);
+  if (writers.length) return writers.includes(user.id);
   return Boolean(project.ownerId && project.ownerId === user.id);
 }
 

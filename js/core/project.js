@@ -17,7 +17,10 @@ import {
   canCreateUnlimitedProjects,
   canSaveProject,
   canManageProjectContent,
+  canBeProjectWriter,
+  normalizeWriters,
   isMaster,
+  listUsers,
   MAX_USER_PROJECTS,
 } from './auth.js';
 
@@ -65,7 +68,7 @@ export function getCurrentProject() {
 
 }
 
-/** 현재 열린 프로젝트 콘텐츠 관리 가능 (마스터=전체, 개발자·소설가=본인만) */
+/** 현재 열린 프로젝트 콘텐츠 관리 가능 (마스터=전체, writers 포함 시) */
 export function canManageCurrentProject() {
   return canManageProjectContent(currentProject);
 }
@@ -82,11 +85,10 @@ export async function listProjects() {
   const all = await storage.getAll('projects');
   const user = getCurrentUser();
   if (!user) return [];
-  // 마스터: 전체 / 그 외 관리자·사용자: 본인 소유만
-  const mine = isMaster(user)
-    ? all
-    : all.filter((p) => p.ownerId === user.id);
-  return mine.sort((a, b) => (b.updatedAt || b.createdAt || '').localeCompare(a.updatedAt || a.createdAt || ''));
+  // 로그인 사용자: 브라우저 DB의 프로젝트 전부 열람 가능
+  return all
+    .map(ensureProjectAcl)
+    .sort((a, b) => (b.updatedAt || b.createdAt || '').localeCompare(a.updatedAt || a.createdAt || ''));
 }
 
 /** 소유자 없는 기존 프로젝트를 현재 사용자(보통 마스터)에게 귀속 */
@@ -95,13 +97,60 @@ export async function claimOrphanProjects(userId) {
   const all = await storage.getAll('projects');
   let n = 0;
   for (const p of all) {
-    if (p.ownerId) continue;
+    if (p.ownerId) {
+      ensureProjectAcl(p);
+      if (!normalizeWriters(p.writers).length && p.ownerId) {
+        p.writers = [p.ownerId];
+        p.updatedAt = nowIso();
+        await storage.put('projects', p);
+      }
+      continue;
+    }
     p.ownerId = userId;
+    p.writers = normalizeWriters(p.writers);
+    if (!p.writers.length) p.writers = [userId];
     p.updatedAt = nowIso();
     await storage.put('projects', p);
     n += 1;
   }
   return n;
+}
+
+/** ownerId / writers 정규화 (레거시: writers 없으면 owner 를 writer 로) */
+export function ensureProjectAcl(project) {
+  if (!project) return project;
+  const writers = normalizeWriters(project.writers);
+  if (writers.length) {
+    project.writers = writers;
+  } else if (project.ownerId) {
+    project.writers = [String(project.ownerId)];
+  } else {
+    project.writers = [];
+  }
+  return project;
+}
+
+/**
+ * 마스터 전용: 현재 프로젝트의 쓰기 권한(writers) 설정
+ * @param {string[]} writerIds 소설가·개발자 userId 목록
+ */
+export async function setProjectWriters(writerIds) {
+  if (!isMaster()) throw new Error('마스터만 프로젝트 쓰기 권한을 부여할 수 있습니다.');
+  if (!currentProject) throw new Error('열린 프로젝트가 없습니다.');
+
+  const users = await listUsers();
+  const byId = new Map(users.map((u) => [u.id, u]));
+  const ids = normalizeWriters(writerIds).filter((id) => {
+    const u = byId.get(id);
+    return u && canBeProjectWriter(u);
+  });
+
+  currentProject.writers = ids;
+  if (!currentProject.ownerId && ids[0]) currentProject.ownerId = ids[0];
+  currentProject.updatedAt = nowIso();
+  await storage.put('projects', currentProject);
+  emit('project:loaded', currentProject);
+  return currentProject;
 }
 
 export async function countOwnedProjects(userId) {
@@ -188,6 +237,7 @@ export async function createProject(title = '새 프로젝트', useSeed = true) 
   const seed = useSeed ? createSeedProject(projectId) : emptyProject(projectId, title);
   seed.project.ownerId = user.id;
   seed.project.author = user.username;
+  seed.project.writers = [user.id];
 
   await storage.put('projects', seed.project);
   await saveAllEntities(projectId, seed);
@@ -223,6 +273,8 @@ function emptyProject(projectId, title) {
       language: 'ko',
 
       ownerId: '',
+
+      writers: [],
 
       versionMeta: { major: 1, minor: 0, patch: 0, build: 1 },
 
@@ -384,7 +436,7 @@ export async function loadProject(projectId) {
 
 
 
-  currentProject = project;
+  currentProject = ensureProjectAcl(project);
 
   cache = {
 
@@ -1438,15 +1490,22 @@ export async function importProjectJson(jsonText) {
 
   const projectId = uuid();
 
-  const project = {
-    ...data.project,
+  const incoming = data.project || {};
+  // 소유권·쓰기 권한은 JSON에 있는 값을 유지 (열람자가 가로채지 않음)
+  let ownerId = String(incoming.ownerId || '').trim();
+  let writers = normalizeWriters(incoming.writers);
+  if (!writers.length && ownerId) writers = [ownerId];
+
+  const project = ensureProjectAcl({
+    ...incoming,
     id: projectId,
     projectId,
-    ownerId: user.id,
-    author: user.username,
-    createdAt: nowIso(),
+    ownerId,
+    writers,
+    author: incoming.author || '',
+    createdAt: incoming.createdAt || nowIso(),
     updatedAt: nowIso(),
-  };
+  });
 
   await storage.put('projects', project);
 

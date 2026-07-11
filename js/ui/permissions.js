@@ -1,7 +1,7 @@
 /** UI 권한 반영
  * - 일반 사용자: 열람·설정·프로젝트 열기
- * - 개발자·소설가: 본인 프로젝트만 콘텐츠 관리
- * - 마스터: 전체 프로젝트 관리
+ * - 개발자·소설가: writers 에 포함된 프로젝트만 콘텐츠 관리
+ * - 마스터: 전체 프로젝트 관리 · writers 부여
  */
 
 import { on } from '../core/events.js';
@@ -35,12 +35,14 @@ export function applyRolePermissions() {
   const canSave = canSaveProject(user);
   const canDefault = canSetDefaultProject(user);
   const canManage = canManageProjectContent(getCurrentProject(), user);
+  const showReadonly = !!user && !!getCurrentProject() && !canManage;
 
   document.body.classList.toggle('role-user', isUser);
   document.body.classList.toggle('role-admin', !isUser && !!user);
   document.body.classList.toggle('role-master', canDefault);
-  document.body.classList.toggle('project-readonly', !canManage);
+  document.body.classList.toggle('project-readonly', showReadonly);
 
+  applyAccessBadge(showReadonly);
   applyUploadPanel(isUser, canManage, canDefault);
   applyNavMenu(isUser);
   applyProjectNav(canSave, canDefault, canManage);
@@ -61,6 +63,13 @@ export function applyRolePermissions() {
   }
 }
 
+function applyAccessBadge(showReadonly) {
+  const badge = document.getElementById('nav-project-access');
+  if (!badge) return;
+  badge.hidden = !showReadonly;
+  badge.textContent = '(열람만가능)';
+}
+
 function applyUploadPanel(isUser, canManage, isMasterRole) {
   const panel = document.querySelector('.upload-panel');
   if (!panel) return;
@@ -77,7 +86,6 @@ function applyUploadPanel(isUser, canManage, isMasterRole) {
   panel.querySelectorAll('.upload-section').forEach((sec) => {
     const title = sec.querySelector('h3')?.textContent?.trim() || '';
     if (title === 'GitHub') {
-      // GitHub 설정·Push/Pull UI는 마스터만
       setHidden(sec, !isMasterRole);
     } else if (title === '보내기' || title === '최근 Import') {
       setHidden(sec, !canManage);
@@ -98,8 +106,8 @@ function applyUploadPanel(isUser, canManage, isMasterRole) {
     }
     const proj = getCurrentProject();
     banner.innerHTML = `
-      <strong>열람 전용</strong>
-      <p>이 프로젝트는 다른 관리자 소유입니다. 파일·소설·인물 관계도 변경은 소유자 또는 마스터만 가능합니다.</p>
+      <strong class="upload-lock-readonly">(열람만가능)</strong>
+      <p>이 프로젝트의 writers 목록에 없거나 일반 사용자입니다. 파일·소설·인물·관계도 변경은 writers 또는 마스터만 가능합니다.</p>
       <p class="upload-lock-role">${proj?.title ? `프로젝트: ${escapeHtml(proj.title)}` : ''}</p>`;
   } else if (banner) {
     banner.remove();
@@ -128,7 +136,7 @@ function applyNavMenu(isUser) {
   setHidden(nav.querySelector('[data-view="story-bible"]'), isUser);
 }
 
-/** 관리자: 새/열기 · 저장은 관리 가능 프로젝트만 · 마스터: +기본 저장 */
+/** 관리자: 새/열기 · 저장은 writers만 · 마스터: 기본 저장·프로젝트 관리 */
 function applyProjectNav(canSave, canDefault, canManage) {
   const nav = document.getElementById('nav-menu');
   if (!nav) return;
@@ -138,6 +146,7 @@ function applyProjectNav(canSave, canDefault, canManage) {
   setHidden(nav.querySelector('[data-action="new-project"]'), !canSave);
   setHidden(nav.querySelector('[data-action="save-project"]'), !canManage);
   setHidden(nav.querySelector('[data-action="save-default-project"]'), !(canDefault && canManage));
+  setHidden(nav.querySelector('[data-action="manage-project"]'), !canDefault);
 }
 
 function applyToolNav(isUser, canManage) {

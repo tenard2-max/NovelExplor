@@ -17,6 +17,7 @@ import { initCharacterActions } from './ui/character-actions.js';
 import { initBackup, offerLocalRecovery, exportTimestampedBackup, openBackupJsonFile, sanitizeThemeTag } from './core/backup.js';
 import { initSyncFolder } from './core/sync-folder.js';
 import { showOpenProjectDialog } from './ui/open-project-dialog.js';
+import { showProjectManageDialog } from './ui/project-manage.js';
 import { loadWorkspaceManifest } from './core/workspace-xml.js';
 import { searchAll } from './search/search.js';
 import {
@@ -32,7 +33,7 @@ import { initGithubPanel } from './ui/github-panel.js';
 import { initGithubSync } from './core/github-sync.js';
 import { initStorySync } from './ui/story-sync.js';
 import { initTimeline } from './ui/timeline-panel.js';
-import { initAuth, isLoggedIn, getCurrentUser, ROLES, canSaveProject, canSetDefaultProject } from './core/auth.js';
+import { initAuth, isLoggedIn, getCurrentUser, ROLES, canSaveProject, canSetDefaultProject, canManageProjectContent } from './core/auth.js';
 import { loadDefaultProject, saveAsDefaultProject } from './core/default-project.js';
 import { pullProjectFromGithub } from './core/github-pull.js';
 import { initAuthGate, showAuthGate, hideAuthGate, whenAuthenticated } from './ui/auth-gate.js';
@@ -172,15 +173,16 @@ function initActions() {
         await flushPendingSave();
         await autosave.flushSave(true);
         let filename = picked.name || '';
-        if (canSaveProject()) {
+        const canWrite = canManageProjectContent(project.getCurrentProject());
+        if (canWrite) {
           filename = await exportTimestampedBackup({ notify: false });
         }
         switchView('character');
         await showAlert(
           '프로젝트 열기',
-          canSaveProject()
+          canWrite
             ? `동기화 파일을 적용했습니다.<br><code>${picked.name || filename}</code>`
-            : `프로젝트를 불러왔습니다.<br><code>${picked.name || filename}</code>`
+            : `프로젝트를 불러왔습니다. <span style="color:#ef4444">(열람만가능)</span><br><code>${picked.name || filename}</code>`
         );
         return;
       }
@@ -189,7 +191,11 @@ function initActions() {
         const id = await loadDefaultProject({ skipConfirm: true });
         if (!id) return;
         switchView('character');
-        await showAlert('기본 프로젝트', `기본 프로젝트를 불러왔습니다.<br><code>${id}.json</code>`);
+        const ro = !canManageProjectContent(project.getCurrentProject());
+        await showAlert(
+          '기본 프로젝트',
+          `기본 프로젝트를 불러왔습니다.${ro ? ' <span style="color:#ef4444">(열람만가능)</span>' : ''}<br><code>${id}.json</code>`
+        );
         return;
       }
 
@@ -200,13 +206,26 @@ function initActions() {
         });
         if (!id) return;
         switchView('character');
+        const ro = !canManageProjectContent(project.getCurrentProject());
         await showAlert(
           'GitHub 프로젝트',
-          `GitHub 스냅샷을 불러왔습니다. (열람 전용)<br><code>${picked.name || `${id}.json`}</code>`
+          `GitHub 스냅샷을 불러왔습니다.${ro ? ' <span style="color:#ef4444">(열람만가능)</span>' : ''}<br><code>${picked.name || `${id}.json`}</code>`
         );
       }
     } catch (err) {
       alert(`프로젝트 열기 실패: ${err.message}`);
+    }
+  });
+
+  bindAction('manage-project', async () => {
+    try {
+      const saved = await showProjectManageDialog();
+      if (saved) {
+        applyUploadPermissions();
+        await showAlert('프로젝트 관리', '쓰기 권한(writers)을 저장했습니다. 다음 프로젝트 저장·내보내기에 포함됩니다.');
+      }
+    } catch (err) {
+      alert(`프로젝트 관리 실패: ${err.message}`);
     }
   });
 
