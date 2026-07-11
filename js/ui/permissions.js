@@ -41,7 +41,7 @@ export function applyRolePermissions() {
   document.body.classList.toggle('role-master', canDefault);
   document.body.classList.toggle('project-readonly', !canManage);
 
-  applyUploadPanel(isUser, canManage, user);
+  applyUploadPanel(isUser, canManage);
   applyNavMenu(isUser);
   applyProjectNav(canSave, canDefault, canManage);
   applyCharacterToolbar(!canManage);
@@ -61,7 +61,7 @@ export function applyRolePermissions() {
   }
 }
 
-function applyUploadPanel(isUser, canManage, user) {
+function applyUploadPanel(isUser, canManage) {
   const panel = document.querySelector('.upload-panel');
   if (!panel) return;
 
