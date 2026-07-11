@@ -134,6 +134,10 @@ function setCharacterPanelOpen(open) {
 
 /** 확인 다이얼로그 후 인물을 삭제한다. 패널·목록 카드에서 공통 사용 */
 export async function deleteCharacterWithConfirm(characterOrId) {
+  if (!canUpload()) {
+    alert('일반 사용자는 인물을 삭제할 수 없습니다.');
+    return false;
+  }
   const id = typeof characterOrId === 'string' ? characterOrId : characterOrId?.id;
   if (!id) return false;
 
@@ -200,8 +204,16 @@ function refresh() {
 function renderPanel(ch) {
   document.getElementById('char-panel-name').textContent = ch.name || '캐릭터';
 
+  const allowUpload = canUpload();
+  document.getElementById('character-panel')
+    ?.classList.toggle('char-panel--no-upload', !allowUpload);
+  document.getElementById('character-panel')
+    ?.classList.toggle('char-panel--readonly', !allowUpload);
+
   const editBtn = document.querySelector('[data-action="char-edit"]');
-  if (editBtn) editBtn.hidden = isEditing;
+  const deleteBtn = document.querySelector('[data-action="char-delete"]');
+  if (editBtn) editBtn.hidden = !allowUpload || isEditing;
+  if (deleteBtn) deleteBtn.hidden = !allowUpload;
 
   const img = document.getElementById('char-avatar-img');
   const empty = document.getElementById('char-avatar-empty');
@@ -216,12 +228,13 @@ function renderPanel(ch) {
   } else {
     img.removeAttribute('src');
     img.hidden = true;
-    if (empty) empty.hidden = false;
+    if (empty) {
+      empty.hidden = false;
+      empty.innerHTML = allowUpload
+        ? '<span class="char-avatar-empty-icon">🖼</span><span>이미지를 끌어다 놓거나<br>클릭해서 등록</span>'
+        : '<span class="char-avatar-empty-icon">🖼</span><span>등록된 이미지가 없습니다</span>';
+    }
   }
-
-  const allowUpload = canUpload();
-  document.getElementById('character-panel')
-    ?.classList.toggle('char-panel--no-upload', !allowUpload);
 
   const reg = document.querySelector('[data-action="char-avatar-register"]');
   const del = document.querySelector('[data-action="char-avatar-delete"]');
@@ -236,13 +249,15 @@ function renderPanel(ch) {
     if (reg) reg.hidden = true;
     if (del) del.hidden = true;
     if (addGalleryBtn) addGalleryBtn.hidden = true;
+    isEditing = false;
   }
 
   const box = document.getElementById('char-avatar-box');
   if (box) {
+    box.classList.toggle('char-avatar-box--readonly', !allowUpload);
     box.title = allowUpload
       ? (hasAvatar ? '클릭 → 원본 보기 / 드래그 앤 드롭으로 등록' : '클릭 또는 드롭으로 대표 이미지 등록')
-      : (hasAvatar ? '클릭 → 원본 보기' : '일반 사용자는 이미지를 등록할 수 없습니다');
+      : (hasAvatar ? '클릭 → 원본 보기' : '등록된 이미지가 없습니다');
   }
 
   renderGallery(ch);
@@ -293,6 +308,10 @@ function fillEditForm(ch) {
 }
 
 function startEdit() {
+  if (!canUpload()) {
+    alert('일반 사용자는 인물 정보를 수정할 수 없습니다.');
+    return;
+  }
   if (!currentId) return;
   isEditing = true;
   const ch = getCurrentCharacter();

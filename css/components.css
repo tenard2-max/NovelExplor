@@ -950,6 +950,31 @@
   transition: border-color 0.15s, background 0.15s;
 }
 
+/* 일반 사용자: 업로드 UI 숨김 · 열람 전용 */
+.char-panel--readonly .char-avatar-box,
+.char-avatar-box--readonly {
+  border-style: solid;
+  cursor: default;
+}
+
+.char-panel--readonly .char-avatar-box.has-image,
+.char-avatar-box--readonly:has(.char-avatar-img:not([hidden])) {
+  cursor: zoom-in;
+}
+
+.char-panel--readonly .char-avatar-draghint,
+.char-panel--no-upload .char-avatar-draghint,
+.char-panel--readonly [data-action="char-edit"],
+.char-panel--readonly [data-action="char-delete"],
+.char-panel--readonly [data-action="char-images-add"],
+.char-panel--readonly #char-avatar-actions,
+.char-panel--no-upload [data-action="char-edit"],
+.char-panel--no-upload [data-action="char-delete"],
+.char-panel--no-upload [data-action="char-images-add"],
+.char-panel--no-upload #char-avatar-actions {
+  display: none !important;
+}
+
 .char-avatar-box.is-dragover {
   border-color: var(--color-primary);
   background: rgba(108, 140, 255, 0.12);
