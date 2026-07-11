@@ -1,4 +1,4 @@
-/** GitHub 연결 UI (우측 패널) */
+/** GitHub 연결 UI (우측 패널) — 마스터 전용 */
 
 import {
   getGithubConfig,
@@ -11,8 +11,15 @@ import { testGithubConnection } from '../core/github-api.js';
 import { syncProjectToGithub } from '../core/github-sync.js';
 import { pullProjectFromGithubWithAlert } from '../core/github-pull.js';
 import { refreshNavVersionsFromGithub } from '../app-version.js';
+import { canSetDefaultProject } from '../core/auth.js';
 import { showAlert } from './dialog.js';
 import { on } from '../core/events.js';
+
+function assertMasterGithub() {
+  if (canSetDefaultProject()) return true;
+  alert('GitHub 설정은 마스터만 사용할 수 있습니다.');
+  return false;
+}
 
 export function initGithubPanel() {
   const tokenEl = document.getElementById('github-token');
@@ -43,6 +50,7 @@ export function initGithubPanel() {
   });
 
   saveBtn?.addEventListener('click', () => {
+    if (!assertMasterGithub()) return;
     saveGithubConfig({
       owner: ownerEl.value.trim(),
       repo: repoEl.value.trim(),
@@ -56,6 +64,7 @@ export function initGithubPanel() {
   });
 
   testBtn?.addEventListener('click', async () => {
+    if (!assertMasterGithub()) return;
     try {
       if (tokenEl.value.trim()) {
         saveGithubConfig({ token: tokenEl.value.trim() });
@@ -70,6 +79,7 @@ export function initGithubPanel() {
   });
 
   syncBtn?.addEventListener('click', async () => {
+    if (!assertMasterGithub()) return;
     try {
       if (!hasGithubToken()) throw new Error('토큰을 먼저 저장하세요.');
       syncBtn.disabled = true;
@@ -89,6 +99,7 @@ export function initGithubPanel() {
   });
 
   pullBtn?.addEventListener('click', async () => {
+    if (!assertMasterGithub()) return;
     try {
       if (!hasGithubToken()) throw new Error('토큰을 먼저 저장하세요.');
       pullBtn.disabled = true;

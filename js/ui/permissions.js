@@ -41,7 +41,7 @@ export function applyRolePermissions() {
   document.body.classList.toggle('role-master', canDefault);
   document.body.classList.toggle('project-readonly', !canManage);
 
-  applyUploadPanel(isUser, canManage);
+  applyUploadPanel(isUser, canManage, canDefault);
   applyNavMenu(isUser);
   applyProjectNav(canSave, canDefault, canManage);
   applyCharacterToolbar(!canManage);
@@ -61,7 +61,7 @@ export function applyRolePermissions() {
   }
 }
 
-function applyUploadPanel(isUser, canManage) {
+function applyUploadPanel(isUser, canManage, isMasterRole) {
   const panel = document.querySelector('.upload-panel');
   if (!panel) return;
 
@@ -76,8 +76,10 @@ function applyUploadPanel(isUser, canManage) {
 
   panel.querySelectorAll('.upload-section').forEach((sec) => {
     const title = sec.querySelector('h3')?.textContent?.trim() || '';
-    // GitHub·보내기·Import 등은 관리 가능할 때만
-    if (title === 'GitHub' || title === '보내기' || title === '최근 Import') {
+    if (title === 'GitHub') {
+      // GitHub 설정·Push/Pull UI는 마스터만
+      setHidden(sec, !isMasterRole);
+    } else if (title === '보내기' || title === '최근 Import') {
       setHidden(sec, !canManage);
     } else {
       setHidden(sec, false);
