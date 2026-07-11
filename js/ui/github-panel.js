@@ -21,13 +21,36 @@ function assertMasterGithub() {
   return false;
 }
 
-function formatResetTime(resetAt) {
-  if (!resetAt) return '';
+const RESET_REFRESH_MS = 1000;
+let resetRefreshTimer = null;
+
+function formatResetRemaining(resetAt) {
+  if (!resetAt) return null;
   const d = resetAt instanceof Date ? resetAt : new Date(Number(resetAt) * 1000);
-  if (Number.isNaN(d.getTime())) return '';
-  const hh = String(d.getHours()).padStart(2, '0');
-  const mm = String(d.getMinutes()).padStart(2, '0');
-  return `리셋 ${hh}:${mm}`;
+  if (Number.isNaN(d.getTime())) return null;
+
+  const diffMs = d.getTime() - Date.now();
+  if (diffMs <= 0) return '—';
+
+  const totalSec = Math.ceil(diffMs / 1000);
+  const minutes = Math.floor(totalSec / 60);
+  const seconds = totalSec % 60;
+  return `리셋 ${minutes}:${String(seconds).padStart(2, '0')}`;
+}
+
+function syncResetRefreshTimer() {
+  const rl = getGithubRateLimit();
+  const resetAt = rl?.resetAt instanceof Date ? rl.resetAt : rl?.resetAt ? new Date(rl.resetAt) : null;
+  const shouldRun = !document.hidden && resetAt && !Number.isNaN(resetAt.getTime()) && resetAt.getTime() > Date.now();
+
+  if (shouldRun) {
+    if (resetRefreshTimer == null) {
+      resetRefreshTimer = window.setInterval(updateRateLimitDisplay, RESET_REFRESH_MS);
+    }
+  } else if (resetRefreshTimer != null) {
+    window.clearInterval(resetRefreshTimer);
+    resetRefreshTimer = null;
+  }
 }
 
 function updateRateLimitDisplay() {
@@ -44,9 +67,10 @@ function updateRateLimitDisplay() {
   }
 
   if (resetEl) {
-    const resetStr = formatResetTime(rl?.resetAt);
-    resetEl.textContent = resetStr || '';
+    resetEl.textContent = rl?.resetAt ? (formatResetRemaining(rl.resetAt) ?? '—') : '';
   }
+
+  syncResetRefreshTimer();
 }
 
 function updateTokenPlaceholder(tokenEl) {
@@ -77,6 +101,9 @@ export function initGithubPanel() {
 
   on('github:rate-limit', () => {
     updateRateLimitDisplay();
+  });
+  document.addEventListener('visibilitychange', () => {
+    syncResetRefreshTimer();
   });
   on('github:sync-progress', (p) => {
     if (p?.label) updateGithubStatus(statusEl, p.label);
