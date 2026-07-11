@@ -13,12 +13,19 @@ import {
 } from '../core/story-sync-engine.js';
 import { scheduleGithubSync } from '../core/github-sync.js';
 import { switchView } from './nav-menu.js';
+import { canUpload } from '../core/auth.js';
 
 const STORY_NAV_VIEWS = new Set(['story-nav', 'timeline']);
 
 export function initStorySync() {
   document.querySelectorAll('[data-action="story-sync"]').forEach((btn) => {
-    btn.addEventListener('click', () => runStorySync().catch(console.error));
+    btn.addEventListener('click', () => {
+      if (!canUpload()) {
+        showAlert('권한', '일반 사용자는 스토리 동기화(업로드 계열)를 사용할 수 없습니다.');
+        return;
+      }
+      runStorySync().catch(console.error);
+    });
   });
 
   document.querySelectorAll('[data-action="timeline-sync"]').forEach((btn) => {

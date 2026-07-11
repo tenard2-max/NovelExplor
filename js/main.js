@@ -32,8 +32,13 @@ import { initGithubPanel } from './ui/github-panel.js';
 import { initGithubSync } from './core/github-sync.js';
 import { initStorySync } from './ui/story-sync.js';
 import { initTimeline } from './ui/timeline-panel.js';
+import { initAuth, isLoggedIn, getCurrentUser, ROLES, canUpload } from './core/auth.js';
+import { initAuthGate, showAuthGate, hideAuthGate, whenAuthenticated } from './ui/auth-gate.js';
+import { initSettings, updateUserBadge } from './ui/settings-panel.js';
+import { initPermissions, applyUploadPermissions } from './ui/permissions.js';
 
 async function boot() {
+  initAuthGate();
   initNav();
   initWorkspace();
   initUploadPanel();
@@ -47,6 +52,8 @@ async function boot() {
   initCharacterActions();
   initStorySync();
   initTimeline();
+  initSettings();
+  initPermissions();
   initActions();
   initBackup();
   initGithubSync();
@@ -64,6 +71,21 @@ async function boot() {
     console.warn('[NovelExplor] workspace.xml 없음/실패 — IndexedDB 모드만 사용:', err.message);
   }
 
+  await initAuth();
+  if (!isLoggedIn()) {
+    showAuthGate();
+    await whenAuthenticated();
+  } else {
+    hideAuthGate();
+  }
+
+  const user = getCurrentUser();
+  if (user?.role === ROLES.MASTER) {
+    await project.claimOrphanProjects(user.id);
+  }
+  updateUserBadge();
+  applyUploadPermissions();
+
   const projects = await project.listProjects();
   if (projects.length) {
     await project.loadProject(projects[0].id);
@@ -78,6 +100,11 @@ async function boot() {
   await refreshNavVersionsFromGithub();
   initAppVersion();
   switchView('master');
+
+  if (user?.mustChangePassword) {
+    switchView('settings');
+    await showAlert('비밀번호 변경', '초기 비밀번호를 설정 화면에서 변경해 주세요.');
+  }
 }
 
 function initAppVersion() {
@@ -195,6 +222,10 @@ function initUploadHandler() {
   });
 
   on('upload:files', async (files) => {
+    if (!canUpload()) {
+      alert('일반 사용자는 파일 업로드를 사용할 수 없습니다.');
+      return;
+    }
     let lastView = null;
     let successCount = 0;
     let storyOrEpisodeCount = 0;

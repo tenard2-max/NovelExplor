@@ -8,6 +8,7 @@ import { findSettingMdFile, getSettingMdFiles, parseSettingMdIndex } from '../co
 import { showStory } from './reader.js';
 import { deleteCharacterWithConfirm } from './character-panel.js';
 import { dedupeTimelineByEpisode, timelineDisplayParts } from '../core/story-sync-engine.js';
+import { renderSettings } from './settings-panel.js';
 
 export function initWorkspace() {
   on('workspace:render', renderView);
@@ -73,6 +74,8 @@ function renderView(viewId) {
       image: c.avatarDataUrl || '',
       deletable: true,
     }));
+  } else if (viewId === 'settings') {
+    renderSettings();
   } else if (viewId === 'timeline') {
     renderCardList(el, dedupeTimelineByEpisode(cache.timeline)
       .map((t) => {

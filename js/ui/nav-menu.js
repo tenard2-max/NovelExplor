@@ -16,6 +16,7 @@ const VIEW_META = {
   character: { title: '인물', subtitle: 'sections/03_characters.xml' },
   timeline: { title: '타임라인', subtitle: '이벤트 · 년월일' },
   editor: { title: '에디터', subtitle: 'sections/12_editor.xml' },
+  settings: { title: '설정', subtitle: '계정 · 비밀번호 · 권한' },
   'graph-foreshadow': { title: '복선 그래프', subtitle: 'Canvas' },
   'graph-character': { title: '인물 관계도', subtitle: 'Canvas' },
   'graph-timeline': { title: '멀티버스', subtitle: '스토리 등장 EP · 등장 횟수 순' },

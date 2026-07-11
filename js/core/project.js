@@ -13,6 +13,12 @@ import { emit } from './events.js';
 import { dedupeTimelineByEpisode } from './story-sync-engine.js';
 
 import {
+  getCurrentUser,
+  canCreateUnlimitedProjects,
+  MAX_USER_PROJECTS,
+} from './auth.js';
+
+import {
 
   createEpisodeFromStory,
 
@@ -67,16 +73,42 @@ export function getCache() {
 
 
 export async function listProjects() {
-
   const all = await storage.getAll('projects');
-  return all.sort((a, b) => (b.updatedAt || b.createdAt || '').localeCompare(a.updatedAt || a.createdAt || ''));
-
+  const user = getCurrentUser();
+  const mine = user
+    ? all.filter((p) => p.ownerId === user.id)
+    : [];
+  return mine.sort((a, b) => (b.updatedAt || b.createdAt || '').localeCompare(a.updatedAt || a.createdAt || ''));
 }
 
-/** JSON 복원 전 — IndexedDB의 모든 프로젝트·연관 데이터 삭제 */
+/** 소유자 없는 기존 프로젝트를 현재 사용자(보통 마스터)에게 귀속 */
+export async function claimOrphanProjects(userId) {
+  if (!userId) return 0;
+  const all = await storage.getAll('projects');
+  let n = 0;
+  for (const p of all) {
+    if (p.ownerId) continue;
+    p.ownerId = userId;
+    p.updatedAt = nowIso();
+    await storage.put('projects', p);
+    n += 1;
+  }
+  return n;
+}
+
+export async function countOwnedProjects(userId) {
+  const all = await storage.getAll('projects');
+  return all.filter((p) => p.ownerId === userId).length;
+}
+
+/** JSON 복원 전 — 현재 사용자 소유 프로젝트·연관 데이터만 삭제 */
 export async function clearAllProjects() {
+  const user = getCurrentUser();
   const projects = await storage.getAll('projects');
-  const projectIds = new Set(projects.map((p) => p.id || p.projectId).filter(Boolean));
+  const targets = user
+    ? projects.filter((p) => p.ownerId === user.id || !p.ownerId)
+    : projects;
+  const projectIds = new Set(targets.map((p) => p.id || p.projectId).filter(Boolean));
 
   const entityStores = ['stories', 'episodes', 'characters', 'worlds', 'foreshadows', 'timeline', 'files'];
   for (const store of entityStores) {
@@ -95,7 +127,7 @@ export async function clearAllProjects() {
     }
   }
 
-  for (const p of projects) {
+  for (const p of targets) {
     await storage.remove('projects', p.id);
   }
 
@@ -129,23 +161,26 @@ export function characterHasPhoto(ch) {
 
 
 export async function createProject(title = '새 프로젝트', useSeed = true) {
+  const user = getCurrentUser();
+  if (!user) throw new Error('로그인이 필요합니다.');
+
+  if (!canCreateUnlimitedProjects(user)) {
+    const owned = await countOwnedProjects(user.id);
+    if (owned >= MAX_USER_PROJECTS) {
+      throw new Error(`일반 사용자는 프로젝트를 최대 ${MAX_USER_PROJECTS}개까지 만들 수 있습니다.`);
+    }
+  }
 
   const projectId = uuid();
-
   const seed = useSeed ? createSeedProject(projectId) : emptyProject(projectId, title);
-
-
+  seed.project.ownerId = user.id;
+  seed.project.author = user.username;
 
   await storage.put('projects', seed.project);
-
   await saveAllEntities(projectId, seed);
-
   await loadProject(projectId);
-
   emit('project:loaded', currentProject);
-
   return currentProject;
-
 }
 
 
@@ -173,6 +208,8 @@ function emptyProject(projectId, title) {
       workspace: 'NovelMD',
 
       language: 'ko',
+
+      ownerId: '',
 
       versionMeta: { major: 1, minor: 0, patch: 0, build: 1 },
 
@@ -1378,11 +1415,29 @@ function normalizeImportedCharacter(item, projectId) {
 
 export async function importProjectJson(jsonText) {
 
+  const user = getCurrentUser();
+  if (!user) throw new Error('로그인이 필요합니다.');
+
+  if (!canCreateUnlimitedProjects(user)) {
+    const owned = await countOwnedProjects(user.id);
+    if (owned >= MAX_USER_PROJECTS) {
+      throw new Error(`일반 사용자는 프로젝트를 최대 ${MAX_USER_PROJECTS}개까지 가질 수 있습니다.`);
+    }
+  }
+
   const data = JSON.parse(jsonText);
 
   const projectId = uuid();
 
-  const project = { ...data.project, id: projectId, projectId, createdAt: nowIso(), updatedAt: nowIso() };
+  const project = {
+    ...data.project,
+    id: projectId,
+    projectId,
+    ownerId: user.id,
+    author: user.username,
+    createdAt: nowIso(),
+    updatedAt: nowIso(),
+  };
 
   await storage.put('projects', project);
 

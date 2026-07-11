@@ -1,7 +1,7 @@
 /** IndexedDB 저장소 */
 
 const DB_NAME = 'FantasyForeshadowDB';
-const DB_VERSION = 2;
+const DB_VERSION = 3;
 
 const STORES = [
   'projects',
@@ -15,6 +15,7 @@ const STORES = [
   'versions',
   'trash',
   'settings',
+  'users',
 ];
 
 let dbPromise = null;
@@ -35,7 +36,21 @@ function openDb() {
           if (store === 'timeline') os.createIndex('projectId', 'projectId');
           if (store === 'worlds') os.createIndex('projectId', 'projectId');
           if (store === 'files') os.createIndex('projectId', 'projectId');
+          if (store === 'users') os.createIndex('username', 'username', { unique: true });
+          if (store === 'projects') {
+            try { os.createIndex('ownerId', 'ownerId'); } catch { /* exists */ }
+          }
         }
+      }
+      // v2→v3: projects에 ownerId 인덱스 보강
+      if (db.objectStoreNames.contains('projects')) {
+        const tx = req.transaction;
+        try {
+          const projStore = tx.objectStore('projects');
+          if (!projStore.indexNames.contains('ownerId')) {
+            projStore.createIndex('ownerId', 'ownerId');
+          }
+        } catch { /* ignore */ }
       }
     };
     req.onsuccess = () => resolve(req.result);
