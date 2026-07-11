@@ -5,6 +5,7 @@ import * as project from '../core/project.js';
 import * as autosave from '../core/autosave.js';
 import { simpleMarkdownToHtml, formatStoryReaderLabel } from '../core/utils.js';
 import { showDialog } from './dialog.js';
+import { canUpload } from '../core/auth.js';
 import {
   loadSectionForView,
   resolveAssetUrl,
@@ -179,15 +180,25 @@ function populateSelect(select, stories) {
 function updateReaderNavState(stories) {
   const hasStories = stories.length > 0;
   const current = stories.find((s) => s.number === currentStoryNum);
-  const canDelete = hasStories && (current?.source === 'idb' || current?.source === 'overlay');
+  const allowDelete = canUpload();
+  const canDelete = allowDelete && hasStories && (current?.source === 'idb' || current?.source === 'overlay');
 
   document.querySelector('[data-action="prev-episode"]')?.toggleAttribute('disabled', !hasStories);
   document.querySelector('[data-action="next-episode"]')?.toggleAttribute('disabled', !hasStories);
-  document.querySelector('[data-action="delete-story"]')?.toggleAttribute('disabled', !canDelete);
-  document.querySelector('[data-action="delete-all-stories"]')?.toggleAttribute(
-    'disabled',
-    !stories.some((s) => s.source === 'idb' || s.source === 'overlay')
-  );
+
+  const delBtn = document.querySelector('[data-action="delete-story"]');
+  const delAllBtn = document.querySelector('[data-action="delete-all-stories"]');
+  if (delBtn) {
+    delBtn.hidden = !allowDelete;
+    delBtn.toggleAttribute('disabled', !canDelete);
+  }
+  if (delAllBtn) {
+    delAllBtn.hidden = !allowDelete;
+    delAllBtn.toggleAttribute(
+      'disabled',
+      !allowDelete || !stories.some((s) => s.source === 'idb' || s.source === 'overlay')
+    );
+  }
 }
 
 export async function showStory(num, contentEl, selectEl) {
@@ -238,6 +249,10 @@ export function getCurrentStoryNumber() {
 }
 
 async function deleteCurrentStory() {
+  if (!canUpload()) {
+    alert('일반 사용자는 소설을 삭제할 수 없습니다.');
+    return;
+  }
   const entry = catalog.find((s) => s.number === currentStoryNum);
   if (!entry || (entry.source !== 'idb' && entry.source !== 'overlay')) {
     await showDialog({
@@ -254,6 +269,10 @@ async function deleteCurrentStory() {
 }
 
 async function deleteAllStories() {
+  if (!canUpload()) {
+    alert('일반 사용자는 소설을 삭제할 수 없습니다.');
+    return;
+  }
   const idbStories = catalog.filter((s) => s.source === 'idb' || s.source === 'overlay');
   if (!idbStories.length) {
     await showDialog({

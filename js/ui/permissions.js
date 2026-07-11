@@ -32,6 +32,7 @@ export function applyRolePermissions() {
   applyProjectNav(canSave, canDefault);
   applyCharacterToolbar(isUser);
   applyStoryNavToolbar(isUser);
+  applyReaderToolbar(isUser);
   applyToolNav(isUser);
   applyFooterSave(canSave);
 
@@ -121,6 +122,14 @@ function applyCharacterToolbar(isUser) {
 
 function applyStoryNavToolbar(isUser) {
   ['story-nav-sync', 'timeline-sync'].forEach((action) => {
+    document.querySelectorAll(`[data-action="${action}"]`).forEach((btn) => {
+      setHidden(btn, isUser);
+    });
+  });
+}
+
+function applyReaderToolbar(isUser) {
+  ['delete-story', 'delete-all-stories'].forEach((action) => {
     document.querySelectorAll(`[data-action="${action}"]`).forEach((btn) => {
       setHidden(btn, isUser);
     });
