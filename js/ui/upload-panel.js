@@ -2,6 +2,7 @@
 
 import { emit, on } from '../core/events.js';
 import { getSelectedCharacterId, registerDroppedImages } from './character-panel.js';
+import { canUpload } from '../core/auth.js';
 
 export const MAX_UPLOAD_FILES = 100;
 
@@ -57,6 +58,11 @@ async function handleDroppedFiles(fileList) {
   const files = Array.from(fileList || []);
   if (!files.length) return;
 
+  if (!canUpload()) {
+    alert('일반 사용자는 파일 업로드를 사용할 수 없습니다.');
+    return;
+  }
+
   const charId = getSelectedCharacterId();
   if (charId) {
     const images = files.filter((f) => f.type.startsWith('image/'));
@@ -78,7 +84,7 @@ function updateDropHint() {
   const hint = document.getElementById('drop-char-hint');
   const dropZone = document.getElementById('drop-zone');
   if (!hint) return;
-  if (selectedCharacter.id) {
+  if (selectedCharacter.id && canUpload()) {
     hint.textContent = `🖼 이미지를 놓으면 "${selectedCharacter.name}"에 등록됩니다`;
     hint.hidden = false;
     dropZone?.classList.add('drop-zone--character');

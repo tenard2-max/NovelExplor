@@ -4,12 +4,19 @@ import { on, emit } from '../core/events.js';
 import * as project from '../core/project.js';
 import * as autosave from '../core/autosave.js';
 import { showDialog } from './dialog.js';
+import { canUpload } from '../core/auth.js';
 
 // 저장 최대 해상도 (풀사이즈 뷰어에서 선명하게 보이도록 충분히 크게)
 const AVATAR_MAX_PX = 1200;
 
 let currentId = null;
 let isEditing = false;
+
+function assertCanUploadImages() {
+  if (canUpload()) return true;
+  alert('일반 사용자는 인물 이미지를 등록·변경할 수 없습니다.');
+  return false;
+}
 
 export function initCharacterPanel() {
   const panel = document.getElementById('character-panel');
@@ -31,23 +38,43 @@ export function initCharacterPanel() {
   document.querySelector('[data-action="char-edit-cancel"]')
     ?.addEventListener('click', () => cancelEdit());
   document.querySelector('[data-action="char-avatar-register"]')
-    ?.addEventListener('click', () => triggerPicker(repInput));
+    ?.addEventListener('click', () => {
+      if (!assertCanUploadImages()) return;
+      triggerPicker(repInput);
+    });
   document.querySelector('[data-action="char-avatar-delete"]')
     ?.addEventListener('click', onDeleteRepresentative);
   document.querySelector('[data-action="char-images-add"]')
-    ?.addEventListener('click', () => triggerPicker(galleryInput));
+    ?.addEventListener('click', () => {
+      if (!assertCanUploadImages()) return;
+      triggerPicker(galleryInput);
+    });
 
   // 대표 이미지 영역
   box?.addEventListener('click', onAvatarBoxClick);
-  box?.addEventListener('dragover', (e) => { e.preventDefault(); box.classList.add('is-dragover'); });
+  box?.addEventListener('dragover', (e) => {
+    if (!canUpload()) return;
+    e.preventDefault();
+    box.classList.add('is-dragover');
+  });
   box?.addEventListener('dragleave', () => box.classList.remove('is-dragover'));
   box?.addEventListener('drop', onRepresentativeDrop);
 
   // 갤러리 영역 (여러 장 드롭)
-  gallery?.addEventListener('dragover', (e) => { e.preventDefault(); gallery.classList.add('is-dragover'); });
+  gallery?.addEventListener('dragover', (e) => {
+    if (!canUpload()) return;
+    e.preventDefault();
+    gallery.classList.add('is-dragover');
+  });
   gallery?.addEventListener('dragleave', () => gallery.classList.remove('is-dragover'));
   gallery?.addEventListener('drop', onGalleryDrop);
   gallery?.addEventListener('click', onGalleryClick);
+
+  // 권한 변경 시 패널 UI 갱신
+  on('auth:changed', () => {
+    const ch = getCurrentCharacter();
+    if (ch) renderPanel(ch);
+  });
 
   repInput?.addEventListener('change', async (e) => {
     const file = e.target.files?.[0];
@@ -138,6 +165,7 @@ export function getSelectedCharacterId() {
  */
 export async function registerDroppedImages(files) {
   if (!currentId) return 0;
+  if (!assertCanUploadImages()) return 0;
   const before = (getCurrentCharacter()?.images || []).length;
   await addGalleryImages(files);
   const after = (getCurrentCharacter()?.images || []).length;
@@ -190,7 +218,32 @@ function renderPanel(ch) {
     img.hidden = true;
     if (empty) empty.hidden = false;
   }
-  actions.hidden = hasAvatar;
+
+  const allowUpload = canUpload();
+  document.getElementById('character-panel')
+    ?.classList.toggle('char-panel--no-upload', !allowUpload);
+
+  const reg = document.querySelector('[data-action="char-avatar-register"]');
+  const del = document.querySelector('[data-action="char-avatar-delete"]');
+  const addGalleryBtn = document.querySelector('[data-action="char-images-add"]');
+  if (allowUpload) {
+    if (actions) actions.hidden = false;
+    if (reg) reg.hidden = hasAvatar;
+    if (del) del.hidden = !hasAvatar;
+    if (addGalleryBtn) addGalleryBtn.hidden = false;
+  } else {
+    if (actions) actions.hidden = true;
+    if (reg) reg.hidden = true;
+    if (del) del.hidden = true;
+    if (addGalleryBtn) addGalleryBtn.hidden = true;
+  }
+
+  const box = document.getElementById('char-avatar-box');
+  if (box) {
+    box.title = allowUpload
+      ? (hasAvatar ? '클릭 → 원본 보기 / 드래그 앤 드롭으로 등록' : '클릭 또는 드롭으로 대표 이미지 등록')
+      : (hasAvatar ? '클릭 → 원본 보기' : '일반 사용자는 이미지를 등록할 수 없습니다');
+  }
 
   renderGallery(ch);
   renderInfoSection(ch);
@@ -318,22 +371,28 @@ function renderGallery(ch) {
   if (!gallery) return;
 
   const images = Array.isArray(ch.images) ? ch.images : [];
+  const allowUpload = canUpload();
   if (countEl) countEl.textContent = images.length ? `${images.length}장` : '';
 
   if (!images.length) {
-    gallery.innerHTML = '<p class="char-gallery-empty">등록된 이미지가 없습니다. 파일을 끌어다 놓거나 “＋ 이미지 추가”로 여러 장 등록하세요.</p>';
+    gallery.innerHTML = allowUpload
+      ? '<p class="char-gallery-empty">등록된 이미지가 없습니다. 파일을 끌어다 놓거나 “＋ 이미지 추가”로 여러 장 등록하세요.</p>'
+      : '<p class="char-gallery-empty">등록된 이미지가 없습니다. (일반 사용자는 이미지 등록 불가)</p>';
     return;
   }
 
   gallery.innerHTML = images.map((url, i) => {
     const isRep = url === ch.avatarDataUrl;
+    const tools = allowUpload
+      ? `<div class="char-gallery-tools">
+          <button type="button" class="char-gallery-btn" data-action="set-rep" title="대표로 지정">★</button>
+          <button type="button" class="char-gallery-btn char-gallery-del" data-action="remove" title="삭제">✕</button>
+        </div>`
+      : '';
     return `
       <div class="char-gallery-item${isRep ? ' is-rep' : ''}" data-index="${i}">
         <img class="char-gallery-thumb" src="${url}" alt="이미지 ${i + 1}" data-action="view">
-        <div class="char-gallery-tools">
-          <button type="button" class="char-gallery-btn" data-action="set-rep" title="대표로 지정">★</button>
-          <button type="button" class="char-gallery-btn char-gallery-del" data-action="remove" title="삭제">✕</button>
-        </div>
+        ${tools}
         ${isRep ? '<span class="char-gallery-badge">대표</span>' : ''}
       </div>`;
   }).join('');
@@ -350,7 +409,7 @@ function onAvatarBoxClick() {
   if (!ch) return;
   if (ch.avatarDataUrl) {
     openImageLightbox(ch.avatarDataUrl);
-  } else {
+  } else if (assertCanUploadImages()) {
     triggerPicker(document.getElementById('character-avatar-file'));
   }
 }
@@ -358,6 +417,7 @@ function onAvatarBoxClick() {
 async function onRepresentativeDrop(e) {
   e.preventDefault();
   document.getElementById('char-avatar-box')?.classList.remove('is-dragover');
+  if (!assertCanUploadImages()) return;
   const file = e.dataTransfer?.files?.[0];
   await registerRepresentative(file);
 }
@@ -365,6 +425,7 @@ async function onRepresentativeDrop(e) {
 async function onGalleryDrop(e) {
   e.preventDefault();
   document.getElementById('char-gallery')?.classList.remove('is-dragover');
+  if (!assertCanUploadImages()) return;
   const files = [...(e.dataTransfer?.files || [])];
   await addGalleryImages(files);
 }
@@ -382,9 +443,11 @@ async function onGalleryClick(e) {
   if (action === 'view') {
     openImageLightbox(url);
   } else if (action === 'set-rep') {
+    if (!assertCanUploadImages()) return;
     await project.setCharacterRepresentative(currentId, url);
     refresh();
   } else if (action === 'remove') {
+    if (!assertCanUploadImages()) return;
     await project.removeCharacterImage(currentId, index);
     refresh();
   }
@@ -392,6 +455,7 @@ async function onGalleryClick(e) {
 
 async function registerRepresentative(file) {
   if (!file || !currentId) return;
+  if (!assertCanUploadImages()) return;
   if (!file.type.startsWith('image/')) { alert('이미지 파일만 등록할 수 있습니다.'); return; }
   try {
     const dataUrl = await resizeImage(file, AVATAR_MAX_PX);
@@ -404,6 +468,7 @@ async function registerRepresentative(file) {
 
 async function addGalleryImages(files) {
   if (!currentId) return;
+  if (!assertCanUploadImages()) return;
   const images = files.filter((f) => f.type.startsWith('image/'));
   if (!images.length) return;
   try {
@@ -423,6 +488,7 @@ async function onDeleteCharacter() {
 async function onDeleteRepresentative() {
   const ch = getCurrentCharacter();
   if (!ch?.avatarDataUrl) return;
+  if (!assertCanUploadImages()) return;
   if (!confirm('대표 이미지를 삭제할까요? (갤러리에서도 제거됩니다)')) return;
   const index = (ch.images || []).indexOf(ch.avatarDataUrl);
   if (index >= 0) {

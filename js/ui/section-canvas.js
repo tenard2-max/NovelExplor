@@ -124,13 +124,13 @@ function renderCharacterSection(doc, xmlUrl) {
       : '<div class="xml-card-img xml-card-img--empty">👤</div>';
     const localTag = c.isLocal ? '<span class="xml-card-local">로컬</span>' : '';
     return `
-      <article class="xml-card xml-card--character" data-id="${escapeHtml(c.id)}" role="button" tabindex="0" title="클릭하여 PNG 등록">
+      <article class="xml-card xml-card--character" data-id="${escapeHtml(c.id)}" role="button" tabindex="0" title="클릭하여 상세 보기">
         ${img}
         <div class="xml-card-body">
           <h3>${escapeHtml(c.name)} <small>${escapeHtml(c.id)}</small> ${localTag}</h3>
           <p class="xml-card-meta">${escapeHtml(c.race)} · EP${escapeHtml(String(c.firstEpisode))}~${escapeHtml(String(c.lastEpisode))}</p>
           <p>${escapeHtml(c.description)}</p>
-          <p class="xml-card-hint">클릭 → 우측에서 PNG 등록 (화면은 DB 우선)</p>
+          <p class="xml-card-hint">클릭 → 인물 상세</p>
         </div>
       </article>`;
   }).join('');
