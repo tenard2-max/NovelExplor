@@ -256,7 +256,8 @@ body {
 }
 
 .wallpaper-controls,
-.character-controls {
+.character-controls,
+.timeline-controls {
   display: flex;
   align-items: center;
   gap: 8px;
@@ -267,7 +268,8 @@ body {
   background: var(--bg-input);
 }
 
-.character-controls[hidden] {
+.character-controls[hidden],
+.timeline-controls[hidden] {
   display: none;
 }
 

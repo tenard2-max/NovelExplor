@@ -1,8 +1,8 @@
 /** 스토리 → 인물/관계도/타임라인/네비 동기화 UI */
 
+import { on, emit } from '../core/events.js';
 import * as project from '../core/project.js';
 import * as autosave from '../core/autosave.js';
-import { emit } from '../core/events.js';
 import { showDialog, showAlert } from './dialog.js';
 import {
   analyzeStorySync,
@@ -10,10 +10,113 @@ import {
 } from '../core/story-sync-engine.js';
 import { scheduleGithubSync } from '../core/github-sync.js';
 
+const TIMELINE_VIEWS = new Set(['timeline', 'graph-timeline']);
+
 export function initStorySync() {
   document.querySelectorAll('[data-action="story-sync"]').forEach((btn) => {
     btn.addEventListener('click', () => runStorySync().catch(console.error));
   });
+
+  document.querySelectorAll('[data-action="timeline-sync"]').forEach((btn) => {
+    btn.addEventListener('click', () => runTimelineSync({ interactive: true }).catch(console.error));
+  });
+
+  // 스토리(ST)·에피소드(EP) 등록 후 타임라인 자동 반영
+  on('upload:committed', (payload) => {
+    if (!payload?.storyOrEpisodeCount) return;
+    runTimelineSync({ interactive: false, fromUpload: true }).catch(console.error);
+  });
+
+  on('view:changed', (viewId) => toggleTimelineControls(viewId));
+  toggleTimelineControls('master');
+}
+
+function toggleTimelineControls(viewId) {
+  const el = document.getElementById('timeline-controls');
+  if (el) el.hidden = !TIMELINE_VIEWS.has(viewId);
+}
+
+/**
+ * 스토리 기준 타임라인만 동기화
+ * @param {{ interactive?: boolean, fromUpload?: boolean }} opts
+ */
+export async function runTimelineSync(opts = {}) {
+  const { interactive = false, fromUpload = false } = opts;
+  const proj = project.getCurrentProject();
+  if (!proj) {
+    if (interactive) await showAlert('타임라인 업데이트', '열린 프로젝트가 없습니다.');
+    return { added: 0, candidates: 0 };
+  }
+
+  const cache = project.getCache();
+  if (!(cache.stories || []).length && !(cache.episodes || []).length) {
+    if (interactive) {
+      await showAlert('타임라인 업데이트', '등록된 스토리(ST) 또는 에피소드가 없습니다.');
+    }
+    return { added: 0, candidates: 0 };
+  }
+
+  await project.ensureEpisodesFromStories(cache, proj.projectId);
+  const analysis = analyzeStorySync(project.getCache());
+  const candidates = analysis.timelineCandidates || [];
+
+  if (!candidates.length) {
+    if (interactive) {
+      await showAlert(
+        '타임라인 업데이트',
+        `EP ${analysis.episodesSynced}화 기준으로 키워드 사건 후보가 없습니다.`
+      );
+    }
+    return { added: 0, candidates: 0 };
+  }
+
+  let selected = candidates;
+  if (interactive) {
+    let picked = null;
+    const confirmed = await showDialog({
+      title: '타임라인 업데이트 — 후보 확인',
+      bodyHtml: buildTimelinePreviewHtml(candidates),
+      onConfirm: () => {
+        picked = [...document.querySelectorAll('.sync-tl-only:checked')]
+          .map((el) => candidates[Number(el.value)])
+          .filter(Boolean);
+      },
+    });
+    if (!confirmed || !picked) return { added: 0, candidates: candidates.length };
+    selected = picked;
+  }
+
+  if (!selected.length) return { added: 0, candidates: candidates.length };
+
+  const added = await project.replaceStorySyncTimeline(selected);
+  autosave.markDirty();
+  emit('timeline:updated', { count: added });
+  emit('project:loaded', proj);
+  scheduleGithubSync(fromUpload ? 'file-upload-timeline' : 'timeline-sync');
+
+  if (interactive) {
+    await showAlert('타임라인 업데이트 완료', `사건 ${added}건을 반영했습니다.`);
+  } else if (fromUpload && added > 0) {
+    await showAlert(
+      '타임라인 자동 반영',
+      `스토리 등록에 맞춰 타임라인 사건 ${added}건을 업데이트했습니다.`
+    );
+  }
+
+  return { added, candidates: candidates.length };
+}
+
+function buildTimelinePreviewHtml(candidates) {
+  const rows = candidates.map((t, i) => `
+    <label class="autoadd-row">
+      <input type="checkbox" class="sync-tl-only" value="${i}" checked>
+      <span class="autoadd-name">EP${String(t.episode).padStart(3, '0')} ${esc(t.title)}</span>
+      <span class="autoadd-meta">${esc((t.keywords || []).join('·'))}</span>
+    </label>`).join('');
+
+  return `
+    <p class="autoadd-desc">스토리 키워드(붕괴, 회귀, 투자, 만남…) 구간에서 추출한 후보입니다. 적용할 항목을 선택하세요. 기존 수동 타임라인은 유지되고, 스토리 동기화 항목만 교체됩니다.</p>
+    <div class="autoadd-list">${rows}</div>`;
 }
 
 async function runStorySync() {

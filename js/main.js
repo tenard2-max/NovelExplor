@@ -197,12 +197,15 @@ function initUploadHandler() {
   on('upload:files', async (files) => {
     let lastView = null;
     let successCount = 0;
+    let storyOrEpisodeCount = 0;
     const errors = [];
 
     for (const file of files) {
       try {
         const view = await importSingleFile(file);
         if (view) lastView = view;
+        const kind = classifyImportFilename(file.name).type;
+        if (kind === 'story' || kind === 'episode') storyOrEpisodeCount += 1;
         logImport(file.name, true);
         successCount += 1;
       } catch (err) {
@@ -214,7 +217,10 @@ function initUploadHandler() {
     if (successCount > 0) {
       emit('project:loaded', project.getCurrentProject());
       autosave.markDirty();
-      emit('upload:committed', { count: successCount });
+      emit('upload:committed', {
+        count: successCount,
+        storyOrEpisodeCount,
+      });
       if (lastView) switchView(lastView);
     }
 
