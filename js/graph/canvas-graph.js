@@ -32,6 +32,9 @@ const FORESHADOW_LADDER = {
   /** 기존 1.5px의 3배 */
   lineWidth: 4.5,
   lineColor: 'rgba(186, 230, 253, 0.95)',
+  /** 좌·우 열 간격 = (화면 기준 최대 간격)의 30% */
+  columnSpanRatio: 0.3,
+  minColumnGap: 48,
 };
 
 const RELATION_COLORS = {
@@ -205,6 +208,7 @@ function buildAndDraw() {
 /**
  * 복선 그래프 — 좌(인물) / 우(복선) 사다리 배치.
  * 직사각형 노드 + 고대비 텍스트 + 두꺼운 직선 연결.
+ * relatedCharacters 매칭 실패 시 선은 만들지 않고 노드만 둔다.
  */
 function buildForeshadowGraph(cache, filter) {
   const foreshadows = cache.foreshadows.filter((f) =>
@@ -214,19 +218,32 @@ function buildForeshadowGraph(cache, filter) {
 
   const w = canvas.clientWidth || 800;
   const h = canvas.clientHeight || 600;
-  const { charW, fsW, boxH } = FORESHADOW_LADDER;
-  const padX = Math.max(36, w * 0.04);
+  const { charW, fsW, boxH, columnSpanRatio, minColumnGap } = FORESHADOW_LADDER;
+  const padX = Math.max(24, w * 0.03);
   const padY = Math.max(40, h * 0.06);
-  const leftX = padX + charW / 2;
-  const rightX = w - padX - fsW / 2;
+
+  // 예전: 좌·우 끝단에 붙여 간격이 거의 화면 전체 → 그 최대 간격의 30%만 사용
+  const maxCenterSpan = Math.max(
+    (charW + fsW) / 2 + minColumnGap,
+    w - 2 * padX - (charW + fsW) / 2
+  );
+  const centerSpan = Math.max(
+    (charW + fsW) / 2 + minColumnGap,
+    maxCenterSpan * columnSpanRatio
+  );
+  const midX = w / 2;
+  const leftX = midX - centerSpan / 2;
+  const rightX = midX + centerSpan / 2;
   const minGap = boxH + 14;
 
+  // 명시된 relatedCharacters만 연결 — 해석 실패 시 선 없음(강제 연결 안 함)
   const links = [];
   const tempIndex = buildCharacterIndex(characters);
   for (const fs of foreshadows) {
     for (const ref of fs.relatedCharacters || []) {
       const ch = resolveCharacter(ref, tempIndex);
-      if (ch) links.push({ charId: ch.id, fsId: fs.id });
+      if (!ch) continue;
+      links.push({ charId: ch.id, fsId: fs.id });
     }
   }
 
@@ -288,14 +305,13 @@ function buildForeshadowGraph(cache, filter) {
   for (const link of links) {
     const charNode = nodes.find((n) => n.id === link.charId && n.type === 'character');
     const fsNode = nodes.find((n) => n.id === link.fsId && n.type === 'foreshadow');
-    if (charNode && fsNode) {
-      edges.push({
-        from: charNode,
-        to: fsNode,
-        color: FORESHADOW_LADDER.lineColor,
-        lineWidth: FORESHADOW_LADDER.lineWidth,
-      });
-    }
+    if (!charNode || !fsNode) continue;
+    edges.push({
+      from: charNode,
+      to: fsNode,
+      color: FORESHADOW_LADDER.lineColor,
+      lineWidth: FORESHADOW_LADDER.lineWidth,
+    });
   }
 }
 
