@@ -13,6 +13,7 @@ import { escapeHtml } from '../core/utils.js';
 import * as project from '../core/project.js';
 import { openCharacterPanel } from './character-panel.js';
 import { on } from '../core/events.js';
+import { formatSummaryLineBreaks } from '../core/story-sync-engine.js';
 
 /** 인물 XML 카드 클릭용 메타 (id → xml 필드) */
 let characterXmlById = new Map();
@@ -283,9 +284,10 @@ function renderStoryNavSectionFromIdb(doc, xmlUrl) {
   const eps = [...(project.getCache().episodes || [])].sort((a, b) => a.number - b.number);
   if (eps.length) {
     const rows = eps.map((e) => {
-      const summary = e.summary
+      const rawSummary = e.summary
         || (e.content ? String(e.content).replace(/\s+/g, ' ').trim().slice(0, 280) : '')
         || '요약 없음 · 「네비 업데이트」를 실행하세요.';
+      const summary = formatSummaryLineBreaks(rawSummary);
       return `
       <article class="xml-nav-ep" data-ep-id="${escapeHtml(e.id)}" tabindex="0" role="button"
                aria-expanded="false" title="클릭하여 요약 보기">

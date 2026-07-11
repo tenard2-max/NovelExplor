@@ -317,7 +317,18 @@ export function buildEpisodeSummary(content = '', title = '') {
 
   const pick = paras.slice(0, 3).join(' ');
   const text = pick || raw.replace(/\s+/g, ' ');
-  return text.length > 280 ? `${text.slice(0, 279)}…` : text;
+  const clipped = text.length > 280 ? `${text.slice(0, 279)}…` : text;
+  return formatSummaryLineBreaks(clipped);
+}
+
+/** 문장 구분(.)마다 개행 — 스토리 네비 요약 가독성 */
+export function formatSummaryLineBreaks(text = '') {
+  return String(text || '')
+    .replace(/\s*\n\s*/g, ' ')
+    .replace(/\.{2,}/g, '…') // 말줄임은 한 덩어리로
+    .replace(/\.\s*/g, '.\n')
+    .replace(/\n{2,}/g, '\n')
+    .trim();
 }
 
 /** 스토리 네비 → 11_STORY_NAV.md */
