@@ -101,6 +101,16 @@ export function initCharacterPanel() {
 
   // 다른 화면으로 이동하면 패널을 닫는다 (인물/관계도 어느 쪽에서 열어도 동일)
   on('view:changed', () => closeCharacterPanel());
+  on('project:loaded', () => {
+    closeCharacterPanel();
+    currentId = null;
+    isEditing = false;
+  });
+  on('project:cleared', () => {
+    closeCharacterPanel();
+    currentId = null;
+    isEditing = false;
+  });
 }
 
 export async function openCharacterPanel(character) {

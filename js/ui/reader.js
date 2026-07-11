@@ -5,18 +5,12 @@ import * as project from '../core/project.js';
 import * as autosave from '../core/autosave.js';
 import { simpleMarkdownToHtml, formatStoryReaderLabel } from '../core/utils.js';
 import { showDialog } from './dialog.js';
-import {
-  loadSectionForView,
-  resolveAssetUrl,
-  parseStories,
-} from '../core/workspace-xml.js';
 
 const LIST_VISIBLE_ROWS = 10;
 
 /** @type {Array<{ id: string, number: number, title: string, src: string, content?: string, source: 'xml'|'idb' }>} */
 let catalog = [];
 let currentStoryNum = null;
-let readerXmlUrl = '';
 
 export function initReader() {
   const select = document.getElementById('reader-episode-select');
@@ -111,50 +105,15 @@ export async function refreshReader() {
 }
 
 async function buildCatalog() {
-  const fromXml = await loadXmlStories();
-  const fromIdb = project.getRegisteredStories().map((s) => ({
+  // 프로젝트 격리: 현재 프로젝트 IndexedDB 소설만 (공유 reader XML 미포함)
+  return project.getRegisteredStories().map((s) => ({
     id: s.storyId || s.id,
     number: Number(s.number),
     title: s.title || '',
     src: '',
     content: s.content || '',
     source: 'idb',
-  }));
-
-  // DB 소설을 우선 넣고, XML에만 있는 화는 뒤에 보강 (XML 파일은 변경하지 않음)
-  const byNum = new Map();
-  for (const s of fromIdb) byNum.set(s.number, s);
-  for (const s of fromXml) {
-    const existing = byNum.get(s.number);
-    if (existing) {
-      byNum.set(s.number, {
-        ...s,
-        title: existing.title || s.title,
-        content: existing.content,
-        source: 'overlay',
-      });
-    } else {
-      byNum.set(s.number, s);
-    }
-  }
-
-  return [...byNum.values()].sort((a, b) => a.number - b.number);
-}
-
-async function loadXmlStories() {
-  try {
-    const payload = await loadSectionForView('reader');
-    if (!payload?.doc) return [];
-    readerXmlUrl = payload.xmlUrl;
-    return parseStories(payload.doc).map((s) => ({
-      ...s,
-      content: undefined,
-      source: 'xml',
-    }));
-  } catch (err) {
-    console.warn('[reader] XML 로드 실패, IndexedDB만 사용:', err.message);
-    return [];
-  }
+  })).sort((a, b) => a.number - b.number);
 }
 
 function populateSelect(select, stories) {
@@ -223,24 +182,9 @@ export async function showStory(num, contentEl, selectEl) {
 }
 
 async function resolveStoryContent(entry) {
-  // 로컬 DB / 오버레이는 IndexedDB 본문 우선 (XML 파일은 변경하지 않음)
-  if (entry.source === 'idb' || entry.source === 'overlay') {
-    return entry.content
-      || project.getStoryByNumber(entry.number)?.content
-      || '';
-  }
-
-  const url = resolveAssetUrl(entry.src, readerXmlUrl);
-  try {
-    const res = await fetch(url, { cache: 'no-store' });
-    if (!res.ok) throw new Error(`${entry.src} (${res.status})`);
-    entry.content = await res.text();
-    return entry.content;
-  } catch (err) {
-    const fallback = project.getStoryByNumber(entry.number)?.content || '';
-    if (fallback) return fallback;
-    throw err;
-  }
+  return entry.content
+    || project.getStoryByNumber(entry.number)?.content
+    || '';
 }
 
 export function getCurrentStoryNumber() {

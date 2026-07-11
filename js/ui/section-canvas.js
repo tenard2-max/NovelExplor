@@ -4,8 +4,6 @@ import {
   loadSectionForView,
   resolveAssetUrl,
   parseCharacters,
-  parseStories,
-  parseForeshadows,
   parseTimeline,
   parseMasterFields,
 } from '../core/workspace-xml.js';
@@ -93,26 +91,16 @@ function renderCharacterSection(doc, xmlUrl) {
   characterXmlUrl = xmlUrl;
   const idbChars = project.getCache().characters || [];
 
-  // DB가 있으면 DB 기준으로 카드를 만들고, XML은 폴백·미등록 인물 보강용
-  const matchedXmlIds = new Set();
+  // 프로젝트 격리: IndexedDB 인물만 표시. 빈 프로젝트에 공유 XML 인물을 넣지 않음.
   let list = [];
-
   if (idbChars.length) {
     list = idbChars.map((idb) => {
       const cid = idb.characterId || String(idb.id).split('-').pop();
       const xmlChar = xmlList.find((x) => x.id === cid)
         || xmlList.find((x) => x.name && x.name === idb.name)
         || { id: cid };
-      if (xmlChar.id) matchedXmlIds.add(xmlChar.id);
       return mergeCharacterDisplay(xmlChar, idb, xmlUrl);
     });
-
-    for (const xmlChar of xmlList) {
-      if (matchedXmlIds.has(xmlChar.id)) continue;
-      list.push(mergeCharacterDisplay(xmlChar, null, xmlUrl));
-    }
-  } else {
-    list = xmlList.map((xmlChar) => mergeCharacterDisplay(xmlChar, null, xmlUrl));
   }
 
   characterXmlById = new Map(list.map((c) => [c.id, c]));
@@ -206,32 +194,37 @@ export function mergeCharacterDisplay(xmlChar, idb, xmlUrl = '') {
 }
 
 function renderReaderSection(doc, xmlUrl) {
-  const stories = parseStories(doc);
-  if (!stories.length) return '<p class="xml-section-empty">소설 목록 없음</p>';
+  // 프로젝트 격리: IndexedDB 소설만 (공유 10_reader.xml 폴백 없음)
+  const idbStories = project.getRegisteredStories();
+  if (!idbStories.length) {
+    return '<p class="xml-section-empty">소설 없음 — ST*.md 업로드 또는 프로젝트 데이터로 등록하세요.</p>';
+  }
 
-  const rows = stories.map((s) => `
-    <button type="button" class="xml-story-row" data-story-src="${escapeHtml(resolveAssetUrl(s.src, xmlUrl))}" data-story-id="${escapeHtml(s.id)}">
+  const rows = idbStories.map((s) => `
+    <button type="button" class="xml-story-row" data-story-id="${escapeHtml(s.storyId || s.id)}">
       <span class="xml-story-num">제${s.number}화</span>
-      <span class="xml-story-title">${escapeHtml(s.title)}</span>
-      <code class="xml-story-src">${escapeHtml(s.src.split('/').pop() || s.src)}</code>
+      <span class="xml-story-title">${escapeHtml(s.title || '')}</span>
     </button>`).join('');
 
   return `
-    <p class="xml-section-note">소설 읽기 전용 XML (<code>10_reader.xml</code>). 행을 누르면 MD를 로드합니다.</p>
+    <p class="xml-section-note">현재 프로젝트 IndexedDB 소설 목록입니다.</p>
     <div class="xml-story-list">${rows}</div>
     <article id="xml-reader-body" class="xml-reader-body" hidden></article>`;
 }
 
 function renderForeshadowSection(doc) {
-  const list = parseForeshadows(doc);
-  const rows = list.map((f) => `
+  // 프로젝트 격리: IndexedDB 떡밥만
+  const idb = project.getCache().foreshadows || [];
+  if (!idb.length) return '<p class="xml-section-empty">복선 없음</p>';
+
+  const rows = idb.map((f) => `
     <div class="xml-fs-row">
-      <span class="grade-badge grade-${escapeHtml(f.grade)}">${escapeHtml(f.grade)}</span>
-      <strong>${escapeHtml(f.title)}</strong>
-      <span class="status-${escapeHtml(f.status)}">${escapeHtml(f.status)}</span>
-      <small>EP${escapeHtml(f.createdEpisode)} → EP${escapeHtml(f.expectedEpisode)}</small>
+      <span class="grade-badge grade-${escapeHtml(f.grade || '')}">${escapeHtml(f.grade || '')}</span>
+      <strong>${escapeHtml(f.title || '')}</strong>
+      <span class="status-${escapeHtml(f.status || '')}">${escapeHtml(f.status || '')}</span>
+      <small>EP${escapeHtml(String(f.createdEpisode || ''))} → EP${escapeHtml(String(f.expectedEpisode || ''))}</small>
     </div>`).join('');
-  return `<div class="xml-fs-list">${rows || '<p class="xml-section-empty">복선 없음</p>'}</div>`;
+  return `<div class="xml-fs-list">${rows}</div>`;
 }
 
 function renderTimelineSection(doc) {

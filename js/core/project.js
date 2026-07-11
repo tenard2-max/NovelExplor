@@ -288,13 +288,38 @@ export async function createProject(title = '새 프로젝트', useSeed = true) 
   }
 
   const projectId = uuid();
+  // useSeed=false(메뉴「새 프로젝트」): 스토리·인물·떡밥·네비 전부 빈 상태
+  // useSeed=true(최초 부트 등): 데모 시드 — 기존 프로젝트 IDB는 건드리지 않음
   const seed = useSeed ? createSeedProject(projectId) : emptyProject(projectId, title);
   seed.project.ownerId = user.id;
   seed.project.author = user.username;
   seed.project.writers = [user.id];
+  if (!useSeed) {
+    seed.project.title = title || '새 프로젝트';
+  }
+
+  // 화면 캐시만 비움 — 다른 프로젝트 IndexedDB 레코드는 유지
+  currentProject = null;
+  cache = {
+    stories: [],
+    episodes: [],
+    characters: [],
+    worlds: [],
+    foreshadows: [],
+    timeline: [],
+    files: [],
+    characterRelations: [],
+  };
+  emit('project:cleared');
 
   await storage.put('projects', seed.project);
   await saveAllEntities(projectId, seed);
+  // 새 프로젝트 전용 관계도 슬롯 명시적 초기화
+  await storage.put('settings', {
+    id: `${projectId}-character-relations`,
+    projectId,
+    edges: [],
+  });
   await loadProject(projectId);
   emit('project:loaded', currentProject);
   return currentProject;
@@ -347,6 +372,8 @@ function emptyProject(projectId, title) {
     timeline: [],
 
     files: {},
+
+    characterRelations: [],
 
   };
 

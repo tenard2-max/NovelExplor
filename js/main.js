@@ -148,14 +148,18 @@ function initActions() {
     const title = prompt('프로젝트 제목:', '새 프로젝트');
     if (title === null) return;
     try {
-      await project.createProject(title, false);
+      // 이전 프로젝트 편집 내용을 먼저 저장한 뒤, 빈 새 프로젝트로 전환
       await flushPendingSave();
       await autosave.flushSave(true);
+      await project.createProject(title, false);
+      await autosave.flushSave(true);
       const filename = await exportTimestampedBackup({ notify: false });
-      switchView('master');
+      switchView('character');
       await showAlert(
         '새 프로젝트',
-        `프로젝트를 만들고 DB·동기화 파일을 저장했습니다.<br><code>${filename}</code>`
+        `빈 프로젝트를 만들었습니다. 스토리·인물·떡밥·네비게이터는 초기 상태입니다.<br>`
+        + `이전 프로젝트 데이터는 브라우저 DB에 그대로 남아 있습니다.<br>`
+        + `<code>${filename}</code>`
       );
     } catch (err) {
       alert(`새 프로젝트 실패: ${err.message}`);
