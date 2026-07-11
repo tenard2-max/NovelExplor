@@ -2,7 +2,7 @@
 <Workspace
   version="1"
   projectTitle="인류 생존 프로젝트"
-  updatedAt="2026-07-10T08:11:01.433Z"
+  updatedAt="2026-07-11T11:17:02.029Z"
   schema="novelexplor-workspace/v1">
 
   <Sections>
@@ -19,7 +19,6 @@
 
   <Assets root="overlays/">
     <File id="chr0001-avatar" path="overlays/characters/CHR0001.png" mime="image/png"/>
-    <File id="chr0002-avatar" path="overlays/characters/CHR0002.png" mime="image/png"/>
     <File id="story-00_MASTER-md" path="overlays/stories/00_MASTER.md" mime="text/markdown"/>
     <File id="story-01_STORY_BIBLE-md" path="overlays/stories/01_STORY_BIBLE.md" mime="text/markdown"/>
     <File id="story-02_WORLD_SETTING-md" path="overlays/stories/02_WORLD_SETTING.md" mime="text/markdown"/>

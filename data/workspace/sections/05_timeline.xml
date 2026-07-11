@@ -1,11 +1,11 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <Section id="timeline" viewId="timeline" title="타임라인" version="1">
   <Events>
-    <Event id="TL0001" episode="1" date="2080-12-31" title="마지막 1초 / 회귀"/>
-    <Event id="TL0002" episode="2" date="2005-03-15" title="대학 친구 재회"/>
-    <Event id="TL0003" episode="3" date="2005-03-20" title="지은과 재회"/>
-    <Event id="TL0004" episode="4" date="2005-04-01" title="AI 일상 개입"/>
-    <Event id="TL0005" episode="6" date="2005-05-01" title="투자 계획 제시"/>
-    <Event id="TL0006" episode="7" date="2005-06-01" title="투자금 확보"/>
+    <Event id="TL0001" episode="1" date="2080-12-31" title="마지막 1초 / 회귀" source=""/>
+    <Event id="TL0002" episode="2" date="2005-03-15" title="대학 친구 재회" source=""/>
+    <Event id="TL0003" episode="3" date="2005-03-20" title="지은과 재회" source=""/>
+    <Event id="TL0004" episode="4" date="2005-04-01" title="AI 일상 개입" source=""/>
+    <Event id="TL0005" episode="6" date="2005-05-01" title="투자 계획 제시" source=""/>
+    <Event id="TL0006" episode="7" date="2005-06-01" title="투자금 확보" source=""/>
   </Events>
 </Section>

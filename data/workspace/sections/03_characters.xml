@@ -8,7 +8,7 @@
     </Character>
     <Character id="CHR0002" name="AI 폰" race="AI" gender="F" age="0" occupation="전략 AI" firstEpisode="1" lastEpisode="7" status="Alive">
       <Description>2080년 자기학습 AI, 노인 케어 성격</Description>
-      <Avatar src="../overlays/characters/CHR0002.png" mime="image/png"/>
+      <Avatar src="" mime="image/png"/>
       <Gallery/>
     </Character>
     <Character id="CHR0003" name="민수" race="인간" gender="M" age="20" occupation="대학생" firstEpisode="2" lastEpisode="7" status="Alive">
