@@ -1895,6 +1895,11 @@ body.auth-locked #app {
   font-size: 13px;
 }
 
+.settings-user-info span {
+  color: var(--text-dim);
+  font-size: 12px;
+}
+
 .role-hidden,
 [hidden].role-hidden {
   display: none !important;
