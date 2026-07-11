@@ -2,9 +2,9 @@
 
 import * as storage from './storage.js';
 import { nowIso } from './utils.js';
-import { canSetDefaultProject, getCurrentUser } from './auth.js';
+import { canSetDefaultProject, getCurrentUser, isMaster } from './auth.js';
 import { getGithubConfig, snapshotsDir, hasGithubToken } from './github-config.js';
-import { getRepoFileJson, listRepoDir } from './github-api.js';
+import { getRepoFileJson, listRepoDir, deleteRepoPaths, commitRepoFiles } from './github-api.js';
 import { pullProjectFromGithub } from './github-pull.js';
 import { syncProjectToGithub, waitUntilGithubIdle } from './github-sync.js';
 import { exportTimestampedBackup, buildBackupJson, restoreFromBackup } from './backup.js';
@@ -94,6 +94,109 @@ function formatStampLabel(stamp) {
   if (!/^\d{14}$/.test(s)) return stamp;
   return `${s.slice(0, 4)}-${s.slice(4, 6)}-${s.slice(6, 8)} `
     + `${s.slice(8, 10)}:${s.slice(10, 12)}:${s.slice(12, 14)}`;
+}
+
+/**
+ * 마스터: GitHub 타임스탬프 스냅샷 JSON 삭제
+ * latest/default 포인터가 가리키면 남은 최신으로 갱신하거나 포인터 파일도 제거
+ * @param {string[]} snapshotIds 파일명에서 .json 제외 (예: 20260711120000_테마)
+ * @returns {Promise<{ deleted: string[], latestUpdated: boolean, defaultUpdated: boolean }>}
+ */
+export async function deleteGithubProjectSnapshots(snapshotIds) {
+  if (!isMaster()) throw new Error('마스터만 GitHub 스냅샷을 삭제할 수 있습니다.');
+  if (!hasGithubToken()) {
+    throw new Error('GitHub Personal Access Token이 필요합니다. 우측 패널에서 연결하세요.');
+  }
+
+  const ids = [...new Set((snapshotIds || []).map((id) => String(id || '').trim()).filter(Boolean))];
+  if (!ids.length) throw new Error('삭제할 스냅샷을 선택하세요.');
+
+  const cfg = getGithubConfig();
+  const snapDir = snapshotsDir(cfg);
+  const deleteSet = new Set(ids);
+
+  const before = await listGithubProjectSnapshots();
+  const toDelete = before.filter((s) => deleteSet.has(s.snapshotId));
+  if (!toDelete.length) throw new Error('선택한 스냅샷을 저장소에서 찾지 못했습니다.');
+
+  let latestMeta = null;
+  let defaultMeta = null;
+  try {
+    latestMeta = await getRepoFileJson(`${snapDir}/latest.json`);
+  } catch { /* none */ }
+  try {
+    defaultMeta = await getRepoFileJson(`${snapDir}/default.json`);
+  } catch { /* none */ }
+
+  const paths = toDelete.map((s) => `${snapDir}/${s.name}`);
+  const deletedIds = new Set(toDelete.map((s) => s.snapshotId));
+  const remaining = before.filter((s) => !deletedIds.has(s.snapshotId));
+  const nextLatest = remaining[0] || null;
+
+  const pointerWrites = [];
+  let latestUpdated = false;
+  let defaultUpdated = false;
+
+  const latestPointsDeleted = latestMeta
+    && deletedIds.has(String(latestMeta.snapshotId || '').replace(/\.json$/i, ''));
+  if (latestPointsDeleted) {
+    if (nextLatest) {
+      pointerWrites.push({
+        repoPath: `${snapDir}/latest.json`,
+        content: JSON.stringify({
+          snapshotId: nextLatest.snapshotId,
+          filename: nextLatest.name,
+          updatedAt: nowIso(),
+          reason: 'delete-repoint',
+        }, null, 2),
+      });
+      latestUpdated = true;
+    } else {
+      paths.push(`${snapDir}/latest.json`);
+      latestUpdated = true;
+    }
+  }
+
+  const defaultId = defaultMeta?.snapshotId
+    || String(defaultMeta?.filename || '').replace(/\.json$/i, '');
+  if (defaultMeta && deletedIds.has(String(defaultId))) {
+    if (nextLatest) {
+      pointerWrites.push({
+        repoPath: `${snapDir}/default.json`,
+        content: JSON.stringify({
+          snapshotId: nextLatest.snapshotId,
+          filename: nextLatest.name,
+          title: defaultMeta.title || '기본 프로젝트',
+          updatedAt: nowIso(),
+          reason: 'delete-repoint',
+        }, null, 2),
+      });
+      defaultUpdated = true;
+    } else {
+      paths.push(`${snapDir}/default.json`);
+      defaultUpdated = true;
+    }
+  }
+
+  const names = toDelete.map((s) => s.name).join(', ');
+  await deleteRepoPaths(
+    paths,
+    `NovelExplor: delete snapshot(s) ${names}`
+  );
+
+  if (pointerWrites.length) {
+    await commitRepoFiles(
+      pointerWrites,
+      `NovelExplor: repoint after snapshot delete`
+    );
+  }
+
+  emit('github:snapshots-changed', { deleted: toDelete.map((s) => s.snapshotId) });
+  return {
+    deleted: toDelete.map((s) => s.name),
+    latestUpdated,
+    defaultUpdated,
+  };
 }
 
 /**

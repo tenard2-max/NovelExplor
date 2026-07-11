@@ -296,6 +296,50 @@ export async function commitRepoFiles(files, message = 'NovelExplor sync', optio
   return { commitSha: commit.sha, fileCount: files.length };
 }
 
+/**
+ * 저장소 경로 삭제 (한 커밋). Git Trees 에서 sha: null 로 제거.
+ * @param {string[]} repoPaths
+ * @param {string} [message]
+ */
+export async function deleteRepoPaths(repoPaths, message = 'NovelExplor: delete files') {
+  const paths = [...new Set((repoPaths || []).map((p) => String(p || '').trim()).filter(Boolean))];
+  if (!paths.length) throw new Error('삭제할 파일이 없습니다.');
+
+  const { owner, repo, branch } = getGithubConfig();
+  const ref = await githubRequest(`/repos/${owner}/${repo}/git/ref/heads/${encodeURIComponent(branch)}`);
+  const parentSha = ref.object.sha;
+  const parentCommit = await githubRequest(`/repos/${owner}/${repo}/git/commits/${parentSha}`);
+  const baseTreeSha = parentCommit.tree.sha;
+
+  const treeItems = paths.map((path) => ({
+    path,
+    mode: '100644',
+    type: 'blob',
+    sha: null,
+  }));
+
+  const tree = await githubRequest(`/repos/${owner}/${repo}/git/trees`, {
+    method: 'POST',
+    body: { base_tree: baseTreeSha, tree: treeItems },
+  });
+
+  const commit = await githubRequest(`/repos/${owner}/${repo}/git/commits`, {
+    method: 'POST',
+    body: {
+      message,
+      tree: tree.sha,
+      parents: [parentSha],
+    },
+  });
+
+  await githubRequest(`/repos/${owner}/${repo}/git/refs/heads/${encodeURIComponent(branch)}`, {
+    method: 'PATCH',
+    body: { sha: commit.sha },
+  });
+
+  return { commitSha: commit.sha, fileCount: paths.length };
+}
+
 /** @deprecated commitRepoFiles 사용 */
 export async function putRepoFiles(files, messagePrefix = 'NovelExplor sync') {
   const msg = files.length > 1

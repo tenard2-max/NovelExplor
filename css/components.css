@@ -451,6 +451,52 @@
   margin: 0 0 8px;
 }
 
+.proj-manage-section {
+  margin-bottom: 20px;
+  padding-bottom: 16px;
+  border-bottom: 1px solid var(--border);
+}
+
+.proj-manage-section:last-child {
+  margin-bottom: 0;
+  padding-bottom: 0;
+  border-bottom: none;
+}
+
+.proj-manage-h {
+  margin: 0 0 8px;
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.proj-manage-gh-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 4px;
+}
+
+.proj-manage-gh-head .proj-manage-h {
+  margin: 0;
+}
+
+.proj-manage-gh-status {
+  margin: 0 0 8px;
+  font-size: 11px;
+  color: var(--text-muted);
+}
+
+.proj-manage-gh-list {
+  max-height: 220px;
+}
+
+.proj-manage-gh-actions {
+  display: flex;
+  gap: 8px;
+  margin-top: 10px;
+}
+
 .proj-manage-author {
   color: var(--text-muted);
   font-weight: 400;
