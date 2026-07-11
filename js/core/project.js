@@ -142,6 +142,15 @@ export async function setProjectWriters(writerIds) {
   return setProjectWritersById(currentProject.id || currentProject.projectId, writerIds);
 }
 
+/** id 또는 projectId 로 프로젝트 레코드 조회 */
+export async function findProjectRecord(projectId) {
+  if (!projectId) return null;
+  const direct = await storage.get('projects', projectId);
+  if (direct) return direct;
+  const all = await storage.getAll('projects');
+  return all.find((p) => p.id === projectId || p.projectId === projectId) || null;
+}
+
 /**
  * 마스터 전용: 지정 프로젝트 writers 설정 (열지 않아도 IDB 갱신)
  * @param {string} projectId
@@ -151,8 +160,8 @@ export async function setProjectWritersById(projectId, writerIds) {
   if (!isMaster()) throw new Error('마스터만 프로젝트 쓰기 권한을 부여할 수 있습니다.');
   if (!projectId) throw new Error('프로젝트가 없습니다.');
 
-  const project = await storage.get('projects', projectId);
-  if (!project) throw new Error('프로젝트를 찾을 수 없습니다.');
+  const project = await findProjectRecord(projectId);
+  if (!project) throw new Error(`프로젝트를 찾을 수 없습니다: ${projectId}`);
 
   const users = await listUsers();
   const byId = new Map(users.map((u) => [u.id, u]));
@@ -160,6 +169,7 @@ export async function setProjectWritersById(projectId, writerIds) {
     .map((id) => byId.get(id))
     .filter((u) => u && canBeProjectWriter(u));
 
+  const key = project.id || project.projectId;
   project.writers = allowed.map((u) => u.id);
   project.writerUsernames = normalizeWriterNames(allowed.map((u) => u.username));
   if (!project.ownerId && project.writers[0]) project.ownerId = project.writers[0];
@@ -167,9 +177,12 @@ export async function setProjectWritersById(projectId, writerIds) {
   ensureProjectAcl(project);
   await storage.put('projects', project);
 
-  if (currentProject && (currentProject.id === projectId || currentProject.projectId === projectId)) {
-    currentProject.writers = project.writers;
-    currentProject.writerUsernames = project.writerUsernames;
+  if (currentProject && (
+    currentProject.id === key || currentProject.projectId === key
+    || currentProject.id === projectId || currentProject.projectId === projectId
+  )) {
+    currentProject.writers = [...project.writers];
+    currentProject.writerUsernames = [...project.writerUsernames];
     currentProject.ownerId = project.ownerId;
     currentProject.updatedAt = project.updatedAt;
     emit('project:loaded', currentProject);
@@ -182,7 +195,7 @@ export async function setProjectWritersById(projectId, writerIds) {
  * @param {string} adminUserId
  * @param {string[]} grantProjectIds 권한 줄 프로젝트 id
  * @param {string[]} revokeProjectIds 권한 뺄 프로젝트 id
- * @returns {Promise<{ changed: number, projectIds: string[] }>}
+ * @returns {Promise<{ changed: number, projectIds: string[], errors: string[], granted: number, revoked: number }>}
  */
 export async function applyAdminWriteAccess(adminUserId, grantProjectIds = [], revokeProjectIds = []) {
   if (!isMaster()) throw new Error('마스터만 프로젝트 쓰기 권한을 부여할 수 있습니다.');
@@ -192,44 +205,124 @@ export async function applyAdminWriteAccess(adminUserId, grantProjectIds = [], r
     throw new Error('소설가·개발자만 쓰기 권한을 받을 수 있습니다.');
   }
 
+  const adminName = String(admin.username || '').trim().toLowerCase();
   const grant = new Set(grantProjectIds.filter(Boolean));
   const revoke = new Set(revokeProjectIds.filter(Boolean));
   const touched = [];
+  const errors = [];
+  let granted = 0;
+  let revoked = 0;
 
   for (const id of new Set([...grant, ...revoke])) {
-    const project = await storage.get('projects', id);
-    if (!project) continue;
-    ensureProjectAcl(project);
-
-    const beforeIds = normalizeWriters(project.writers).slice().sort().join('|');
-    const beforeNames = normalizeWriterNames(project.writerUsernames).slice().sort().join('|');
-    const writerSet = new Set(normalizeWriters(project.writers));
-
-    if (grant.has(id)) writerSet.add(adminUserId);
-    if (revoke.has(id)) writerSet.delete(adminUserId);
-
-    const nextIds = [...writerSet];
-    await setProjectWritersById(id, nextIds);
-
-    // username 도 명시 저장 (다른 브라우저·재로그인 대비)
-    const saved = await storage.get('projects', id);
-    if (saved) {
-      const nameSet = new Set(normalizeWriterNames(saved.writerUsernames));
-      if (grant.has(id) && admin.username) nameSet.add(String(admin.username).toLowerCase());
-      if (revoke.has(id) && admin.username) nameSet.delete(String(admin.username).toLowerCase());
-      saved.writerUsernames = [...nameSet];
-      await storage.put('projects', saved);
-      if (currentProject && (currentProject.id === id || currentProject.projectId === id)) {
-        currentProject.writers = saved.writers;
-        currentProject.writerUsernames = saved.writerUsernames;
+    try {
+      const project = await findProjectRecord(id);
+      if (!project) {
+        errors.push(`프로젝트를 찾을 수 없음: ${id}`);
+        continue;
       }
-    }
 
-    const afterIds = normalizeWriters(saved?.writers).slice().sort().join('|');
-    const afterNames = normalizeWriterNames(saved?.writerUsernames).slice().sort().join('|');
-    if (afterIds !== beforeIds || afterNames !== beforeNames) touched.push(id);
+      ensureProjectAcl(project);
+      const writerSet = new Set(normalizeWriters(project.writers));
+      const nameSet = new Set(normalizeWriterNames(project.writerUsernames));
+      const before = `${[...writerSet].sort().join('|')}::${[...nameSet].sort().join('|')}`;
+
+      if (grant.has(id)) {
+        writerSet.add(adminUserId);
+        if (adminName) nameSet.add(adminName);
+      }
+      if (revoke.has(id)) {
+        writerSet.delete(adminUserId);
+        if (adminName) nameSet.delete(adminName);
+      }
+
+      // 소설가·개발자만 writers 유지 (마스터 id는 역할로 이미 쓰기 가능)
+      const nextUsers = [...writerSet]
+        .map((wid) => users.find((u) => u.id === wid))
+        .filter((u) => u && canBeProjectWriter(u));
+
+      if (grant.has(id) && !nextUsers.some((u) => u.id === adminUserId)) {
+        nextUsers.push(admin);
+      }
+
+      const key = project.id || project.projectId;
+      project.writers = normalizeWriters(nextUsers.map((u) => u.id));
+      project.writerUsernames = normalizeWriterNames([
+        ...nextUsers.map((u) => u.username).filter(Boolean),
+        ...(grant.has(id) && adminName ? [adminName] : []),
+      ].filter((n) => !(revoke.has(id) && n === adminName)));
+
+      if (grant.has(id)) {
+        if (!project.writers.includes(adminUserId)) {
+          project.writers = normalizeWriters([...project.writers, adminUserId]);
+        }
+        if (adminName && !project.writerUsernames.includes(adminName)) {
+          project.writerUsernames = normalizeWriterNames([...project.writerUsernames, adminName]);
+        }
+      }
+
+      project.updatedAt = nowIso();
+      ensureProjectAcl(project);
+      // ensure 가 writers 를 owner 로만 채운 뒤 grant 가 빠지지 않게 재확인
+      if (grant.has(id)) {
+        if (!project.writers.includes(adminUserId)) {
+          project.writers = normalizeWriters([...project.writers, adminUserId]);
+        }
+        if (adminName && !normalizeWriterNames(project.writerUsernames).includes(adminName)) {
+          project.writerUsernames = normalizeWriterNames([...project.writerUsernames, adminName]);
+        }
+      }
+
+      await storage.put('projects', project);
+
+      const verify = await findProjectRecord(key);
+      if (!verify) {
+        errors.push(`저장 후 재조회 실패: ${project.title || key}`);
+        continue;
+      }
+
+      if (grant.has(id)) {
+        const okId = normalizeWriters(verify.writers).includes(adminUserId);
+        const okName = adminName && normalizeWriterNames(verify.writerUsernames).includes(adminName);
+        if (!okId && !okName) {
+          errors.push(`저장 검증 실패(권한 미반영): ${project.title || key}`);
+          continue;
+        }
+        granted += 1;
+      }
+      if (revoke.has(id) && !grant.has(id)) {
+        const stillId = normalizeWriters(verify.writers).includes(adminUserId);
+        const stillName = adminName && normalizeWriterNames(verify.writerUsernames).includes(adminName);
+        if (stillId || stillName) {
+          errors.push(`해제 검증 실패: ${project.title || key}`);
+        } else {
+          revoked += 1;
+        }
+      }
+
+      if (currentProject && (currentProject.id === key || currentProject.projectId === key)) {
+        currentProject.writers = [...verify.writers];
+        currentProject.writerUsernames = [...(verify.writerUsernames || [])];
+        currentProject.updatedAt = verify.updatedAt;
+      }
+
+      const after = `${normalizeWriters(verify.writers).slice().sort().join('|')}::${normalizeWriterNames(verify.writerUsernames).slice().sort().join('|')}`;
+      if (after !== before) touched.push(key);
+    } catch (err) {
+      errors.push(`${id}: ${err.message || err}`);
+    }
   }
-  return { changed: touched.length, projectIds: touched };
+
+  if (currentProject && touched.some((id) => id === currentProject.id || id === currentProject.projectId)) {
+    emit('project:loaded', currentProject);
+  }
+
+  return {
+    changed: touched.length,
+    projectIds: touched,
+    errors,
+    granted,
+    revoked,
+  };
 }
 
 export async function countOwnedProjects(userId) {

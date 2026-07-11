@@ -226,14 +226,14 @@ async function showGithubOpenProjectDialog() {
     <div class="open-proj">
       <section class="open-proj-section">
         <strong>기본 프로젝트</strong>
-        <p class="open-proj-hint">마스터가 지정한 기본 프로젝트입니다.</p>
+        <p class="open-proj-hint">마스터가 지정한 기본본입니다. 출처(GitHub / 이 브라우저)가 표시됩니다.</p>
         <div id="open-proj-default" class="open-proj-file-list"></div>
       </section>
       <section class="open-proj-section">
-        <strong>GitHub 스냅샷</strong>
+        <strong>GitHub 원격 스냅샷</strong>
         <p class="open-proj-hint">
-          저장소 <code>snapshots/</code>에 <strong>업로드된</strong> 타임스탬프 JSON만 표시됩니다.
-          로컬·다운로드만 저장한 프로젝트는 여기에 없습니다. (PAT로 저장 시 업로드)
+          GitHub <code>data/workspace/snapshots/</code>에 <strong>실제로 올라간</strong> 타임스탬프 JSON만 나옵니다.
+          다운로드·이 브라우저·연결 폴더만 저장한 건 여기 없습니다 → 열기 1단계에서 「이 브라우저」또는 「로컬 폴더」를 고르세요.
         </p>
         <p id="open-proj-gh-count" class="open-proj-gh-count"></p>
         <div id="open-proj-github-list" class="open-proj-file-list" role="listbox" aria-label="GitHub 스냅샷"></div>
@@ -267,13 +267,13 @@ async function showGithubOpenProjectDialog() {
     resolveOuter?.(value);
   };
 
-  function selectDefault(meta) {
+  function selectDefault(meta, sourceLabel) {
     selection = { type: 'default' };
     previewEl.hidden = false;
     previewBodyEl.innerHTML = `
       <p class="open-proj-preview-title"><strong>${esc(meta?.title || '기본 프로젝트')}</strong></p>
       <p class="open-proj-preview-file"><code>${esc(meta?.filename || meta?.snapshotId || 'default')}</code></p>
-      <p class="open-proj-preview-hint">마스터가 지정한 기본 프로젝트를 불러옵니다.</p>`;
+      <p class="open-proj-preview-hint">${esc(sourceLabel)} 기본 프로젝트를 불러옵니다.</p>`;
     confirmBtn.disabled = false;
     defaultEl.querySelectorAll('.open-proj-file').forEach((el) => el.classList.add('is-selected'));
     githubListEl.querySelectorAll('.open-proj-file').forEach((el) => el.classList.remove('is-selected'));
@@ -294,16 +294,40 @@ async function showGithubOpenProjectDialog() {
     });
   }
 
-  let defaultMeta = await fetchGithubDefaultMeta();
-  if (!defaultMeta) defaultMeta = await getLocalDefaultMeta();
-  if (defaultMeta) {
-    defaultEl.innerHTML = `
-      <button type="button" class="open-proj-file" data-kind="default" role="option">
-        <span class="open-proj-file-stamp">기본</span>
-        <span class="open-proj-file-name">${esc(defaultMeta.title)}</span>
-        <code class="open-proj-file-name">${esc(defaultMeta.filename || defaultMeta.snapshotId)}</code>
-      </button>`;
-    defaultEl.querySelector('button')?.addEventListener('click', () => selectDefault(defaultMeta));
+  const ghDefault = await fetchGithubDefaultMeta();
+  const localDefault = await getLocalDefaultMeta();
+
+  /** @type {{ meta: object, stamp: string, source: string }[]} */
+  const defaultRows = [];
+  if (ghDefault) {
+    defaultRows.push({ meta: ghDefault, stamp: 'GitHub 기본', source: 'GitHub' });
+  }
+  if (localDefault) {
+    const sameAsGh = ghDefault
+      && (ghDefault.snapshotId === localDefault.snapshotId
+        || ghDefault.filename === localDefault.filename);
+    if (!sameAsGh) {
+      defaultRows.push({
+        meta: localDefault,
+        stamp: '이 브라우저 기본',
+        source: '이 브라우저(GitHub 아님)',
+      });
+    }
+  }
+
+  if (defaultRows.length) {
+    defaultEl.innerHTML = defaultRows.map((row, i) => `
+      <button type="button" class="open-proj-file" data-default-idx="${i}" role="option">
+        <span class="open-proj-file-stamp">${esc(row.stamp)}</span>
+        <span class="open-proj-file-name">${esc(row.meta.title || '기본 프로젝트')}</span>
+        <code class="open-proj-file-name">${esc(row.meta.filename || row.meta.snapshotId)}</code>
+      </button>`).join('');
+    defaultEl.querySelectorAll('.open-proj-file').forEach((btn) => {
+      btn.addEventListener('click', () => {
+        const row = defaultRows[Number(btn.dataset.defaultIdx)];
+        if (row) selectDefault(row.meta, row.source);
+      });
+    });
   } else {
     defaultEl.innerHTML = '<p class="open-proj-empty">아직 지정된 기본 프로젝트가 없습니다.</p>';
   }
@@ -311,11 +335,14 @@ async function showGithubOpenProjectDialog() {
   try {
     countEl.textContent = 'GitHub 스냅샷 불러오는 중…';
     const snaps = await listGithubProjectsDetailed();
+    const remoteNote = localDefault && !snaps.some((s) => s.snapshotId === localDefault.snapshotId)
+      ? ` · 이 브라우저 기본(${localDefault.filename || localDefault.snapshotId})은 원격에 없음`
+      : '';
     countEl.textContent = snaps.length
-      ? `원격 스냅샷 ${snaps.length}개`
-      : '원격 스냅샷 0개 — 프로젝트 저장 시 PAT가 있으면 여기에 쌓입니다.';
+      ? `원격 스냅샷 ${snaps.length}개 (저장소 기준)${remoteNote}`
+      : `원격 스냅샷 0개 — PAT로 「프로젝트 저장」해야 여기에 쌓입니다.${remoteNote}`;
     if (!snaps.length) {
-      githubListEl.innerHTML = '<p class="open-proj-empty">GitHub 스냅샷이 없습니다.</p>';
+      githubListEl.innerHTML = '<p class="open-proj-empty">GitHub에 타임스탬프 JSON이 없습니다.</p>';
     } else {
       githubListEl.innerHTML = snaps.map((s) => `
         <button type="button" class="open-proj-file" data-id="${esc(s.snapshotId)}" role="option">

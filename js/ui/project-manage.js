@@ -232,11 +232,17 @@ export async function showProjectManageDialog() {
 
   return new Promise((resolve) => {
     let settled = false;
+    const prevConfirmType = confirmBtn.type;
+    // method=dialog 폼이 비동기 저장 전에 닫히는 것을 막기 위해 button 으로 처리
+    confirmBtn.type = 'button';
+
     const finish = (ok) => {
       if (settled) return;
       settled = true;
       cancelBtn.removeEventListener('click', onCancel);
-      form.removeEventListener('submit', onSubmit);
+      confirmBtn.removeEventListener('click', onApply);
+      form.removeEventListener('submit', onFormSubmit);
+      confirmBtn.type = prevConfirmType || 'submit';
       dialog.classList.remove('dialog-wide');
       confirmBtn.textContent = '확인';
       confirmBtn.disabled = false;
@@ -245,8 +251,12 @@ export async function showProjectManageDialog() {
     };
 
     const onCancel = () => finish(false);
-    const onSubmit = async (e) => {
+    const onFormSubmit = (e) => {
       e.preventDefault();
+      e.stopPropagation();
+    };
+
+    const onApply = async () => {
       const adminId = selectedAdminId();
       if (!adminId) {
         alert('관리자를 선택하세요.');
@@ -254,26 +264,56 @@ export async function showProjectManageDialog() {
       }
 
       const checked = [...listEl.querySelectorAll('input[name="proj-item"]:checked')];
-      const grantLocal = checked.map((el) => el.dataset.localId).filter(Boolean);
+      // dataset 뿐 아니라 catalog.key 로 localId 해석 (속성 누락·이스케이프 대비)
+      const grantLocal = [];
+      const ghOnlyChecked = [];
+      for (const el of checked) {
+        const item = catalog.find((c) => c.key === el.value);
+        const localId = item?.localId || el.getAttribute('data-local-id') || el.dataset.localId || '';
+        if (localId) grantLocal.push(localId);
+        else if (item?.ghSnapshotId || el.dataset.ghId) ghOnlyChecked.push(el);
+      }
+
       const allLocalIds = catalog.map((c) => c.localId).filter(Boolean);
       const grantSet = new Set(grantLocal);
       const revokeLocal = allLocalIds.filter((id) => !grantSet.has(id));
 
-      const ghOnlyChecked = checked.filter((el) => !el.dataset.localId && el.dataset.ghId);
+      if (!grantLocal.length && checked.length) {
+        alert(
+          '체크한 항목에 이 브라우저 로컬 프로젝트가 없습니다.\n'
+          + '쓰기 권한은 「로컬」 배지가 있는 프로젝트에만 적용됩니다.\n'
+          + '먼저 해당 프로젝트를 「이 브라우저」로 연 뒤 다시 시도하세요.'
+        );
+        return;
+      }
+
+      if (!grantLocal.length && !revokeLocal.length) {
+        alert('적용할 로컬 프로젝트가 없습니다.');
+        return;
+      }
+
       if (ghOnlyChecked.length) {
         const okOpen = confirm(
-          `체크한 항목 중 ${ghOnlyChecked.length}개는 이 브라우저에 로컬 프로젝트가 없습니다.\n`
-          + `쓰기 권한은 로컬에 있는 프로젝트에만 바로 적용됩니다.\n`
-          + `계속할까요?`
+          `체크한 항목 중 ${ghOnlyChecked.length}개는 로컬이 없어 권한 적용 대상에서 제외됩니다.\n`
+          + `로컬 ${grantLocal.length}개만 적용할까요?`
         );
         if (!okOpen) return;
       }
 
+      confirmBtn.disabled = true;
+      statusEl.textContent = '권한 저장 중…';
       try {
-        const { changed, projectIds } = await applyAdminWriteAccess(adminId, grantLocal, revokeLocal);
+        const result = await applyAdminWriteAccess(adminId, grantLocal, revokeLocal);
+        const { changed, projectIds, errors = [], granted = 0, revoked = 0 } = result;
+
+        if (errors.length) {
+          console.warn('[project-manage] ACL 오류:', errors);
+        }
+
         const cur = getCurrentProject();
         const curId = cur?.id || cur?.projectId;
-        if (curId && projectIds.includes(curId)) {
+        // 부여된 프로젝트가 열려 있으면 JSON/폴더에도 ACL 반영
+        if (curId && (projectIds.includes(curId) || grantLocal.includes(curId))) {
           await loadProject(curId);
           await flushSave(true);
           try {
@@ -284,21 +324,36 @@ export async function showProjectManageDialog() {
         }
         applyRolePermissions();
         const admin = admins.find((u) => u.id === adminId);
+        const errLine = errors.length
+          ? `\n\n오류 ${errors.length}건:\n${errors.slice(0, 5).join('\n')}`
+          : '';
         alert(
-          `${admin?.username || '관리자'} 쓰기 권한을 반영했습니다. (변경 ${changed}건)\n`
-          + `체크됨 ${grantLocal.length} · 해제 ${revokeLocal.length}\n`
-          + `같은 브라우저에서 해당 계정으로 다시 로그인하면 바로 적용됩니다.\n`
-          + `다른 PC는 프로젝트 저장(JSON/GitHub) 후 그 파일로 열어야 합니다.`
+          `${admin?.username || '관리자'} 쓰기 권한 반영\n`
+          + `부여 ${granted} · 해제 ${revoked} · 변경 ${changed}\n`
+          + `체크(로컬) ${grantLocal.length} · 해제 대상 ${revokeLocal.length}`
+          + errLine
+          + `\n\n같은 브라우저에서 해당 계정으로 다시 로그인하세요.\n`
+          + `다른 PC는 저장(JSON/GitHub) 후 그 파일로 열어야 합니다.`
         );
+
+        if (!granted && grantLocal.length && errors.length) {
+          statusEl.textContent = `권한 저장 실패: ${errors[0]}`;
+          confirmBtn.disabled = false;
+          return;
+        }
+
         await refreshCatalog();
         finish(true);
       } catch (err) {
         alert(err.message || String(err));
+        statusEl.textContent = `권한 적용 실패: ${err.message || err}`;
+        confirmBtn.disabled = false;
       }
     };
 
     cancelBtn.addEventListener('click', onCancel);
-    form.addEventListener('submit', onSubmit);
+    confirmBtn.addEventListener('click', onApply);
+    form.addEventListener('submit', onFormSubmit);
     dialog.showModal();
   });
 }

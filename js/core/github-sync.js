@@ -82,13 +82,9 @@ export async function syncProjectToGithub({
 } = {}) {
   if (!hasGithubToken()) return null;
 
-  // 기본 프로젝트 지정은 반드시 완료되어야 하므로 진행 중이면 대기 후 재시도
+  // 진행 중이면 대기 후 이어서 업로드 (예전엔 일반 저장이 조용히 스킵되어 원격 목록이 안 늘었음)
   if (syncInFlight) {
-    if (asDefault || reason === 'default') {
-      await waitUntilGithubIdle();
-    } else {
-      return null;
-    }
+    await waitUntilGithubIdle();
   }
   if (syncInFlight) return null;
 
