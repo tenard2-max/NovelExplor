@@ -8,6 +8,7 @@ const DEFAULT_TIMEOUT_MS = 45000;
 const BLOB_TIMEOUT_MS = 90000;
 const MAX_RETRIES = 2;
 const BLOB_BATCH = 4;
+const REF_FAST_FORWARD_RETRIES = 2;
 const DIR_CACHE_TTL_MS = 5 * 60 * 1000;
 const DIR_CACHE_PREFIX = 'ne-gh-dir:';
 
@@ -58,12 +59,130 @@ function formatGithubApiError(status, detail) {
   if (status === 403 || status === 429 || /rate limit/i.test(d)) {
     return 'GitHub API 호출 한도 초과. 우측 패널에 PAT를 연결하면 한도가 크게 늘어납니다.';
   }
+  if (/not a fast.?forward|fast.?forward/i.test(d)) {
+    return 'GitHub 원격 브랜치가 다른 곳에서 먼저 갱신되었습니다. 잠시 후 다시 동기화해 주세요.';
+  }
   return d || `GitHub API 오류 (${status})`;
 }
 
 export function isGithubRateLimitError(err) {
   const msg = String(err?.message || err || '');
   return /한도 초과|rate limit/i.test(msg);
+}
+
+export function isGithubNonFastForwardError(err) {
+  const msg = String(err?.message || err || '');
+  return /not a fast.?forward|fast.?forward|먼저 갱신/i.test(msg);
+}
+
+const GITHUB_SYNC_CONFLICT_MESSAGE =
+  '동기화 충돌: 원격 브랜치에 다른 커밋이 반영되어 자동 재시도 후에도 실패했습니다. 잠시 후 다시 시도하거나 GitHub에서 브랜치 상태를 확인해 주세요.';
+
+async function getBranchTip(owner, repo, branch) {
+  const ref = await githubRequest(`/repos/${owner}/${repo}/git/ref/heads/${encodeURIComponent(branch)}`);
+  const parentSha = ref.object.sha;
+  const parentCommit = await githubRequest(`/repos/${owner}/${repo}/git/commits/${parentSha}`);
+  return { parentSha, baseTreeSha: parentCommit.tree.sha };
+}
+
+async function buildTreeAndCommit(owner, repo, { message, baseTreeSha, treeItems, parentSha }) {
+  const tree = await githubRequest(`/repos/${owner}/${repo}/git/trees`, {
+    method: 'POST',
+    body: { base_tree: baseTreeSha, tree: treeItems },
+  });
+  const commit = await githubRequest(`/repos/${owner}/${repo}/git/commits`, {
+    method: 'POST',
+    body: {
+      message,
+      tree: tree.sha,
+      parents: [parentSha],
+    },
+  });
+  return commit;
+}
+
+async function patchBranchRef(owner, repo, branch, commitSha) {
+  await githubRequest(`/repos/${owner}/${repo}/git/refs/heads/${encodeURIComponent(branch)}`, {
+    method: 'PATCH',
+    body: { sha: commitSha },
+  });
+}
+
+/**
+ * 최신 브랜치 tip 기준으로 tree/commit/ref 갱신. non-fast-forward 시 재시도.
+ */
+async function commitTreeWithRetry(owner, repo, branch, {
+  message,
+  treeItems,
+  onProgress,
+  progressTotal,
+}) {
+  let lastError;
+
+  for (let attempt = 0; attempt <= REF_FAST_FORWARD_RETRIES; attempt++) {
+    if (attempt > 0) {
+      reportProgress(onProgress, {
+        phase: 'ref-retry',
+        done: progressTotal,
+        total: progressTotal,
+        label: `브랜치 충돌 — 재시도 ${attempt}/${REF_FAST_FORWARD_RETRIES}…`,
+      });
+      await sleep(400 * attempt);
+    }
+
+    const { parentSha, baseTreeSha } = await getBranchTip(owner, repo, branch);
+
+    reportProgress(onProgress, {
+      phase: attempt > 0 ? 'tree-retry' : 'tree',
+      done: progressTotal,
+      total: progressTotal,
+      label: attempt > 0
+        ? `트리 재생성… (${progressTotal}파일)`
+        : `트리 생성… (${progressTotal}파일)`,
+    });
+
+    reportProgress(onProgress, {
+      phase: attempt > 0 ? 'commit-retry' : 'commit',
+      done: progressTotal,
+      total: progressTotal,
+      label: attempt > 0 ? '커밋 재시도…' : '커밋 중…',
+    });
+
+    let commit;
+    try {
+      commit = await buildTreeAndCommit(owner, repo, {
+        message,
+        baseTreeSha,
+        treeItems,
+        parentSha,
+      });
+    } catch (err) {
+      lastError = err;
+      if (isGithubNonFastForwardError(err) && attempt < REF_FAST_FORWARD_RETRIES) continue;
+      throw err;
+    }
+
+    reportProgress(onProgress, {
+      phase: 'ref',
+      done: progressTotal,
+      total: progressTotal,
+      label: attempt > 0 ? '브랜치 재갱신…' : '브랜치 갱신…',
+    });
+
+    try {
+      await patchBranchRef(owner, repo, branch, commit.sha);
+      return commit;
+    } catch (err) {
+      lastError = err;
+      if (isGithubNonFastForwardError(err) && attempt < REF_FAST_FORWARD_RETRIES) continue;
+      if (isGithubNonFastForwardError(err)) {
+        throw new Error(GITHUB_SYNC_CONFLICT_MESSAGE);
+      }
+      throw err;
+    }
+  }
+
+  throw lastError || new Error(GITHUB_SYNC_CONFLICT_MESSAGE);
 }
 
 async function githubRequest(path, {
@@ -319,11 +438,6 @@ export async function commitRepoFiles(files, message = 'NovelExplor sync', optio
     label: `준비 중… (0/${total})`,
   });
 
-  const ref = await githubRequest(`/repos/${owner}/${repo}/git/ref/heads/${encodeURIComponent(branch)}`);
-  const parentSha = ref.object.sha;
-  const parentCommit = await githubRequest(`/repos/${owner}/${repo}/git/commits/${parentSha}`);
-  const baseTreeSha = parentCommit.tree.sha;
-
   const treeItems = [];
   let done = 0;
 
@@ -361,41 +475,11 @@ export async function commitRepoFiles(files, message = 'NovelExplor sync', optio
     });
   }
 
-  reportProgress(onProgress, {
-    phase: 'tree',
-    done: total,
-    total,
-    label: `트리 생성… (${total}파일)`,
-  });
-  const tree = await githubRequest(`/repos/${owner}/${repo}/git/trees`, {
-    method: 'POST',
-    body: { base_tree: baseTreeSha, tree: treeItems },
-  });
-
-  reportProgress(onProgress, {
-    phase: 'commit',
-    done: total,
-    total,
-    label: '커밋 중…',
-  });
-  const commit = await githubRequest(`/repos/${owner}/${repo}/git/commits`, {
-    method: 'POST',
-    body: {
-      message,
-      tree: tree.sha,
-      parents: [parentSha],
-    },
-  });
-
-  reportProgress(onProgress, {
-    phase: 'ref',
-    done: total,
-    total,
-    label: '브랜치 갱신…',
-  });
-  await githubRequest(`/repos/${owner}/${repo}/git/refs/heads/${encodeURIComponent(branch)}`, {
-    method: 'PATCH',
-    body: { sha: commit.sha },
+  const commit = await commitTreeWithRetry(owner, repo, branch, {
+    message,
+    treeItems,
+    onProgress,
+    progressTotal: total,
   });
 
   reportProgress(onProgress, {
@@ -418,10 +502,6 @@ export async function deleteRepoPaths(repoPaths, message = 'NovelExplor: delete 
   if (!paths.length) throw new Error('삭제할 파일이 없습니다.');
 
   const { owner, repo, branch } = getGithubConfig();
-  const ref = await githubRequest(`/repos/${owner}/${repo}/git/ref/heads/${encodeURIComponent(branch)}`);
-  const parentSha = ref.object.sha;
-  const parentCommit = await githubRequest(`/repos/${owner}/${repo}/git/commits/${parentSha}`);
-  const baseTreeSha = parentCommit.tree.sha;
 
   const treeItems = paths.map((path) => ({
     path,
@@ -430,23 +510,10 @@ export async function deleteRepoPaths(repoPaths, message = 'NovelExplor: delete 
     sha: null,
   }));
 
-  const tree = await githubRequest(`/repos/${owner}/${repo}/git/trees`, {
-    method: 'POST',
-    body: { base_tree: baseTreeSha, tree: treeItems },
-  });
-
-  const commit = await githubRequest(`/repos/${owner}/${repo}/git/commits`, {
-    method: 'POST',
-    body: {
-      message,
-      tree: tree.sha,
-      parents: [parentSha],
-    },
-  });
-
-  await githubRequest(`/repos/${owner}/${repo}/git/refs/heads/${encodeURIComponent(branch)}`, {
-    method: 'PATCH',
-    body: { sha: commit.sha },
+  const commit = await commitTreeWithRetry(owner, repo, branch, {
+    message,
+    treeItems,
+    progressTotal: paths.length,
   });
 
   return { commitSha: commit.sha, fileCount: paths.length };
