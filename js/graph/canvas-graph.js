@@ -151,7 +151,7 @@ function buildAndDraw() {
     edges = [];
     buildForeshadowGraph(cache, filter);
     if (gen !== buildGeneration) return;
-    renderLegend('복선 등급별 노드 · 인물 연결선');
+    renderLegend('좌: 인물 · 우: 복선 · 연관 직교 연결');
     draw();
     updateStatus();
   } else if (mode === 'character') {
@@ -179,53 +179,132 @@ function buildAndDraw() {
   }
 }
 
+/**
+ * 복선 그래프 — 좌(인물) / 우(복선) 사다리(이분) 배치.
+ * 연관 인물↔복선은 여러 직교 선으로 연결하며, 노드끼리 겹치지 않게 세로로 나열한다.
+ */
 function buildForeshadowGraph(cache, filter) {
   const foreshadows = cache.foreshadows.filter((f) =>
     filter === 'all' || f.status === filter
   );
+  const characters = cache.characters || [];
 
-  const cx = canvas.clientWidth / 2;
-  const cy = canvas.clientHeight / 2;
-  const radius = Math.min(cx, cy) * 0.55;
+  const w = canvas.clientWidth || 800;
+  const h = canvas.clientHeight || 600;
+  const padX = Math.max(90, w * 0.14);
+  const padY = Math.max(56, h * 0.08);
+  const leftX = padX;
+  const rightX = w - padX;
+  const minGap = 72;
 
-  foreshadows.forEach((fs, i) => {
-    const angle = (i / Math.max(foreshadows.length, 1)) * Math.PI * 2 - Math.PI / 2;
-    nodes.push({
-      id: fs.id,
-      label: fs.title,
-      sub: fs.grade,
-      color: GRADE_COLORS[fs.grade] || '#888',
-      x: cx + Math.cos(angle) * radius,
-      y: cy + Math.sin(angle) * radius,
-      r: fs.grade === 'SSS' || fs.grade === 'SS' ? 28 : 22,
-      data: fs,
-      type: 'foreshadow',
-    });
-  });
+  // relatedCharacters 링크 (캐릭터 id / characterId / 이름 모두 허용)
+  const links = [];
+  const tempIndex = buildCharacterIndex(characters);
+  for (const fs of foreshadows) {
+    for (const ref of fs.relatedCharacters || []) {
+      const ch = resolveCharacter(ref, tempIndex);
+      if (ch) links.push({ charId: ch.id, fsId: fs.id });
+    }
+  }
 
-  cache.characters.forEach((ch, i) => {
-    const angle = (i / Math.max(cache.characters.length, 1)) * Math.PI * 2;
-    const cr = radius * 0.35;
+  const { chars: orderedChars, fores: orderedFs } = orderForeshadowLadder(
+    characters,
+    foreshadows,
+    links
+  );
+
+  const charStep = orderedChars.length > 1
+    ? Math.max(minGap, (h - padY * 2) / (orderedChars.length - 1))
+    : 0;
+  const fsStep = orderedFs.length > 1
+    ? Math.max(minGap, (h - padY * 2) / (orderedFs.length - 1))
+    : 0;
+
+  orderedChars.forEach((ch, i) => {
     nodes.push({
       id: ch.id,
       label: ch.name,
       sub: ch.race || '',
       color: '#38bdf8',
-      x: cx + Math.cos(angle) * cr,
-      y: cy + Math.sin(angle) * cr,
+      x: leftX,
+      y: orderedChars.length === 1 ? h / 2 : padY + charStep * i,
       r: 18,
       data: ch,
       type: 'character',
     });
   });
 
-  for (const fs of foreshadows) {
-    for (const cid of fs.relatedCharacters || []) {
-      const charNode = findCharacterNode(nodes, cid);
-      const fsNode = nodes.find((n) => n.id === fs.id);
-      if (charNode && fsNode) edges.push({ from: fsNode, to: charNode, color: 'rgba(108,140,255,0.4)' });
+  orderedFs.forEach((fs, i) => {
+    nodes.push({
+      id: fs.id,
+      label: fs.title,
+      sub: fs.grade,
+      color: GRADE_COLORS[fs.grade] || '#888',
+      x: rightX,
+      y: orderedFs.length === 1 ? h / 2 : padY + fsStep * i,
+      r: fs.grade === 'SSS' || fs.grade === 'SS' ? 28 : 22,
+      data: fs,
+      type: 'foreshadow',
+    });
+  });
+
+  // from=인물(좌) → to=복선(우) — 한 인물이 여러 복선에, 한 복선이 여러 인물에 연결 가능
+  let edgeIdx = 0;
+  for (const link of links) {
+    const charNode = nodes.find((n) => n.id === link.charId && n.type === 'character');
+    const fsNode = nodes.find((n) => n.id === link.fsId && n.type === 'foreshadow');
+    if (charNode && fsNode) {
+      edges.push({
+        from: charNode,
+        to: fsNode,
+        color: 'rgba(108,140,255,0.45)',
+        lane: edgeIdx++,
+      });
     }
   }
+}
+
+/** 교차 감소용 이분 그래프 정렬 (barycenter) */
+function orderForeshadowLadder(characters, foreshadows, links) {
+  let chars = characters.slice();
+  let fores = foreshadows.slice();
+  if (!chars.length || !fores.length || !links.length) {
+    return { chars, fores };
+  }
+
+  const charPos = new Map(chars.map((c, i) => [c.id, i]));
+  const fsPos = new Map(fores.map((f, i) => [f.id, i]));
+
+  for (let pass = 0; pass < 4; pass += 1) {
+    // 인물: 연결된 복선들의 평균 순서로 정렬
+    chars = chars.slice().sort((a, b) => {
+      const ba = barycenterOf(a.id, links, 'charId', 'fsId', fsPos);
+      const bb = barycenterOf(b.id, links, 'charId', 'fsId', fsPos);
+      return ba - bb;
+    });
+    chars.forEach((c, i) => charPos.set(c.id, i));
+
+    // 복선: 연결된 인물들의 평균 순서로 정렬
+    fores = fores.slice().sort((a, b) => {
+      const ba = barycenterOf(a.id, links, 'fsId', 'charId', charPos);
+      const bb = barycenterOf(b.id, links, 'fsId', 'charId', charPos);
+      return ba - bb;
+    });
+    fores.forEach((f, i) => fsPos.set(f.id, i));
+  }
+
+  return { chars, fores };
+}
+
+function barycenterOf(id, links, selfKey, otherKey, otherPos) {
+  const ys = [];
+  for (const L of links) {
+    if (L[selfKey] !== id) continue;
+    const p = otherPos.get(L[otherKey]);
+    if (p != null) ys.push(p);
+  }
+  if (!ys.length) return 1e9;
+  return ys.reduce((s, v) => s + v, 0) / ys.length;
 }
 
 function buildCharacterIndex(characters) {
@@ -556,10 +635,14 @@ function draw() {
     ctx.lineWidth = e.lineWidth || 1.5;
     ctx.lineCap = 'round';
     ctx.lineJoin = 'round';
-    const path = mode === 'character' ? getCharacterEdgePath(e) : [
-      { x: e.from.x, y: e.from.y },
-      { x: e.to.x, y: e.to.y },
-    ];
+    const path = mode === 'character'
+      ? getCharacterEdgePath(e)
+      : mode === 'foreshadow'
+        ? getForeshadowEdgePath(e)
+        : [
+          { x: e.from.x, y: e.from.y },
+          { x: e.to.x, y: e.to.y },
+        ];
     drawPolyline(path);
     if (mode === 'character' && (e.lineNo || e.description)) {
       drawEdgeLabel(e, path);
@@ -827,6 +910,39 @@ function separateOverlappingCharacterCards(maxIter = 12) {
   }
   resolveAllCharacterLabels();
   return moved;
+}
+
+/**
+ * 복선 사다리 연결선 — 인물(좌) 오른쪽 가장자리 → 복선(우) 왼쪽 가장자리.
+ * 중간 세로 레인으로 직교 경로를 잡아 노드 원과 겹치지 않게 한다.
+ */
+function getForeshadowEdgePath(e) {
+  const left = e.from.x <= e.to.x ? e.from : e.to;
+  const right = e.from.x <= e.to.x ? e.to : e.from;
+  const lr = left.r || 18;
+  const rr = right.r || 22;
+  const x0 = left.x + lr + 2;
+  const x1 = right.x - rr - 2;
+  const y0 = left.y;
+  const y1 = right.y;
+  const span = Math.max(40, x1 - x0);
+  // 여러 선이 같은 세로축에 겹치지 않도록 레인 오프셋
+  const lane = Number(e.lane) || 0;
+  const midX = x0 + span * (0.28 + ((lane % 7) / 7) * 0.44);
+
+  if (Math.abs(y0 - y1) <= 6) {
+    return [
+      { x: x0, y: y0 },
+      { x: x1, y: y1 },
+    ];
+  }
+
+  return [
+    { x: x0, y: y0 },
+    { x: midX, y: y0 },
+    { x: midX, y: y1 },
+    { x: x1, y: y1 },
+  ];
 }
 
 /**
@@ -1227,7 +1343,9 @@ function hitTestEdge(wx, wy) {
   for (const e of edges) {
     const path = mode === 'character'
       ? getCharacterEdgePath(e)
-      : [{ x: e.from.x, y: e.from.y }, { x: e.to.x, y: e.to.y }];
+      : mode === 'foreshadow'
+        ? getForeshadowEdgePath(e)
+        : [{ x: e.from.x, y: e.from.y }, { x: e.to.x, y: e.to.y }];
     const dist = distToPolyline(wx, wy, path);
     if (dist < bestDist) {
       bestDist = dist;
