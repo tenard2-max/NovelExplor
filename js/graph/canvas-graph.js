@@ -6,6 +6,7 @@ import * as autosave from '../core/autosave.js';
 import { openCharacterPanel, openImageLightbox } from '../ui/character-panel.js';
 import { showDialog, showAlert } from '../ui/dialog.js';
 import { collectMultiverseRows } from '../core/story-sync-engine.js';
+import { canUpload } from '../core/auth.js';
 
 const GRADE_COLORS = {
   F: '#6b7280', D: '#60a5fa', C: '#4ade80', B: '#facc15',
@@ -80,6 +81,11 @@ const EDGE_Y_ALIGN_TOL = 50;
 /** 관계선 라벨을 선 위로 띄우는 거리 */
 const EDGE_LABEL_ABOVE = 14;
 
+/** 인물 관계도 편집(드래그·줄 추가·관계 수정) — 관리자만 */
+function canEditCharacterGraph() {
+  return canUpload();
+}
+
 export function initGraph() {
   canvas = document.getElementById('main-canvas');
   if (!canvas) return;
@@ -110,6 +116,7 @@ export function initGraph() {
   on('view:changed', (view) => {
     if (view.startsWith('graph-')) {
       mode = view.replace('graph-', '');
+      if (mode === 'character' && !canEditCharacterGraph()) cancelLinkAddMode();
       showGraphLayer(true);
       buildAndDraw();
     } else {
@@ -131,9 +138,21 @@ export function initGraph() {
   document.querySelector('[data-action="graph-reset"]')?.addEventListener('click', () => { zoom = 1; panX = 0; panY = 0; buildAndDraw(); });
 
   document.querySelector('[data-action="graph-save-layout"]')
-    ?.addEventListener('click', () => saveCharacterLayout().catch(console.error));
+    ?.addEventListener('click', () => {
+      if (!canEditCharacterGraph()) {
+        alert('일반 사용자는 인물 관계도를 편집할 수 없습니다. (열람만 가능)');
+        return;
+      }
+      saveCharacterLayout().catch(console.error);
+    });
   document.querySelector('[data-action="graph-add-link"]')
-    ?.addEventListener('click', () => toggleLinkAddMode());
+    ?.addEventListener('click', () => {
+      if (!canEditCharacterGraph()) {
+        alert('일반 사용자는 인물 관계도를 편집할 수 없습니다. (열람만 가능)');
+        return;
+      }
+      toggleLinkAddMode();
+    });
 
   document.getElementById('graph-filter')?.addEventListener('change', buildAndDraw);
 }
@@ -1364,8 +1383,13 @@ function onMouseDown(e) {
   const wx = (e.clientX - rect.left - panX) / zoom;
   const wy = (e.clientY - rect.top - panY) / zoom;
   const hit = hitTest(wx, wy);
+  const canEdit = mode !== 'character' || canEditCharacterGraph();
 
   if (linkAddMode && mode === 'character') {
+    if (!canEdit) {
+      cancelLinkAddMode();
+      return;
+    }
     if (hit && hit.type === 'character') {
       if (!linkPickFirst) {
         linkPickFirst = hit;
@@ -1382,7 +1406,7 @@ function onMouseDown(e) {
     return;
   }
 
-  if (hit && mode === 'character' && hit.type === 'character' && e.shiftKey) {
+  if (canEdit && hit && mode === 'character' && hit.type === 'character' && e.shiftKey) {
     connectingFrom = hit;
     connectPointer = { x: wx, y: wy };
     dragNode = null;
@@ -1394,6 +1418,13 @@ function onMouseDown(e) {
   if (!hit && mode === 'character') {
     const edgeHit = hitTestEdge(wx, wy);
     if (edgeHit) {
+      if (!canEdit) {
+        // 열람만 — 관계선 클릭으로 편집 불가
+        dragNode = null;
+        dragging = { x: e.clientX - panX, y: e.clientY - panY };
+        pointerState = null;
+        return;
+      }
       pointerState = { sx: e.clientX, sy: e.clientY, edge: edgeHit };
       dragNode = null;
       dragging = null;
@@ -1403,7 +1434,7 @@ function onMouseDown(e) {
 
   if (hit) {
     dragNode = hit;
-    pointerState = { sx: e.clientX, sy: e.clientY };
+    pointerState = { sx: e.clientX, sy: e.clientY, readonly: !canEdit };
     dragging = null;
     return;
   }
@@ -1419,12 +1450,21 @@ function onMouseMove(e) {
   const wy = (e.clientY - rect.top - panY) / zoom;
 
   if (connectingFrom) {
+    if (mode === 'character' && !canEditCharacterGraph()) {
+      connectingFrom = null;
+      connectPointer = null;
+      return;
+    }
     connectPointer = { x: wx, y: wy };
     draw();
     return;
   }
 
   if (dragNode) {
+    // 일반 사용자: 인물 카드 위치 이동 금지 (클릭 열람·팬만)
+    if (mode === 'character' && !canEditCharacterGraph()) {
+      return;
+    }
     dragNode.x = wx;
     dragNode.y = wy;
     if (mode === 'character' && dragNode.type === 'character') {
@@ -1452,6 +1492,14 @@ async function onMouseUp(e) {
   }
 
   if (connectingFrom) {
+    if (mode === 'character' && !canEditCharacterGraph()) {
+      connectingFrom = null;
+      connectPointer = null;
+      dragNode = null;
+      pointerState = null;
+      dragging = null;
+      return;
+    }
     const rect = canvas.getBoundingClientRect();
     const wx = (e.clientX - rect.left - panX) / zoom;
     const wy = (e.clientY - rect.top - panY) / zoom;
@@ -1472,10 +1520,12 @@ async function onMouseUp(e) {
   }
 
   if (pointerState?.edge && mode === 'character') {
-    const dx = e.clientX - pointerState.sx;
-    const dy = e.clientY - pointerState.sy;
-    if (dx * dx + dy * dy <= CLICK_THRESHOLD * CLICK_THRESHOLD) {
-      await editRelationDialog(pointerState.edge);
+    if (canEditCharacterGraph()) {
+      const dx = e.clientX - pointerState.sx;
+      const dy = e.clientY - pointerState.sy;
+      if (dx * dx + dy * dy <= CLICK_THRESHOLD * CLICK_THRESHOLD) {
+        await editRelationDialog(pointerState.edge);
+      }
     }
     pointerState = null;
     return;
@@ -1571,6 +1621,10 @@ function distToSegment(px, py, x1, y1, x2, y2) {
 }
 
 function toggleLinkAddMode() {
+  if (!canEditCharacterGraph()) {
+    cancelLinkAddMode();
+    return;
+  }
   linkAddMode = !linkAddMode;
   linkPickFirst = null;
   connectingFrom = null;
@@ -1648,6 +1702,11 @@ function escAttr(str) {
 }
 
 async function openRelationDialog(fromNode, toNode) {
+  if (!canEditCharacterGraph()) {
+    await showAlert('인물 관계도', '일반 사용자는 관계선을 추가할 수 없습니다. (열람만 가능)');
+    draw();
+    return;
+  }
   let form = {};
   const confirmed = await showDialog({
     title: '관계선 추가',
@@ -1678,6 +1737,10 @@ async function openRelationDialog(fromNode, toNode) {
 }
 
 async function editRelationDialog(edge) {
+  if (!canEditCharacterGraph()) {
+    await showAlert('인물 관계도', '일반 사용자는 관계선을 편집할 수 없습니다. (열람만 가능)');
+    return;
+  }
   const rel = edge.rel || {};
   let form = {};
   let remove = false;
@@ -1715,6 +1778,10 @@ async function editRelationDialog(edge) {
 }
 
 async function saveCharacterLayout() {
+  if (!canEditCharacterGraph()) {
+    await showAlert('인물 관계도', '일반 사용자는 위치를 저장할 수 없습니다. (열람만 가능)');
+    return;
+  }
   if (mode !== 'character') {
     await showAlert('위치 저장', '인물 관계도 화면에서만 저장할 수 있습니다.');
     return;
