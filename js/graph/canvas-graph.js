@@ -55,6 +55,7 @@ let connectingFrom = null;
 let connectPointer = null;
 let pointerState = null;
 let linkAddMode = false;
+let linkEditMode = false;
 let linkPickFirst = null;
 const avatarImages = new Map();
 /** 드래그로 옮긴 좌표 — rebuild 시에도 유지, 「위치 저장」으로 DB 반영 */
@@ -115,7 +116,7 @@ export function initGraph() {
   on('view:changed', (view) => {
     if (view.startsWith('graph-')) {
       mode = view.replace('graph-', '');
-      if (mode === 'character' && !canEditCharacterGraph()) cancelLinkAddMode();
+      if (mode === 'character' && !canEditCharacterGraph()) cancelLinkModes();
       showGraphLayer(true);
       buildAndDraw();
     } else {
@@ -152,6 +153,14 @@ export function initGraph() {
       }
       toggleLinkAddMode();
     });
+  document.querySelector('[data-action="graph-edit-link"]')
+    ?.addEventListener('click', () => {
+      if (!canEditCharacterGraph()) {
+        alert('일반 사용자는 인물 관계도를 편집할 수 없습니다. (열람만 가능)');
+        return;
+      }
+      toggleLinkEditMode();
+    });
 
   document.getElementById('graph-filter')?.addEventListener('change', buildAndDraw);
 }
@@ -168,7 +177,7 @@ function showGraphLayer(show) {
   if (graphLayer) graphLayer.hidden = !show;
   if (workspaceLayer) workspaceLayer.hidden = show;
   if (filter) filter.hidden = !(show && mode === 'foreshadow');
-  if (!show) cancelLinkAddMode();
+  if (!show) cancelLinkModes();
   if (show) { resizeCanvas(); buildAndDraw(); }
 }
 
@@ -608,7 +617,9 @@ async function buildCharacterGraph(cache, gen) {
 
   const linkHint = linkAddMode
     ? '줄 추가 모드: 카드 두 개를 순서대로 클릭'
-    : '줄 추가 버튼 또는 Shift+드래그로 연결 · 선 클릭: 편집';
+    : linkEditMode
+      ? '줄 변경 모드: 관계선을 클릭해 편집'
+      : '줄 추가·줄 변경 버튼으로 연결/편집';
   const baseLegend = `드래그: 이동 · ${linkHint} · 중립=흰 / 아군=화이트블루 / 적군=레드`;
 
   let legend = `${baseLegend} · 연결 없음`;
@@ -1386,7 +1397,7 @@ function onMouseDown(e) {
 
   if (linkAddMode && mode === 'character') {
     if (!canEdit) {
-      cancelLinkAddMode();
+      cancelLinkModes();
       return;
     }
     if (hit && hit.type === 'character') {
@@ -1402,6 +1413,25 @@ function onMouseDown(e) {
     dragNode = null;
     dragging = null;
     pointerState = null;
+    return;
+  }
+
+  if (linkEditMode && mode === 'character') {
+    if (!canEdit) {
+      cancelLinkModes();
+      return;
+    }
+    const edgeHit = hitTestEdge(wx, wy);
+    if (edgeHit) {
+      pointerState = { sx: e.clientX, sy: e.clientY, edge: edgeHit, editMode: true };
+      dragNode = null;
+      dragging = null;
+      return;
+    }
+    // 줄 변경 모드에서는 빈 곳 팬만 허용
+    dragNode = null;
+    pointerState = null;
+    dragging = { x: e.clientX - panX, y: e.clientY - panY };
     return;
   }
 
@@ -1424,6 +1454,7 @@ function onMouseDown(e) {
         pointerState = null;
         return;
       }
+      // 줄 변경 모드가 아니어도 선 클릭으로 편집 가능(기존 동작)
       pointerState = { sx: e.clientX, sy: e.clientY, edge: edgeHit };
       dragNode = null;
       dragging = null;
@@ -1621,25 +1652,51 @@ function distToSegment(px, py, x1, y1, x2, y2) {
 
 function toggleLinkAddMode() {
   if (!canEditCharacterGraph()) {
-    cancelLinkAddMode();
+    cancelLinkModes();
     return;
   }
-  linkAddMode = !linkAddMode;
+  const next = !linkAddMode;
+  cancelLinkModes();
+  linkAddMode = next;
   linkPickFirst = null;
   connectingFrom = null;
   connectPointer = null;
-  const btn = document.querySelector('[data-action="graph-add-link"]');
-  if (btn) btn.classList.toggle('is-active', linkAddMode);
+  syncLinkModeButtons();
+  if (isGraphVisible() && mode === 'character') buildAndDraw();
+  else draw();
+}
+
+function toggleLinkEditMode() {
+  if (!canEditCharacterGraph()) {
+    cancelLinkModes();
+    return;
+  }
+  const next = !linkEditMode;
+  cancelLinkModes();
+  linkEditMode = next;
+  syncLinkModeButtons();
   if (isGraphVisible() && mode === 'character') buildAndDraw();
   else draw();
 }
 
 function cancelLinkAddMode() {
+  cancelLinkModes();
+}
+
+function cancelLinkModes() {
   linkAddMode = false;
+  linkEditMode = false;
   linkPickFirst = null;
   connectingFrom = null;
   connectPointer = null;
-  document.querySelector('[data-action="graph-add-link"]')?.classList.remove('is-active');
+  syncLinkModeButtons();
+}
+
+function syncLinkModeButtons() {
+  document.querySelector('[data-action="graph-add-link"]')
+    ?.classList.toggle('is-active', linkAddMode);
+  document.querySelector('[data-action="graph-edit-link"]')
+    ?.classList.toggle('is-active', linkEditMode);
 }
 
 async function finishLinkAdd(fromNode, toNode) {
@@ -1647,7 +1704,7 @@ async function finishLinkAdd(fromNode, toNode) {
   connectPointer = null;
   linkPickFirst = null;
   await openRelationDialog(fromNode, toNode);
-  cancelLinkAddMode();
+  cancelLinkModes();
 }
 
 function relationFormHtml(defaults = {}) {
