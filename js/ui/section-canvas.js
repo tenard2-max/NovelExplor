@@ -69,9 +69,11 @@ export async function renderSectionCanvas(viewId, mountEl) {
   else if (viewId === 'story-nav') body = renderStoryNavSectionFromIdb(doc, xmlUrl);
   else body = `<p class="xml-section-note">섹션 <strong>${escapeHtml(meta.id)}</strong> XML이 로드되었습니다.</p>`;
 
-  const sourceNote = (viewId === 'timeline' || viewId === 'story-nav')
-    ? '<p class="xml-section-note">IndexedDB 기준 표시 · 스토리 동기화 시 XML도 자동 재생성됩니다.</p>'
-    : '';
+  const sourceNote = viewId === 'timeline'
+    ? '<p class="xml-section-note">이벤트 · 년월일만 표시 · 스토리 네비게이터의 「타임라인」에서 열 수 있습니다.</p>'
+    : viewId === 'story-nav'
+      ? '<p class="xml-section-note">IndexedDB 기준 표시 · 상단 「타임라인」으로 사건 연표를 볼 수 있습니다.</p>'
+      : '';
   mountEl.innerHTML = banner + sourceNote + body;
   return { xmlUrl, title: meta.title };
 }
@@ -233,36 +235,44 @@ function renderForeshadowSection(doc) {
 }
 
 function renderTimelineSection(doc) {
-  const list = dedupeTimelineByEpisode(parseTimeline(doc));
-  const rows = list.map((t) => {
-    const { date, title } = timelineDisplayParts(t);
-    return `
-    <div class="xml-tl-row">
-      <span>EP${escapeHtml(String(t.episode).padStart(3, '0'))}</span>
-      <strong>${escapeHtml(date)}</strong>
-      <span>${escapeHtml(title)}</span>
-    </div>`;
-  }).join('');
-  return `<div class="xml-tl-list">${rows || '<p class="xml-section-empty">이벤트 없음</p>'}</div>`;
+  return renderTimelineEventChain(dedupeTimelineByEpisode(parseTimeline(doc)));
 }
 
-/** 타임라인: IndexedDB 우선 — EP당 1건 · 년월일 + 제목 한 줄 */
+/** 타임라인: 이벤트 + 년월일만 · 사각형 + 두께 3 연결선 */
 function renderTimelineSectionFromIdb(doc) {
   const idb = dedupeTimelineByEpisode(project.getCache().timeline || []);
-  if (idb.length) {
-    const rows = idb.map((t) => {
-      const { date, title } = timelineDisplayParts(t);
-      return `
-      <div class="xml-tl-row">
-        <span>EP${escapeHtml(String(t.episode).padStart(3, '0'))}</span>
-        <strong>${escapeHtml(date)}</strong>
-        <span>${escapeHtml(title)}</span>
-      </div>`;
-    }).join('');
-    return `<div class="xml-tl-list">${rows}</div>`;
-  }
+  if (idb.length) return renderTimelineEventChain(idb);
   if (doc) return renderTimelineSection(doc);
   return '<p class="xml-section-empty">이벤트 없음 · 상단 「타임라인 업데이트」로 생성할 수 있습니다.</p>';
+}
+
+/** 유효 년월일이 있는 사건만 날짜순으로 사각형 체인 표시 (EP 번호 숨김) */
+function renderTimelineEventChain(items = []) {
+  const events = items
+    .map((t) => {
+      const { date, title } = timelineDisplayParts(t);
+      return { date, title, raw: t };
+    })
+    .filter((e) => /^\d{4}-\d{2}-\d{2}$/.test(e.date))
+    .sort((a, b) => a.date.localeCompare(b.date));
+
+  if (!events.length) {
+    return '<p class="xml-section-empty">년월일이 있는 이벤트가 없습니다.</p>';
+  }
+
+  const parts = [];
+  events.forEach((e, i) => {
+    parts.push(`
+      <article class="tl-card">
+        <span class="tl-date">${escapeHtml(e.date)}</span>
+        <span class="tl-title">${escapeHtml(e.title)}</span>
+      </article>`);
+    if (i < events.length - 1) {
+      parts.push('<div class="tl-connector" aria-hidden="true"></div>');
+    }
+  });
+
+  return `<div class="tl-chain">${parts.join('')}</div>`;
 }
 
 function renderStoryNavSection(doc, xmlUrl) {

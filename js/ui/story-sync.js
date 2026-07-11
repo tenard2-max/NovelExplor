@@ -12,9 +12,9 @@ import {
   buildEpisodeSummary,
 } from '../core/story-sync-engine.js';
 import { scheduleGithubSync } from '../core/github-sync.js';
+import { switchView } from './nav-menu.js';
 
-const TIMELINE_VIEWS = new Set(['timeline', 'graph-timeline']);
-const STORY_NAV_VIEWS = new Set(['story-nav']);
+const STORY_NAV_VIEWS = new Set(['story-nav', 'timeline']);
 
 export function initStorySync() {
   document.querySelectorAll('[data-action="story-sync"]').forEach((btn) => {
@@ -29,6 +29,14 @@ export function initStorySync() {
     btn.addEventListener('click', () => runStoryNavSync({ interactive: true }).catch(console.error));
   });
 
+  document.querySelectorAll('[data-action="open-timeline"]').forEach((btn) => {
+    btn.addEventListener('click', () => switchView('timeline'));
+  });
+
+  document.querySelectorAll('[data-action="open-story-nav"]').forEach((btn) => {
+    btn.addEventListener('click', () => switchView('story-nav'));
+  });
+
   // 스토리(ST)·에피소드(EP) 등록 후 타임라인·네비 자동 반영
   on('upload:committed', (payload) => {
     if (!payload?.storyOrEpisodeCount) return;
@@ -39,21 +47,25 @@ export function initStorySync() {
   });
 
   on('view:changed', (viewId) => {
-    toggleTimelineControls(viewId);
     toggleStoryNavControls(viewId);
+    syncStoryNavToolbarActive(viewId);
   });
-  toggleTimelineControls('master');
   toggleStoryNavControls('master');
-}
-
-function toggleTimelineControls(viewId) {
-  const el = document.getElementById('timeline-controls');
-  if (el) el.hidden = !TIMELINE_VIEWS.has(viewId);
+  syncStoryNavToolbarActive('master');
 }
 
 function toggleStoryNavControls(viewId) {
   const el = document.getElementById('story-nav-controls');
   if (el) el.hidden = !STORY_NAV_VIEWS.has(viewId);
+}
+
+function syncStoryNavToolbarActive(viewId) {
+  document.querySelectorAll('[data-action="open-story-nav"]').forEach((btn) => {
+    btn.classList.toggle('is-active', viewId === 'story-nav');
+  });
+  document.querySelectorAll('[data-action="open-timeline"]').forEach((btn) => {
+    btn.classList.toggle('is-active', viewId === 'timeline');
+  });
 }
 
 async function persistTimelineMarkdown() {

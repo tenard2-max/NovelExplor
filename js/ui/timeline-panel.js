@@ -18,22 +18,41 @@ export function initTimeline() {
 
 function render() {
   const list = document.getElementById('timeline-list');
+  if (!list) return;
   const cache = project.getCache();
   if (!cache.timeline?.length) {
     list.innerHTML = '<p class="inspector-empty">타임라인 이벤트가 없습니다.</p>';
     return;
   }
 
-  const sort = document.getElementById('timeline-sort')?.value || 'episode';
-  let items = dedupeTimelineByEpisode(cache.timeline);
-  if (sort === 'date') items = [...items].sort((a, b) => (a.date || '').localeCompare(b.date || ''));
+  let events = dedupeTimelineByEpisode(cache.timeline)
+    .map((t) => {
+      const { date, title } = timelineDisplayParts(t);
+      return { date, title };
+    })
+    .filter((e) => /^\d{4}-\d{2}-\d{2}$/.test(e.date));
 
-  list.innerHTML = items.map((t) => {
-    const { date, title } = timelineDisplayParts(t);
-    return `
-    <div class="timeline-item">
-      <span>EP${String(t.episode).padStart(3, '0')}</span>
-      <span><strong>${date}</strong> ${title}</span>
-    </div>`;
-  }).join('');
+  const sort = document.getElementById('timeline-sort')?.value || 'date';
+  if (sort === 'episode') {
+    /* 패널에서도 날짜 기준이 기본 — episode 옵션이 있으면 날짜 유지 */
+  }
+  events = [...events].sort((a, b) => a.date.localeCompare(b.date));
+
+  if (!events.length) {
+    list.innerHTML = '<p class="inspector-empty">년월일이 있는 이벤트가 없습니다.</p>';
+    return;
+  }
+
+  const parts = [];
+  events.forEach((e, i) => {
+    parts.push(`
+      <article class="tl-card tl-card--compact">
+        <span class="tl-date">${e.date}</span>
+        <span class="tl-title">${e.title}</span>
+      </article>`);
+    if (i < events.length - 1) {
+      parts.push('<div class="tl-connector tl-connector--compact" aria-hidden="true"></div>');
+    }
+  });
+  list.innerHTML = `<div class="tl-chain tl-chain--panel">${parts.join('')}</div>`;
 }

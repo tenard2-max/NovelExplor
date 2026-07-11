@@ -74,14 +74,16 @@ function renderView(viewId) {
       deletable: true,
     }));
   } else if (viewId === 'timeline') {
-    renderCardList(el, dedupeTimelineByEpisode(cache.timeline), (t) => {
-      const { date, title } = timelineDisplayParts(t);
-      return {
-        id: t.id, type: 'timeline',
-        title: `${date}  ${title}`, badge: `EP${t.episode}`,
-        desc: '',
-      };
-    });
+    renderCardList(el, dedupeTimelineByEpisode(cache.timeline)
+      .map((t) => {
+        const { date, title } = timelineDisplayParts(t);
+        return { ...t, date, title };
+      })
+      .filter((t) => /^\d{4}-\d{2}-\d{2}$/.test(t.date)), (t) => ({
+      id: t.id, type: 'timeline',
+      title: `${t.date}  ${t.title}`, badge: '이벤트',
+      desc: '',
+    }));
   }
 }
 

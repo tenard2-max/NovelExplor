@@ -89,7 +89,8 @@ function render(treeEl) {
     if (folder.id === 'timeline') {
       for (const t of dedupeTimelineByEpisode(cache.timeline)) {
         const { date, title } = timelineDisplayParts(t);
-        parts.push(fileNode(t.id, `EP${t.episode} ${date} ${title}`, 1, 'timeline'));
+        if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) continue;
+        parts.push(fileNode(t.id, `${date} ${title}`, 1, 'timeline'));
       }
     }
 

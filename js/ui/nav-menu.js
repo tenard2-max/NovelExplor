@@ -14,7 +14,7 @@ const VIEW_META = {
   'story-nav': { title: '스토리 네비게이터', subtitle: 'IndexedDB · XML 자동생성' },
   foreshadow: { title: '떡밥 회수', subtitle: 'sections/04_foreshadows.xml' },
   character: { title: '인물', subtitle: 'sections/03_characters.xml' },
-  timeline: { title: '타임라인', subtitle: 'IndexedDB · XML 자동생성' },
+  timeline: { title: '타임라인', subtitle: '이벤트 · 년월일' },
   editor: { title: '에디터', subtitle: 'sections/12_editor.xml' },
   'graph-foreshadow': { title: '복선 그래프', subtitle: 'Canvas' },
   'graph-character': { title: '인물 관계도', subtitle: 'Canvas' },

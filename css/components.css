@@ -1518,6 +1518,74 @@
   gap: 6px;
 }
 
+/* 스토리 네비 · 타임라인 — 이벤트 사각형 + 두께 3 연결선 */
+.tl-chain {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0;
+  max-width: 520px;
+  margin: 12px auto 24px;
+  padding: 8px 12px 24px;
+}
+
+.tl-chain--panel {
+  max-width: 100%;
+  margin: 0;
+  padding: 4px 0;
+}
+
+.tl-card {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+  box-sizing: border-box;
+  padding: 12px 16px;
+  border: 1px solid #7dd3fc;
+  border-radius: 8px;
+  background: #0c1929;
+  color: #f8fafc;
+  font-size: 14px;
+  line-height: 1.35;
+  overflow: hidden;
+}
+
+.tl-card--compact {
+  padding: 8px 12px;
+  font-size: 13px;
+}
+
+.tl-date {
+  flex: 0 0 auto;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  color: #e0f2fe;
+  white-space: nowrap;
+}
+
+.tl-title {
+  flex: 1 1 auto;
+  min-width: 0;
+  font-weight: 600;
+  color: #f8fafc;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.tl-connector {
+  width: 3px;
+  height: 28px;
+  flex-shrink: 0;
+  background: #94a3b8;
+  border-radius: 1px;
+}
+
+.tl-connector--compact {
+  height: 16px;
+}
+
 .xml-fs-row,
 .xml-tl-row {
   display: flex;
