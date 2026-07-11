@@ -1,6 +1,6 @@
 /** GitHub REST API — Contents 읽기 + Git Trees 단일 커밋 */
 
-import { getGithubConfig } from './github-config.js';
+import { getGithubConfig, rawGithubUrl } from './github-config.js';
 
 const API = 'https://api.github.com';
 const DEFAULT_TIMEOUT_MS = 45000;
@@ -111,6 +111,21 @@ export async function getRepoFileContent(repoPath) {
   );
   if (!data) return null;
 
+  // 1MB 초과 등은 content 없이 download_url 만 오는 경우
+  if (!data.content && data.download_url) {
+    const res = await fetch(data.download_url, { cache: 'no-store' });
+    if (!res.ok) throw new Error(`GitHub 파일 다운로드 실패 (${res.status}): ${repoPath}`);
+    const text = await res.text();
+    const isText = !/\.(png|jpg|jpeg|gif|webp|zip)$/i.test(repoPath);
+    return {
+      sha: data.sha,
+      size: data.size || text.length,
+      contentBase64: '',
+      content: text,
+      isText,
+    };
+  }
+
   const raw = String(data.content || '').replace(/\n/g, '');
   const isText = !/\.(png|jpg|jpeg|gif|webp|zip)$/i.test(repoPath);
 
@@ -147,6 +162,14 @@ export async function listRepoDir(repoPath) {
 }
 
 export async function getRepoFileText(repoPath) {
+  // 공개 raw URL 우선 — Contents API 쿼터·base64 오버헤드 회피
+  try {
+    const res = await fetch(rawGithubUrl(repoPath), { cache: 'no-store' });
+    if (res.ok) return await res.text();
+  } catch {
+    /* fall through to API */
+  }
+
   const item = await getRepoFileContent(repoPath);
   if (!item) throw new Error(`GitHub 파일 없음: ${repoPath}`);
   return item.content;

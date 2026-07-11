@@ -8,6 +8,7 @@ import { listUsers, canBeProjectWriter, normalizeWriters, normalizeWriterNames, 
 import { listProjects, applyAdminWriteAccess, loadProject, getCurrentProject } from '../core/project.js';
 import {
   listGithubProjectsDetailed,
+  listGithubProjectSnapshots,
   deleteGithubProjectSnapshots,
   fetchGithubDefaultMeta,
 } from '../core/default-project.js';
@@ -166,17 +167,24 @@ export async function showProjectManageDialog() {
     statusEl.textContent = '프로젝트 목록을 모으는 중…';
     refreshBtn.disabled = true;
     try {
-      catalog = await buildProjectCatalog();
+      const built = await buildProjectCatalog();
+      catalog = built.items;
       const nLocal = catalog.filter((c) => c.localId).length;
       const nGh = catalog.filter((c) => c.ghSnapshotId).length;
       const nFolder = catalog.filter((c) => c.folderName).length;
       const folderNote = hasSyncDir()
         ? `폴더(${getSyncFolderLabel() || '연결됨'}) ${nFolder}`
         : '폴더 미연결';
-      statusEl.textContent = `${catalog.length}개 프로젝트 · 로컬 ${nLocal} · GitHub ${nGh} · ${folderNote}`;
-      if (!hasGithubToken()) {
-        statusEl.textContent += ' · GitHub 삭제는 PAT 필요';
+      let line = `${catalog.length}개 프로젝트 · 로컬 ${nLocal} · GitHub ${nGh} · ${folderNote}`;
+      if (built.githubError) {
+        line += ` · GitHub오류: ${built.githubError}`;
+      } else if (built.githubListed > nGh) {
+        line += ` · 원격파일 ${built.githubListed}(동일 작품 병합 ${nGh})`;
       }
+      if (!hasGithubToken()) {
+        line += ' · GitHub 삭제는 PAT 필요';
+      }
+      statusEl.textContent = line;
       renderList();
     } catch (err) {
       catalog = [];
@@ -374,10 +382,14 @@ export async function showProjectManageDialog() {
  * }} ProjectCatalogItem
  */
 
-/** 로컬 + 폴더 + GitHub 를 제목·owner 기준으로 합침 */
+/** 로컬 + 폴더 + GitHub 를 제목·owner 기준으로 합침
+ * @returns {Promise<{ items: ProjectCatalogItem[], githubError: string, githubListed: number }>}
+ */
 async function buildProjectCatalog() {
   /** @type {Map<string, ProjectCatalogItem>} */
   const byKey = new Map();
+  let githubError = '';
+  let githubListed = 0;
 
   const locals = await listProjects();
   for (const p of locals) {
@@ -399,6 +411,108 @@ async function buildProjectCatalog() {
       latestStamp: stampFromIso(p.updatedAt),
       isDefault: false,
     });
+  }
+
+  // GitHub 먼저 — 폴더 JSON 대량 읽기보다 앞서 원격 목록을 확정 (이전엔 폴더 뒤에 두다 실패를 삼킴)
+  let defaultId = '';
+  try {
+    const def = await fetchGithubDefaultMeta();
+    defaultId = def?.snapshotId || '';
+  } catch { /* */ }
+
+  /** @type {Awaited<ReturnType<typeof listGithubProjectsDetailed>>} */
+  let snaps = [];
+  try {
+    // 1) 디렉터리 목록만 먼저 (성공하면 최소한 파일명으로라도 표시 가능)
+    const lite = await listGithubProjectSnapshots();
+    githubListed = lite.length;
+    snaps = lite.map((s) => ({
+      ...s,
+      title: s.label || s.name,
+      author: '',
+      writers: [],
+      writerUsernames: [],
+      ownerId: '',
+      exportedAt: '',
+    }));
+
+    // 2) 메타 보강 (실패해도 위에서 넣은 항목 유지)
+    if (lite.length) {
+      try {
+        const detailed = await listGithubProjectsDetailed();
+        const byId = new Map(detailed.map((d) => [d.snapshotId, d]));
+        snaps = lite.map((s) => {
+          const d = byId.get(s.snapshotId);
+          return d || {
+            ...s,
+            title: s.label || s.name,
+            author: '',
+            writers: [],
+            writerUsernames: [],
+            ownerId: '',
+            exportedAt: '',
+          };
+        });
+      } catch (metaErr) {
+        console.warn('[project-manage] GitHub 메타 보강 실패(목록은 유지):', metaErr);
+        githubError = `메타 보강 실패: ${metaErr?.message || metaErr}`;
+      }
+    }
+  } catch (err) {
+    console.warn('[project-manage] GitHub 목록 실패:', err);
+    githubError = err?.message || String(err);
+    snaps = [];
+    githubListed = 0;
+  }
+
+  for (const s of snaps) {
+    const mk = projectMergeKey(s.title, s.ownerId, `gh:${s.snapshotId}`);
+    let matched = byKey.get(mk);
+    if (!matched) {
+      for (const item of byKey.values()) {
+        if (sameProject(item.title, item.author, s.title, s.author)) {
+          matched = item;
+          break;
+        }
+      }
+    }
+    // 같은 원격 작품은 더 최신 스냅샷만 대표로 유지
+    if (matched?.ghSnapshotId && matched.ghSnapshotId !== s.snapshotId) {
+      if (s.snapshotId <= matched.ghSnapshotId) continue;
+    }
+    if (matched) {
+      matched.ghSnapshotId = s.snapshotId;
+      matched.fileHint = matched.fileHint || s.name;
+      matched.isDefault = Boolean(defaultId && s.snapshotId === defaultId);
+      if (s.snapshotId.replace(/\D/g, '').slice(0, 14) > (matched.latestStamp || '')) {
+        matched.latestStamp = s.snapshotId.replace(/\D/g, '').slice(0, 14);
+        matched.latestLabel = s.label;
+      }
+      if (!matched.writers.length) matched.writers = normalizeWriters(s.writers);
+      if (!matched.writerUsernames?.length) {
+        matched.writerUsernames = normalizeWriterNames(s.writerUsernames);
+      }
+      if (!matched.author && s.author) matched.author = s.author;
+      // 메타로 제목이 좋아지면 키는 그대로 두되 표시 제목만 갱신
+      if (s.title && s.title !== s.name && s.title !== s.label) {
+        matched.title = s.title;
+      }
+    } else {
+      byKey.set(mk, {
+        key: mk,
+        title: s.title || s.name,
+        author: s.author || '',
+        writers: normalizeWriters(s.writers),
+        writerUsernames: normalizeWriterNames(s.writerUsernames),
+        localId: '',
+        ghSnapshotId: s.snapshotId,
+        folderName: '',
+        fileHint: s.name,
+        latestLabel: s.label,
+        latestStamp: s.snapshotId.replace(/\D/g, '').slice(0, 14),
+        isDefault: Boolean(defaultId && s.snapshotId === defaultId),
+      });
+    }
   }
 
   await initSyncFolder();
@@ -430,25 +544,41 @@ async function buildProjectCatalog() {
             prev.latestLabel = f.label;
           }
           if (!prev.writers.length && writers.length) prev.writers = writers;
-          if (!prev.writerUsernames?.length && writers.length) {
-            /* folder peek may not have usernames */
-          }
           if (!prev.author && author) prev.author = author;
         } else {
-          byKey.set(mergeKey, {
-            key: mergeKey,
-            title: title || f.name,
-            author,
-            writers,
-            writerUsernames: [],
-            localId: '',
-            ghSnapshotId: '',
-            folderName: f.name,
-            fileHint: f.name,
-            latestLabel: f.label,
-            latestStamp: f.stamp,
-            isDefault: false,
-          });
+          // 제목만 같은 GitHub 항목과 합치기
+          let matchedGh = null;
+          for (const item of byKey.values()) {
+            if (item.ghSnapshotId && sameProject(item.title, item.author, title, author)) {
+              matchedGh = item;
+              break;
+            }
+          }
+          if (matchedGh) {
+            matchedGh.folderName = f.name;
+            if (!matchedGh.fileHint) matchedGh.fileHint = f.name;
+            if (f.stamp > (matchedGh.latestStamp || '')) {
+              matchedGh.latestStamp = f.stamp;
+              matchedGh.latestLabel = f.label;
+            }
+            if (!matchedGh.writers.length && writers.length) matchedGh.writers = writers;
+            if (!matchedGh.author && author) matchedGh.author = author;
+          } else {
+            byKey.set(mergeKey, {
+              key: mergeKey,
+              title: title || f.name,
+              author,
+              writers,
+              writerUsernames: [],
+              localId: '',
+              ghSnapshotId: '',
+              folderName: f.name,
+              fileHint: f.name,
+              latestLabel: f.label,
+              latestStamp: f.stamp,
+              isDefault: false,
+            });
+          }
         }
       }
     } catch (err) {
@@ -456,72 +586,11 @@ async function buildProjectCatalog() {
     }
   }
 
-  let defaultId = '';
-  try {
-    const def = await fetchGithubDefaultMeta();
-    defaultId = def?.snapshotId || '';
-  } catch { /* */ }
-
-  try {
-    const snaps = await listGithubProjectsDetailed();
-    // 같은 프로젝트는 최신 스냅샷만 대표로 (목록은 프로젝트 단위)
-    /** @type {Map<string, typeof snaps[0]>} */
-    const latestByProject = new Map();
-    for (const s of snaps) {
-      const mk = projectMergeKey(s.title, s.ownerId, `gh:${s.snapshotId}`);
-      const prev = latestByProject.get(mk);
-      if (!prev || s.snapshotId > prev.snapshotId) latestByProject.set(mk, s);
-    }
-
-    for (const [mk, s] of latestByProject) {
-      // 로컬/폴더와 제목·owner로 합치기
-      let matched = byKey.get(mk);
-        if (!matched) {
-        for (const item of byKey.values()) {
-          if (sameProject(item.title, item.author, s.title, s.author)) {
-            matched = item;
-            break;
-          }
-        }
-      }
-      if (matched) {
-        matched.ghSnapshotId = s.snapshotId;
-        matched.fileHint = matched.fileHint || s.name;
-        matched.isDefault = Boolean(defaultId && s.snapshotId === defaultId);
-        if (s.snapshotId.replace(/\D/g, '').slice(0, 14) > (matched.latestStamp || '')) {
-          matched.latestStamp = s.snapshotId.replace(/\D/g, '').slice(0, 14);
-          matched.latestLabel = s.label;
-        }
-        if (!matched.writers.length) matched.writers = normalizeWriters(s.writers);
-        if (!matched.writerUsernames?.length) {
-          matched.writerUsernames = normalizeWriterNames(s.writerUsernames);
-        }
-        if (!matched.author && s.author) matched.author = s.author;
-      } else {
-        byKey.set(mk, {
-          key: mk,
-          title: s.title || s.name,
-          author: s.author || '',
-          writers: normalizeWriters(s.writers),
-          writerUsernames: normalizeWriterNames(s.writerUsernames),
-          localId: '',
-          ghSnapshotId: s.snapshotId,
-          folderName: '',
-          fileHint: s.name,
-          latestLabel: s.label,
-          latestStamp: s.snapshotId.replace(/\D/g, '').slice(0, 14),
-          isDefault: Boolean(defaultId && s.snapshotId === defaultId),
-        });
-      }
-    }
-  } catch (err) {
-    console.warn('[project-manage] GitHub 목록 실패:', err);
-  }
-
-  return [...byKey.values()].sort((a, b) =>
+  const items = [...byKey.values()].sort((a, b) =>
     (b.latestStamp || '').localeCompare(a.latestStamp || '')
     || a.title.localeCompare(b.title)
   );
+  return { items, githubError, githubListed };
 }
 
 function projectMergeKey(title, ownerId, fallback) {

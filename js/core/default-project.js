@@ -3,7 +3,7 @@
 import * as storage from './storage.js';
 import { nowIso } from './utils.js';
 import { canSetDefaultProject, getCurrentUser, isMaster } from './auth.js';
-import { getGithubConfig, snapshotsDir, hasGithubToken } from './github-config.js';
+import { getGithubConfig, snapshotsDir, hasGithubToken, rawGithubUrl } from './github-config.js';
 import { getRepoFileJson, listRepoDir, deleteRepoPaths, commitRepoFiles } from './github-api.js';
 import { pullProjectFromGithub } from './github-pull.js';
 import { syncProjectToGithub, waitUntilGithubIdle } from './github-sync.js';
@@ -92,6 +92,7 @@ export async function listGithubProjectSnapshots() {
 
 /**
  * 스냅샷 JSON에서 프로젝트 제목·작성자·writers 메타를 채워 전체 목록 반환 (마스터 관리용)
+ * 개별 메타 실패해도 목록에서 빼지 않음. 디렉터리 목록 실패만 throw.
  * @returns {Promise<{
  *   snapshotId: string, name: string, label: string, size: number,
  *   title: string, author: string, writers: string[], ownerId: string, exportedAt: string
@@ -108,11 +109,17 @@ export async function listGithubProjectsDetailed() {
     const chunk = list.slice(i, i + batch);
     const metas = await Promise.all(chunk.map(async (s) => {
       try {
-        const data = await getRepoFileJson(`${snapDir}/${s.name}`);
+        // raw 우선 (API 쿼터 절약)
+        let data = null;
+        try {
+          const res = await fetch(rawGithubUrl(`${snapDir}/${s.name}`), { cache: 'no-store' });
+          if (res.ok) data = JSON.parse(await res.text());
+        } catch { /* */ }
+        if (!data) data = await getRepoFileJson(`${snapDir}/${s.name}`);
         const project = data?.project || {};
         return {
           ...s,
-          title: project.title || data?.title || '(제목 없음)',
+          title: project.title || data?.title || s.label || s.name,
           author: project.author || '',
           writers: Array.isArray(project.writers) ? project.writers : [],
           writerUsernames: Array.isArray(project.writerUsernames) ? project.writerUsernames : [],
@@ -122,7 +129,7 @@ export async function listGithubProjectsDetailed() {
       } catch {
         return {
           ...s,
-          title: '(메타 읽기 실패)',
+          title: s.label || s.name,
           author: '',
           writers: [],
           writerUsernames: [],
