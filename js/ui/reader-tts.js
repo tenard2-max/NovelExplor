@@ -80,39 +80,50 @@ function start() {
     return;
   }
 
-  if (synth.speaking || synth.pending) {
-    synth.cancel();
-  }
+  stopPreviousPlayback();
 
   const inner = document.querySelector('#reader-content .reader-inner');
   tagReaderBlocksForTts(inner);
-  chunks = buildTtsChunksFromReaderDom(inner);
+  let nextChunks = buildTtsChunksFromReaderDom(inner);
 
-  if (!chunks.length) {
+  if (!nextChunks.length) {
     const markdown = getCurrentStoryMarkdownSync();
     if (markdown != null && typeof markdown === 'object' && typeof markdown.then === 'function') {
       showStatus('소설 본문을 불러오지 못했습니다. 페이지를 새로고침 후 다시 시도해 주세요.', { persist: true });
       return;
     }
     const plain = markdownToSpeakableText(markdown);
-    chunks = chunkSpeakableText(plain);
+    nextChunks = chunkSpeakableText(plain);
   }
 
-  if (!chunks.length) {
+  if (!nextChunks.length) {
     showStatus('읽을 내용이 없습니다.', { persist: true });
     return;
   }
 
   nameEntries = buildCharacterNameEntries(project.getCache().characters || []);
 
-  resetPlaybackState({ silent: true });
-
+  chunks = nextChunks;
   playing = true;
   paused = false;
   chunkIndex = 0;
+  currentUtterance = null;
+  clearHighlight();
   updateButtons();
 
+  // 테스트 음성과 동일: 클릭 핸들러 안에서 동기 speak (await 없음)
   speakNextChunk();
+}
+
+/** 이전 재생만 정지 — 새 chunks는 비우지 않음 */
+function stopPreviousPlayback() {
+  if (synth.speaking || synth.pending) {
+    synth.cancel();
+  }
+  playing = false;
+  paused = false;
+  currentUtterance = null;
+  clearHighlight();
 }
 
 function speakNextChunk() {
@@ -134,7 +145,15 @@ function speakNextChunk() {
 function speakChunk(chunk) {
   if (!playing || !synth) return;
 
-  const utterance = createUtterance(chunk.text);
+  const text = chunk.text?.trim();
+  if (!text) {
+    chunkIndex += 1;
+    speakNextChunk();
+    return;
+  }
+
+  // speakTestVoice()와 동일한 utterance 생성·speak 패턴
+  const utterance = createUtterance(text);
   currentUtterance = utterance;
 
   utterance.onstart = () => {
