@@ -135,8 +135,21 @@ export function ensureProjectAcl(project) {
  * @param {string[]} writerIds 소설가·개발자 userId 목록
  */
 export async function setProjectWriters(writerIds) {
-  if (!isMaster()) throw new Error('마스터만 프로젝트 쓰기 권한을 부여할 수 있습니다.');
   if (!currentProject) throw new Error('열린 프로젝트가 없습니다.');
+  return setProjectWritersById(currentProject.id || currentProject.projectId, writerIds);
+}
+
+/**
+ * 마스터 전용: 지정 프로젝트 writers 설정 (열지 않아도 IDB 갱신)
+ * @param {string} projectId
+ * @param {string[]} writerIds
+ */
+export async function setProjectWritersById(projectId, writerIds) {
+  if (!isMaster()) throw new Error('마스터만 프로젝트 쓰기 권한을 부여할 수 있습니다.');
+  if (!projectId) throw new Error('프로젝트가 없습니다.');
+
+  const project = await storage.get('projects', projectId);
+  if (!project) throw new Error('프로젝트를 찾을 수 없습니다.');
 
   const users = await listUsers();
   const byId = new Map(users.map((u) => [u.id, u]));
@@ -145,12 +158,53 @@ export async function setProjectWriters(writerIds) {
     return u && canBeProjectWriter(u);
   });
 
-  currentProject.writers = ids;
-  if (!currentProject.ownerId && ids[0]) currentProject.ownerId = ids[0];
-  currentProject.updatedAt = nowIso();
-  await storage.put('projects', currentProject);
-  emit('project:loaded', currentProject);
-  return currentProject;
+  project.writers = ids;
+  if (!project.ownerId && ids[0]) project.ownerId = ids[0];
+  project.updatedAt = nowIso();
+  ensureProjectAcl(project);
+  await storage.put('projects', project);
+
+  if (currentProject && (currentProject.id === projectId || currentProject.projectId === projectId)) {
+    currentProject.writers = project.writers;
+    currentProject.ownerId = project.ownerId;
+    currentProject.updatedAt = project.updatedAt;
+    emit('project:loaded', currentProject);
+  }
+  return project;
+}
+
+/**
+ * 마스터: 특정 관리자의 쓰기 권한을 여러 로컬 프로젝트에 일괄 반영
+ * @param {string} adminUserId
+ * @param {string[]} grantProjectIds 권한 줄 프로젝트 id
+ * @param {string[]} revokeProjectIds 권한 뺄 프로젝트 id
+ */
+export async function applyAdminWriteAccess(adminUserId, grantProjectIds = [], revokeProjectIds = []) {
+  if (!isMaster()) throw new Error('마스터만 프로젝트 쓰기 권한을 부여할 수 있습니다.');
+  const users = await listUsers();
+  const admin = users.find((u) => u.id === adminUserId);
+  if (!admin || !canBeProjectWriter(admin)) {
+    throw new Error('소설가·개발자만 쓰기 권한을 받을 수 있습니다.');
+  }
+
+  const grant = new Set(grantProjectIds.filter(Boolean));
+  const revoke = new Set(revokeProjectIds.filter(Boolean));
+  let changed = 0;
+
+  for (const id of new Set([...grant, ...revoke])) {
+    const project = await storage.get('projects', id);
+    if (!project) continue;
+    ensureProjectAcl(project);
+    const before = normalizeWriters(project.writers).slice().sort().join('|');
+    const writers = new Set(normalizeWriters(project.writers));
+    if (grant.has(id)) writers.add(adminUserId);
+    if (revoke.has(id)) writers.delete(adminUserId);
+    const next = [...writers];
+    if (next.slice().sort().join('|') === before) continue;
+    await setProjectWritersById(id, next);
+    changed += 1;
+  }
+  return changed;
 }
 
 export async function countOwnedProjects(userId) {

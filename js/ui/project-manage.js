@@ -1,18 +1,28 @@
-/** 마스터: 전체 프로젝트 목록 + writers + GitHub JSON 삭제 */
+/** 마스터 프로젝트 관리
+ * 상단: 관리자(소설가·개발자) 1명 선택
+ * 하단: 선택 가능한 프로젝트 목록 (로컬 + 동기화 폴더 + GitHub)
+ * 저장: 선택한 관리자에게 체크된 프로젝트 쓰기 권한 부여/해제
+ */
 
 import { listUsers, canBeProjectWriter, normalizeWriters, isMaster, ROLE_LABELS } from '../core/auth.js';
-import { getCurrentProject, setProjectWriters, listProjects, loadProject } from '../core/project.js';
+import { listProjects, applyAdminWriteAccess } from '../core/project.js';
 import {
   listGithubProjectsDetailed,
   deleteGithubProjectSnapshots,
   fetchGithubDefaultMeta,
 } from '../core/default-project.js';
 import { hasGithubToken } from '../core/github-config.js';
+import {
+  initSyncFolder,
+  hasSyncDir,
+  listTimestampBackups,
+  readBackupFile,
+  getSyncFolderLabel,
+} from '../core/sync-folder.js';
 import { applyRolePermissions } from './permissions.js';
 
 /**
- * 프로젝트 관리 다이얼로그 — 모든 GitHub·로컬 프로젝트 표시
- * @returns {Promise<boolean>} writers 저장 여부
+ * @returns {Promise<boolean>} 권한 적용 여부
  */
 export async function showProjectManageDialog() {
   if (!isMaster()) {
@@ -20,7 +30,6 @@ export async function showProjectManageDialog() {
     return false;
   }
 
-  let proj = getCurrentProject();
   const dialog = document.getElementById('dialog');
   const titleEl = document.getElementById('dialog-title');
   const bodyEl = document.getElementById('dialog-body');
@@ -32,241 +41,187 @@ export async function showProjectManageDialog() {
 
   dialog.classList.add('dialog-wide');
   titleEl.textContent = '프로젝트 관리';
-  confirmBtn.textContent = '쓰기 권한 저장';
-  confirmBtn.disabled = !proj;
+  confirmBtn.textContent = '권한 적용';
+  confirmBtn.disabled = true;
 
   const users = await listUsers();
   const admins = users.filter((u) => canBeProjectWriter(u));
-  const userNameById = new Map(users.map((u) => [u.id, u.username]));
 
   bodyEl.innerHTML = `
     <div class="proj-manage">
       <section class="proj-manage-section">
-        <div class="proj-manage-gh-head">
-          <h3 class="proj-manage-h">모든 프로젝트 (GitHub)</h3>
-          <button type="button" class="btn-sm" id="proj-gh-refresh">새로고침</button>
-        </div>
+        <h3 class="proj-manage-h">관리자 선택</h3>
         <p class="proj-manage-hint">
-          저장소 <code>snapshots/</code> 의 모든 타임스탬프 JSON입니다. 제목·작성자·파일을 확인한 뒤 삭제할 수 있습니다.
+          쓰기 권한을 줄 <strong>소설가·개발자</strong>를 한 명 선택하세요. (마스터는 항상 쓰기 가능)
         </p>
-        <p id="proj-gh-status" class="proj-manage-gh-status">불러오는 중…</p>
-        <div id="proj-gh-list" class="proj-manage-project-list" role="list" aria-label="GitHub 프로젝트"></div>
-        <div class="proj-manage-gh-actions">
-          <button type="button" class="btn-sm" id="proj-gh-select-all" disabled>전체 선택</button>
-          <button type="button" class="btn-sm char-btn-danger" id="proj-gh-delete" disabled>선택 삭제</button>
+        <div class="proj-manage-list" id="proj-admin-list" role="radiogroup" aria-label="관리자">
+          ${admins.length
+    ? admins.map((u, i) => `
+            <label class="proj-manage-row">
+              <input type="radio" name="proj-admin" value="${esc(u.id)}" ${i === 0 ? 'checked' : ''}>
+              <span class="proj-manage-name">${esc(u.username)}</span>
+              <span class="proj-manage-role">${esc(ROLE_LABELS[u.role] || u.role)}</span>
+            </label>`).join('')
+    : '<p class="proj-manage-empty">등록된 소설가·개발자가 없습니다. 마스터 화면에서 역할을 지정하세요.</p>'}
         </div>
       </section>
 
       <section class="proj-manage-section">
-        <h3 class="proj-manage-h">이 브라우저 로컬 프로젝트</h3>
-        <p class="proj-manage-hint">IndexedDB에 있는 프로젝트입니다. 행을 클릭하면 열고 writers를 편집할 수 있습니다.</p>
-        <div id="proj-local-list" class="proj-manage-project-list" role="list" aria-label="로컬 프로젝트"></div>
-      </section>
-
-      <section class="proj-manage-section" id="proj-writers-section">
-        <h3 class="proj-manage-h">쓰기 권한 (writers)</h3>
-        <div id="proj-writers-body"></div>
+        <div class="proj-manage-gh-head">
+          <h3 class="proj-manage-h">프로젝트 선택</h3>
+          <button type="button" class="btn-sm" id="proj-refresh">새로고침</button>
+        </div>
+        <p class="proj-manage-hint">
+          로컬 DB · 연결 폴더 · GitHub 의 프로젝트를 모읍니다.
+          체크 = 위 관리자에게 쓰기 권한. 다운로드 폴더만 저장된 JSON은 목록에 나오지 않습니다.
+        </p>
+        <p id="proj-status" class="proj-manage-gh-status">불러오는 중…</p>
+        <div id="proj-list" class="proj-manage-project-list" role="list" aria-label="프로젝트"></div>
+        <div class="proj-manage-gh-actions">
+          <button type="button" class="btn-sm" id="proj-select-all" disabled>전체 선택</button>
+          <button type="button" class="btn-sm char-btn-danger" id="proj-gh-delete" disabled>GitHub 선택 삭제</button>
+        </div>
       </section>
     </div>`;
 
-  const ghListEl = bodyEl.querySelector('#proj-gh-list');
-  const localListEl = bodyEl.querySelector('#proj-local-list');
-  const writersBody = bodyEl.querySelector('#proj-writers-body');
-  const ghStatusEl = bodyEl.querySelector('#proj-gh-status');
-  const refreshBtn = bodyEl.querySelector('#proj-gh-refresh');
-  const selectAllBtn = bodyEl.querySelector('#proj-gh-select-all');
+  const listEl = bodyEl.querySelector('#proj-list');
+  const statusEl = bodyEl.querySelector('#proj-status');
+  const refreshBtn = bodyEl.querySelector('#proj-refresh');
+  const selectAllBtn = bodyEl.querySelector('#proj-select-all');
   const deleteBtn = bodyEl.querySelector('#proj-gh-delete');
 
-  /** @type {Awaited<ReturnType<typeof listGithubProjectsDetailed>>} */
-  let snapshots = [];
-  let defaultId = '';
+  /** @type {ProjectCatalogItem[]} */
+  let catalog = [];
 
-  function formatWriters(ids) {
-    const list = normalizeWriters(ids);
-    if (!list.length) return 'writers 없음';
-    return list.map((id) => userNameById.get(id) || id.slice(0, 8)).join(', ');
+  function selectedAdminId() {
+    return bodyEl.querySelector('input[name="proj-admin"]:checked')?.value || '';
   }
 
-  function renderWritersPanel() {
-    proj = getCurrentProject();
-    confirmBtn.disabled = !proj;
-    if (!proj) {
-      writersBody.innerHTML = '<p class="proj-manage-empty">열린 프로젝트가 없습니다. 위 로컬 목록에서 프로젝트를 선택하세요.</p>';
+  function updateActionButtons() {
+    const adminId = selectedAdminId();
+    confirmBtn.disabled = !adminId || !admins.length;
+    const ghChecked = [...listEl.querySelectorAll('input[name="proj-item"]:checked')]
+      .filter((el) => el.dataset.ghId);
+    deleteBtn.disabled = ghChecked.length === 0;
+    selectAllBtn.disabled = catalog.length === 0;
+  }
+
+  function syncChecksToAdmin() {
+    const adminId = selectedAdminId();
+    listEl.querySelectorAll('input[name="proj-item"]').forEach((el) => {
+      const item = catalog.find((c) => c.key === el.value);
+      if (!item) return;
+      // 로컬 writers 기준. GitHub만 있으면 스냅샷 writers
+      const writers = normalizeWriters(item.writers);
+      el.checked = Boolean(adminId && writers.includes(adminId));
+    });
+    updateActionButtons();
+  }
+
+  function renderList() {
+    if (!catalog.length) {
+      listEl.innerHTML = '<p class="proj-manage-empty">표시할 프로젝트가 없습니다.</p>';
+      updateActionButtons();
       return;
     }
-    const selected = new Set(normalizeWriters(proj.writers));
-    writersBody.innerHTML = `
-      <p class="proj-manage-meta">
-        <strong>${esc(proj.title || '(제목 없음)')}</strong>
-        ${proj.author ? `<span class="proj-manage-author">— ${esc(proj.author)}</span>` : ''}
-      </p>
-      <p class="proj-manage-hint">
-        소설가·개발자에게만 부여할 수 있습니다. 마스터는 항상 쓰기 가능합니다.
-        목록에 없으면 <span class="proj-manage-ro">(열람만가능)</span>입니다.
-      </p>
-      <div class="proj-manage-list" role="group" aria-label="쓰기 권한">
-        ${admins.length
-    ? admins.map((u) => `
-          <label class="proj-manage-row">
-            <input type="checkbox" name="writer" value="${esc(u.id)}" ${selected.has(u.id) ? 'checked' : ''}>
-            <span class="proj-manage-name">${esc(u.username)}</span>
-            <span class="proj-manage-role">${esc(ROLE_LABELS[u.role] || u.role)}</span>
-          </label>`).join('')
-    : '<p class="proj-manage-empty">등록된 소설가·개발자가 없습니다.</p>'}
-      </div>`;
-  }
 
-  function updateDeleteEnabled() {
-    const n = ghListEl.querySelectorAll('input[name="gh-snap"]:checked').length;
-    deleteBtn.disabled = n === 0;
-    selectAllBtn.disabled = snapshots.length === 0;
-  }
-
-  function renderGhList() {
-    if (!snapshots.length) {
-      ghListEl.innerHTML = '<p class="proj-manage-empty">GitHub에 타임스탬프 프로젝트가 없습니다.</p>';
-      updateDeleteEnabled();
-      return;
-    }
-    ghListEl.innerHTML = snapshots.map((s) => {
-      const isDefault = defaultId && (s.snapshotId === defaultId || s.name === `${defaultId}.json`);
-      const sizeKb = s.size ? `${(s.size / 1024).toFixed(1)} KB` : '';
-      const snippet = [
-        s.author ? `작성: ${s.author}` : '',
-        `저장: ${s.label}`,
-        formatWriters(s.writers),
-        isDefault ? '기본 프로젝트' : '',
-        sizeKb,
+    listEl.innerHTML = catalog.map((item) => {
+      const badges = [];
+      if (item.localId) badges.push('로컬');
+      if (item.folderName) badges.push('폴더');
+      if (item.ghSnapshotId) badges.push(item.isDefault ? 'GitHub·기본' : 'GitHub');
+      const meta = [
+        item.author ? `작성 ${item.author}` : '',
+        item.latestLabel || '',
+        badges.join(' · '),
       ].filter(Boolean).join(' · ');
+
       return `
         <label class="proj-manage-card" role="listitem">
-          <input type="checkbox" name="gh-snap" value="${esc(s.snapshotId)}">
+          <input type="checkbox" name="proj-item" value="${esc(item.key)}"
+            data-local-id="${esc(item.localId || '')}"
+            data-gh-id="${esc(item.ghSnapshotId || '')}">
           <span class="proj-manage-card-body">
-            <strong class="proj-manage-card-title">${esc(s.title)}</strong>
-            <code class="proj-manage-card-file">${esc(s.name)}</code>
-            <small class="proj-manage-card-meta">${esc(snippet)}</small>
+            <strong class="proj-manage-card-title">${esc(item.title)}</strong>
+            ${item.fileHint ? `<code class="proj-manage-card-file">${esc(item.fileHint)}</code>` : ''}
+            <small class="proj-manage-card-meta">${esc(meta)}</small>
           </span>
         </label>`;
     }).join('');
-    ghListEl.querySelectorAll('input[name="gh-snap"]').forEach((el) => {
-      el.addEventListener('change', updateDeleteEnabled);
+
+    listEl.querySelectorAll('input[name="proj-item"]').forEach((el) => {
+      el.addEventListener('change', updateActionButtons);
     });
-    updateDeleteEnabled();
+    syncChecksToAdmin();
   }
 
-  async function renderLocalList() {
-    const locals = await listProjects();
-    const currentId = getCurrentProject()?.id || getCurrentProject()?.projectId;
-    if (!locals.length) {
-      localListEl.innerHTML = '<p class="proj-manage-empty">로컬 프로젝트가 없습니다.</p>';
-      return;
-    }
-    localListEl.innerHTML = locals.map((p) => {
-      const id = p.id || p.projectId;
-      const active = id === currentId;
-      const snippet = [
-        p.author ? `작성: ${p.author}` : '',
-        formatWriters(p.writers),
-        p.updatedAt ? `갱신: ${String(p.updatedAt).slice(0, 19).replace('T', ' ')}` : '',
-        active ? '현재 열림' : '',
-      ].filter(Boolean).join(' · ');
-      return `
-        <button type="button" class="proj-manage-card proj-manage-card-btn${active ? ' is-active' : ''}"
-                data-local-id="${esc(id)}" role="listitem">
-          <span class="proj-manage-card-body">
-            <strong class="proj-manage-card-title">${esc(p.title || '(제목 없음)')}</strong>
-            <small class="proj-manage-card-meta">${esc(snippet)}</small>
-          </span>
-        </button>`;
-    }).join('');
-
-    localListEl.querySelectorAll('[data-local-id]').forEach((btn) => {
-      btn.addEventListener('click', async () => {
-        const id = btn.dataset.localId;
-        try {
-          await loadProject(id);
-          applyRolePermissions();
-          renderWritersPanel();
-          await renderLocalList();
-        } catch (err) {
-          alert(err.message || String(err));
-        }
-      });
-    });
-  }
-
-  async function refreshGithubList() {
-    ghStatusEl.textContent = 'GitHub에서 모든 프로젝트를 불러오는 중…';
+  async function refreshCatalog() {
+    statusEl.textContent = '프로젝트 목록을 모으는 중…';
     refreshBtn.disabled = true;
-    deleteBtn.disabled = true;
     try {
-      const [list, defMeta] = await Promise.all([
-        listGithubProjectsDetailed(),
-        fetchGithubDefaultMeta(),
-      ]);
-      snapshots = list;
-      defaultId = defMeta?.snapshotId || '';
+      catalog = await buildProjectCatalog();
+      const nLocal = catalog.filter((c) => c.localId).length;
+      const nGh = catalog.filter((c) => c.ghSnapshotId).length;
+      const nFolder = catalog.filter((c) => c.folderName).length;
+      const folderNote = hasSyncDir()
+        ? `폴더(${getSyncFolderLabel() || '연결됨'}) ${nFolder}`
+        : '폴더 미연결';
+      statusEl.textContent = `${catalog.length}개 프로젝트 · 로컬 ${nLocal} · GitHub ${nGh} · ${folderNote}`;
       if (!hasGithubToken()) {
-        ghStatusEl.textContent = list.length
-          ? `${list.length}개 프로젝트 (삭제는 PAT 필요)`
-          : '스냅샷 없음';
-      } else {
-        ghStatusEl.textContent = list.length
-          ? `${list.length}개 프로젝트`
-          : '스냅샷 없음';
+        statusEl.textContent += ' · GitHub 삭제는 PAT 필요';
       }
-      renderGhList();
+      renderList();
     } catch (err) {
-      snapshots = [];
-      ghListEl.innerHTML = '';
-      ghStatusEl.textContent = `목록 실패: ${err.message || err}`;
-      updateDeleteEnabled();
+      catalog = [];
+      listEl.innerHTML = '';
+      statusEl.textContent = `목록 실패: ${err.message || err}`;
+      updateActionButtons();
     } finally {
       refreshBtn.disabled = false;
     }
   }
 
-  refreshBtn.addEventListener('click', () => { refreshGithubList(); });
+  bodyEl.querySelectorAll('input[name="proj-admin"]').forEach((el) => {
+    el.addEventListener('change', syncChecksToAdmin);
+  });
+
+  refreshBtn.addEventListener('click', () => { refreshCatalog(); });
 
   selectAllBtn.addEventListener('click', () => {
-    const boxes = [...ghListEl.querySelectorAll('input[name="gh-snap"]')];
+    const boxes = [...listEl.querySelectorAll('input[name="proj-item"]')];
     const allOn = boxes.every((b) => b.checked);
     boxes.forEach((b) => { b.checked = !allOn; });
-    updateDeleteEnabled();
+    updateActionButtons();
   });
 
   deleteBtn.addEventListener('click', async () => {
-    const ids = [...ghListEl.querySelectorAll('input[name="gh-snap"]:checked')].map((el) => el.value);
+    const ids = [...listEl.querySelectorAll('input[name="proj-item"]:checked')]
+      .map((el) => el.dataset.ghId)
+      .filter(Boolean);
     if (!ids.length) return;
     if (!hasGithubToken()) {
-      alert('삭제하려면 GitHub PAT가 필요합니다. 우측 패널에서 연결하세요.');
+      alert('GitHub 삭제에는 PAT가 필요합니다.');
       return;
     }
     const names = ids.map((id) => {
-      const s = snapshots.find((x) => x.snapshotId === id);
-      return s ? `${s.title} (${s.name})` : `${id}.json`;
+      const c = catalog.find((x) => x.ghSnapshotId === id);
+      return c ? `${c.title} (${c.fileHint || id})` : id;
     });
-    const ok = confirm(`선택한 GitHub 프로젝트 ${ids.length}개를 삭제할까요?\n\n${names.join('\n')}`);
-    if (!ok) return;
+    if (!confirm(`GitHub 스냅샷 ${ids.length}개를 삭제할까요?\n\n${names.join('\n')}`)) return;
     deleteBtn.disabled = true;
-    ghStatusEl.textContent = '삭제 중…';
+    statusEl.textContent = 'GitHub 삭제 중…';
     try {
-      const result = await deleteGithubProjectSnapshots(ids);
-      let note = `${result.deleted.length}개 삭제됨`;
-      if (result.latestUpdated) note += ' · latest 포인터 갱신';
-      if (result.defaultUpdated) note += ' · default 포인터 갱신';
-      ghStatusEl.textContent = note;
-      await refreshGithubList();
+      await deleteGithubProjectSnapshots(ids);
+      await refreshCatalog();
     } catch (err) {
       alert(`삭제 실패: ${err.message || err}`);
-      ghStatusEl.textContent = `삭제 실패: ${err.message || err}`;
-      updateDeleteEnabled();
+      statusEl.textContent = `삭제 실패: ${err.message || err}`;
+      updateActionButtons();
     }
   });
 
-  renderWritersPanel();
-  renderLocalList();
-  refreshGithubList();
+  updateActionButtons();
+  refreshCatalog();
 
   return new Promise((resolve) => {
     let settled = false;
@@ -285,14 +240,37 @@ export async function showProjectManageDialog() {
     const onCancel = () => finish(false);
     const onSubmit = async (e) => {
       e.preventDefault();
-      proj = getCurrentProject();
-      if (!proj) {
-        finish(false);
+      const adminId = selectedAdminId();
+      if (!adminId) {
+        alert('관리자를 선택하세요.');
         return;
       }
-      const ids = [...bodyEl.querySelectorAll('input[name="writer"]:checked')].map((el) => el.value);
+
+      const checked = [...listEl.querySelectorAll('input[name="proj-item"]:checked')];
+      const grantLocal = checked.map((el) => el.dataset.localId).filter(Boolean);
+      const allLocalIds = catalog.map((c) => c.localId).filter(Boolean);
+      const grantSet = new Set(grantLocal);
+      const revokeLocal = allLocalIds.filter((id) => !grantSet.has(id));
+
+      const ghOnlyChecked = checked.filter((el) => !el.dataset.localId && el.dataset.ghId);
+      if (ghOnlyChecked.length) {
+        const okOpen = confirm(
+          `체크한 항목 중 ${ghOnlyChecked.length}개는 이 브라우저에 로컬 프로젝트가 없습니다.\n`
+          + `쓰기 권한은 로컬에 있는 프로젝트에만 바로 적용됩니다.\n`
+          + `계속할까요?`
+        );
+        if (!okOpen) return;
+      }
+
       try {
-        await setProjectWriters(ids);
+        const n = await applyAdminWriteAccess(adminId, grantLocal, revokeLocal);
+        applyRolePermissions();
+        const admin = admins.find((u) => u.id === adminId);
+        alert(
+          `${admin?.username || '관리자'} 쓰기 권한을 반영했습니다. (변경 ${n}건)\n`
+          + `체크됨 ${grantLocal.length} · 해제 ${revokeLocal.length}`
+        );
+        await refreshCatalog();
         finish(true);
       } catch (err) {
         alert(err.message || String(err));
@@ -303,6 +281,189 @@ export async function showProjectManageDialog() {
     form.addEventListener('submit', onSubmit);
     dialog.showModal();
   });
+}
+
+/**
+ * @typedef {{
+ *   key: string,
+ *   title: string,
+ *   author: string,
+ *   writers: string[],
+ *   localId: string,
+ *   ghSnapshotId: string,
+ *   folderName: string,
+ *   fileHint: string,
+ *   latestLabel: string,
+ *   latestStamp: string,
+ *   isDefault: boolean,
+ * }} ProjectCatalogItem
+ */
+
+/** 로컬 + 폴더 + GitHub 를 제목·owner 기준으로 합침 */
+async function buildProjectCatalog() {
+  /** @type {Map<string, ProjectCatalogItem>} */
+  const byKey = new Map();
+
+  const locals = await listProjects();
+  for (const p of locals) {
+    const id = p.id || p.projectId;
+    const key = projectMergeKey(p.title, p.ownerId, id);
+    byKey.set(key, {
+      key,
+      title: p.title || '(제목 없음)',
+      author: p.author || '',
+      writers: normalizeWriters(p.writers),
+      localId: id,
+      ghSnapshotId: '',
+      folderName: '',
+      fileHint: '',
+      latestLabel: p.updatedAt
+        ? `갱신 ${String(p.updatedAt).slice(0, 19).replace('T', ' ')}`
+        : '',
+      latestStamp: stampFromIso(p.updatedAt),
+      isDefault: false,
+    });
+  }
+
+  await initSyncFolder();
+  if (hasSyncDir()) {
+    try {
+      const files = await listTimestampBackups();
+      for (const f of files.slice(0, 60)) {
+        let title = '';
+        let author = '';
+        let ownerId = '';
+        let writers = [];
+        try {
+          const file = await readBackupFile(f.handle);
+          const data = JSON.parse(await file.text());
+          title = data?.project?.title || '';
+          author = data?.project?.author || '';
+          ownerId = data?.project?.ownerId || '';
+          writers = normalizeWriters(data?.project?.writers);
+        } catch {
+          title = f.name;
+        }
+        const mergeKey = projectMergeKey(title, ownerId, `folder:${f.name}`);
+        const prev = byKey.get(mergeKey);
+        if (prev) {
+          prev.folderName = f.name;
+          if (!prev.fileHint) prev.fileHint = f.name;
+          if (f.stamp > (prev.latestStamp || '')) {
+            prev.latestStamp = f.stamp;
+            prev.latestLabel = f.label;
+          }
+          if (!prev.writers.length && writers.length) prev.writers = writers;
+          if (!prev.author && author) prev.author = author;
+        } else {
+          byKey.set(mergeKey, {
+            key: mergeKey,
+            title: title || f.name,
+            author,
+            writers,
+            localId: '',
+            ghSnapshotId: '',
+            folderName: f.name,
+            fileHint: f.name,
+            latestLabel: f.label,
+            latestStamp: f.stamp,
+            isDefault: false,
+          });
+        }
+      }
+    } catch (err) {
+      console.warn('[project-manage] 폴더 목록 실패:', err);
+    }
+  }
+
+  let defaultId = '';
+  try {
+    const def = await fetchGithubDefaultMeta();
+    defaultId = def?.snapshotId || '';
+  } catch { /* */ }
+
+  try {
+    const snaps = await listGithubProjectsDetailed();
+    // 같은 프로젝트는 최신 스냅샷만 대표로 (목록은 프로젝트 단위)
+    /** @type {Map<string, typeof snaps[0]>} */
+    const latestByProject = new Map();
+    for (const s of snaps) {
+      const mk = projectMergeKey(s.title, s.ownerId, `gh:${s.snapshotId}`);
+      const prev = latestByProject.get(mk);
+      if (!prev || s.snapshotId > prev.snapshotId) latestByProject.set(mk, s);
+    }
+
+    for (const [mk, s] of latestByProject) {
+      // 로컬/폴더와 제목·owner로 합치기
+      let matched = byKey.get(mk);
+        if (!matched) {
+        for (const item of byKey.values()) {
+          if (sameProject(item.title, item.author, s.title, s.author)) {
+            matched = item;
+            break;
+          }
+        }
+      }
+      if (matched) {
+        matched.ghSnapshotId = s.snapshotId;
+        matched.fileHint = matched.fileHint || s.name;
+        matched.isDefault = Boolean(defaultId && s.snapshotId === defaultId);
+        if (s.snapshotId.replace(/\D/g, '').slice(0, 14) > (matched.latestStamp || '')) {
+          matched.latestStamp = s.snapshotId.replace(/\D/g, '').slice(0, 14);
+          matched.latestLabel = s.label;
+        }
+        if (!matched.writers.length) matched.writers = normalizeWriters(s.writers);
+        if (!matched.author && s.author) matched.author = s.author;
+      } else {
+        byKey.set(mk, {
+          key: mk,
+          title: s.title || s.name,
+          author: s.author || '',
+          writers: normalizeWriters(s.writers),
+          localId: '',
+          ghSnapshotId: s.snapshotId,
+          folderName: '',
+          fileHint: s.name,
+          latestLabel: s.label,
+          latestStamp: s.snapshotId.replace(/\D/g, '').slice(0, 14),
+          isDefault: Boolean(defaultId && s.snapshotId === defaultId),
+        });
+      }
+    }
+  } catch (err) {
+    console.warn('[project-manage] GitHub 목록 실패:', err);
+  }
+
+  return [...byKey.values()].sort((a, b) =>
+    (b.latestStamp || '').localeCompare(a.latestStamp || '')
+    || a.title.localeCompare(b.title)
+  );
+}
+
+function projectMergeKey(title, ownerId, fallback) {
+  const t = String(title || '').trim().toLowerCase();
+  const o = String(ownerId || '').trim();
+  if (t && o) return `p:${o}|${t}`;
+  if (t) return `t:${t}`;
+  return `f:${fallback}`;
+}
+
+function sameProject(titleA, authorA, titleB, authorB) {
+  const ta = String(titleA || '').trim().toLowerCase();
+  const tb = String(titleB || '').trim().toLowerCase();
+  if (!ta || !tb || ta !== tb) return false;
+  const aa = String(authorA || '').trim().toLowerCase();
+  const ab = String(authorB || '').trim().toLowerCase();
+  if (aa && ab) return aa === ab;
+  return true;
+}
+
+function stampFromIso(iso) {
+  if (!iso) return '';
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return '';
+  const p = (n) => String(n).padStart(2, '0');
+  return `${d.getFullYear()}${p(d.getMonth() + 1)}${p(d.getDate())}${p(d.getHours())}${p(d.getMinutes())}${p(d.getSeconds())}`;
 }
 
 function esc(str) {

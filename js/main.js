@@ -222,7 +222,7 @@ function initActions() {
       const saved = await showProjectManageDialog();
       if (saved) {
         applyUploadPermissions();
-        await showAlert('프로젝트 관리', '쓰기 권한(writers)을 저장했습니다. 다음 프로젝트 저장·내보내기에 포함됩니다.');
+        await showAlert('프로젝트 관리', '선택한 관리자의 쓰기 권한을 프로젝트에 반영했습니다.');
       }
     } catch (err) {
       alert(`프로젝트 관리 실패: ${err.message}`);
