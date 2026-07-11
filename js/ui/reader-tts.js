@@ -7,9 +7,8 @@ import { setTtsWallpaper } from './canvas-wallpaper.js';
 
 const synth = typeof window !== 'undefined' ? window.speechSynthesis : null;
 const TTS_MAX_CHUNK = 200;
-const START_GUARD_MS = 5000;
+const TEST_VOICE_TEXT = '안녕하세요. TN Motion Engine 테스트입니다.';
 
-let koreanVoice = null;
 let playing = false;
 let paused = false;
 let chunkIndex = 0;
@@ -18,21 +17,15 @@ let chunks = [];
 let nameEntries = [];
 let statusTimer = null;
 let statusRestore = '';
-let startGuardTimer = null;
-let heardAnySpeech = false;
 
 /** @type {SpeechSynthesisUtterance | null} */
 let currentUtterance = null;
 
 export function initReaderTts() {
   const playBtn = document.querySelector('[data-action="tts-play"]');
+  const testBtn = document.querySelector('[data-action="tts-test"]');
   const stopBtn = document.querySelector('[data-action="tts-stop"]');
   const pauseBtn = document.querySelector('[data-action="tts-pause"]');
-
-  refreshVoices();
-  if (typeof speechSynthesis !== 'undefined') {
-    speechSynthesis.addEventListener('voiceschanged', refreshVoices);
-  }
 
   playBtn?.addEventListener('click', () => {
     if (playing && paused) {
@@ -42,6 +35,7 @@ export function initReaderTts() {
     start();
   });
 
+  testBtn?.addEventListener('click', () => speakTestVoice());
   stopBtn?.addEventListener('click', () => stop());
   pauseBtn?.addEventListener('click', () => togglePause());
 
@@ -55,41 +49,29 @@ export function initReaderTts() {
   });
 }
 
-function refreshVoices() {
-  if (!synth) return;
-  const voices = synth.getVoices();
-  koreanVoice = pickBestKoreanVoice(voices);
+/** Edge에서 동작 확인된 패턴과 동일한 utterance 생성 */
+function createUtterance(text) {
+  const utterance = new SpeechSynthesisUtterance(text);
+  utterance.lang = 'ko-KR';
+  utterance.rate = 1.0;
+  utterance.pitch = 1.0;
+  utterance.volume = 1.0;
+  return utterance;
 }
 
-function pickBestKoreanVoice(voices) {
-  const koVoices = voices.filter((v) => v.lang.startsWith('ko'));
-  if (!koVoices.length) return null;
+function speakTestVoice() {
+  if (!synth) {
+    showStatus('이 브라우저는 음성 읽기를 지원하지 않습니다.', { persist: true });
+    return;
+  }
 
-  const score = (v) => {
-    let s = 0;
-    if (v.lang === 'ko-KR') s += 10;
-    if (/한국어|Korean/i.test(v.name)) s += 20;
-    if (/Google/i.test(v.name) && /한국|Korean/i.test(v.name)) s += 15;
-    if (v.localService) s += 5;
-    return s;
-  };
+  if (synth.speaking || synth.pending) {
+    synth.cancel();
+  }
 
-  return [...koVoices].sort((a, b) => score(b) - score(a))[0];
-}
-
-function voiceDiagnostics() {
-  if (!synth) return { total: 0, ko: 0 };
-  const voices = synth.getVoices();
-  return { total: voices.length, ko: voices.filter((v) => v.lang.startsWith('ko')).length };
-}
-
-function showVoiceDiagnostic() {
-  const { total, ko } = voiceDiagnostics();
-  showStatus(`보이스 ${total}개 / ko ${ko}개`, { duration: 1000 });
-}
-
-function voiceStatusLabel() {
-  return koreanVoice?.name || '없음';
+  const utterance = createUtterance(TEST_VOICE_TEXT);
+  speechSynthesis.speak(utterance);
+  showStatus('테스트 음성 재생 중…');
 }
 
 function start() {
@@ -100,18 +82,6 @@ function start() {
 
   if (synth.speaking || synth.pending) {
     synth.cancel();
-  }
-
-  refreshVoices();
-  showVoiceDiagnostic();
-
-  const { ko } = voiceDiagnostics();
-  if (ko === 0) {
-    showStatus(
-      '한국어 음성이 없습니다. Windows 설정 > 시간 및 언어 > 음성에서 한국어 음성을 추가해 주세요.',
-      { persist: true }
-    );
-    return;
   }
 
   const inner = document.querySelector('#reader-content .reader-inner');
@@ -140,7 +110,6 @@ function start() {
   playing = true;
   paused = false;
   chunkIndex = 0;
-  heardAnySpeech = false;
   updateButtons();
 
   speakNextChunk();
@@ -165,50 +134,18 @@ function speakNextChunk() {
 function speakChunk(chunk) {
   if (!playing || !synth) return;
 
-  refreshVoices();
-
-  const utterance = new SpeechSynthesisUtterance(chunk.text);
-  utterance.lang = 'ko-KR';
-  utterance.volume = 1;
-  utterance.rate = 1;
-  utterance.pitch = 1;
-  if (koreanVoice) utterance.voice = koreanVoice;
-
-  let chunkStarted = false;
+  const utterance = createUtterance(chunk.text);
   currentUtterance = utterance;
-
-  const clearGuard = () => {
-    clearTimeout(startGuardTimer);
-    startGuardTimer = null;
-  };
-
-  const failAppError = (detail) => {
-    clearGuard();
-    const msg = detail
-      ? `앱 오류: 음성 재생 실패 (${detail}). 재생 버튼을 다시 눌러 주세요.`
-      : '앱 오류: 음성 재생이 시작되지 않았습니다. 재생 버튼을 다시 눌러 주세요.';
-    handleSpeakFailure(msg);
-  };
 
   utterance.onstart = () => {
     if (!playing) return;
-    chunkStarted = true;
-    heardAnySpeech = true;
-    clearGuard();
     onChunkStart(chunk);
     updateButtons();
-    showStatus(`읽는 중… · ${voiceStatusLabel()}`);
+    showStatus('읽는 중…');
   };
 
   utterance.onend = () => {
     if (!playing) return;
-    clearGuard();
-
-    if (!chunkStarted) {
-      failAppError('onend without onstart');
-      return;
-    }
-
     currentUtterance = null;
     chunkIndex += 1;
     speakNextChunk();
@@ -216,17 +153,10 @@ function speakChunk(chunk) {
 
   utterance.onerror = (e) => {
     if (e.error === 'interrupted' || e.error === 'canceled') return;
-    clearGuard();
-    failAppError(e.error || 'unknown');
+    handleSpeakFailure(`음성 재생 실패 (${e.error || 'unknown'})`);
   };
 
-  startGuardTimer = window.setTimeout(() => {
-    if (!playing || paused || currentUtterance !== utterance || chunkStarted) return;
-    failAppError('onstart timeout');
-  }, START_GUARD_MS);
-
-  if (synth.paused) synth.resume();
-  synth.speak(utterance);
+  speechSynthesis.speak(utterance);
 }
 
 function onChunkStart(chunk) {
@@ -258,10 +188,8 @@ function handleSpeakFailure(message) {
   playing = false;
   paused = false;
   currentUtterance = null;
-  heardAnySpeech = false;
-  clearTimeout(startGuardTimer);
   clearHighlight();
-  synth?.cancel();
+  speechSynthesis.cancel();
   updateButtons();
   showStatus(message, { persist: true });
 }
@@ -273,8 +201,6 @@ function resetPlaybackState(opts = {}) {
   chunkIndex = 0;
   chunks = [];
   currentUtterance = null;
-  heardAnySpeech = false;
-  clearTimeout(startGuardTimer);
   clearHighlight();
   updateButtons();
   if (!opts.silent && wasPlaying) {
@@ -285,7 +211,7 @@ function resetPlaybackState(opts = {}) {
 function stop(opts = {}) {
   const wasPlaying = playing;
   resetPlaybackState({ silent: true });
-  synth?.cancel();
+  speechSynthesis.cancel();
   if (!opts.silent && wasPlaying) {
     showStatus('읽기를 정지했습니다.');
   }
@@ -313,22 +239,13 @@ function resume() {
   if (synth.paused) synth.resume();
   paused = false;
   updateButtons();
-  showStatus(`읽는 중… · ${voiceStatusLabel()}`);
+  showStatus('읽는 중…');
 }
 
 function finish() {
-  if (playing && chunks.length > 0 && !heardAnySpeech) {
-    handleSpeakFailure(
-      '앱 오류: 음성 재생이 시작되지 않았습니다. 재생 버튼을 다시 눌러 주세요.'
-    );
-    return;
-  }
-
   playing = false;
   paused = false;
   currentUtterance = null;
-  heardAnySpeech = false;
-  clearTimeout(startGuardTimer);
   clearHighlight();
   updateButtons();
   showStatus('읽기 완료');
