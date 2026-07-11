@@ -9,6 +9,7 @@ import { initUploadPanel, logImport, emitSelectedFiles } from './ui/upload-panel
 import { initGraph } from './graph/canvas-graph.js';
 import { initEditor, getEditorSelection, getCurrentEpisodeNumber, flushPendingSave } from './ui/editor.js';
 import { initReader } from './ui/reader.js';
+import { initReaderTts } from './ui/reader-tts.js';
 import { initInspector } from './ui/inspector.js';
 import { initCanvasLayout } from './ui/canvas-layout.js';
 import { initCanvasWallpaper } from './ui/canvas-wallpaper.js';
@@ -48,6 +49,7 @@ async function boot() {
   initGraph();
   initEditor();
   initReader();
+  initReaderTts();
   initInspector();
   initCanvasLayout();
   initCanvasWallpaper();

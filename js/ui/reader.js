@@ -164,6 +164,7 @@ export async function showStory(num, contentEl, selectEl) {
   if (!entry || !contentEl) return;
 
   currentStoryNum = num;
+  emit('reader:story-changed', { number: num });
   if (selectEl) selectEl.value = String(num);
   else {
     const sel = document.getElementById('reader-episode-select');
@@ -189,6 +190,12 @@ async function resolveStoryContent(entry) {
 
 export function getCurrentStoryNumber() {
   return currentStoryNum;
+}
+
+export async function getCurrentStoryMarkdown() {
+  const entry = catalog.find((s) => s.number === currentStoryNum);
+  if (!entry) return '';
+  return resolveStoryContent(entry);
 }
 
 async function deleteCurrentStory() {

@@ -141,6 +141,28 @@
   padding: 8px 12px;
   border-bottom: 1px solid var(--border);
   background: var(--bg-panel);
+  flex-wrap: wrap;
+}
+
+.reader-nav-divider {
+  width: 1px;
+  height: 20px;
+  background: var(--border);
+  margin: 0 2px;
+}
+
+.reader-tts-status {
+  font-size: 12px;
+  color: var(--text-muted);
+  min-width: 0;
+  max-width: 180px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.reader-tts-status.is-visible {
+  color: var(--accent, #60a5fa);
 }
 
 .editor-filename {

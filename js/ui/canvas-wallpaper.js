@@ -9,6 +9,7 @@ const DEFAULTS = { saturation: 100, alpha: 45, size: 100 };
 const MAX_IMAGE_WIDTH = 1600;
 
 let state = { ...DEFAULTS, dataUrl: '' };
+let ttsOverrideUrl = '';
 let saveTimer = null;
 
 export function initCanvasWallpaper() {
@@ -39,6 +40,7 @@ export function initCanvasWallpaper() {
       return;
     }
     try {
+      ttsOverrideUrl = '';
       state.dataUrl = await resizeImageToDataUrl(file, MAX_IMAGE_WIDTH);
       applyWallpaper();
       await persistWallpaper();
@@ -60,7 +62,10 @@ export function initCanvasWallpaper() {
   alpha?.addEventListener('input', onGauge);
   size?.addEventListener('input', onGauge);
 
-  on('project:loaded', () => loadWallpaperForProject());
+  on('project:loaded', () => {
+    ttsOverrideUrl = '';
+    loadWallpaperForProject();
+  });
   on('view:changed', (viewId) => {
     toggleControls(viewId === 'reader');
     applyWallpaper(viewId);
@@ -96,6 +101,16 @@ function syncGaugesFromState() {
   syncGaugeLabels();
 }
 
+/** TTS 등 일시 배경 — 저장하지 않음, 마지막 캐릭터 배경 유지 */
+export function setTtsWallpaper(dataUrl) {
+  ttsOverrideUrl = String(dataUrl || '').trim();
+  applyWallpaper();
+}
+
+function getActiveWallpaperUrl() {
+  return ttsOverrideUrl || state.dataUrl;
+}
+
 function applyWallpaper(viewId) {
   const layer = document.getElementById('canvas-wallpaper-layer');
   const body = document.querySelector('.canvas-body');
@@ -103,7 +118,8 @@ function applyWallpaper(viewId) {
   if (!layer || !body) return;
 
   const activeView = viewId || getCurrentView();
-  const show = activeView === 'reader' && !!state.dataUrl;
+  const dataUrl = getActiveWallpaperUrl();
+  const show = activeView === 'reader' && !!dataUrl;
 
   if (!show) {
     layer.hidden = true;
@@ -117,7 +133,7 @@ function applyWallpaper(viewId) {
     return;
   }
 
-  const imageUrl = `url(${JSON.stringify(state.dataUrl)})`;
+  const imageUrl = `url(${JSON.stringify(dataUrl)})`;
   const filter = `saturate(${state.saturation}%)`;
   const opacity = String(state.alpha / 100);
   const backgroundSize = `${state.size}%`;
@@ -134,6 +150,7 @@ function applyWallpaper(viewId) {
 }
 
 async function loadWallpaperForProject() {
+  ttsOverrideUrl = '';
   const proj = project.getCurrentProject();
   if (!proj) {
     state = { ...DEFAULTS, dataUrl: '' };
