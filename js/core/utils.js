@@ -88,29 +88,39 @@ export function extractDocTitle(content, fallback = '') {
   return fallback || first.slice(0, 80);
 }
 
-/** 소설 읽기 제목 — MD 첫 줄 7번째 문자(1-based)부터 추출 (예: Ep006_제6화 → 제6화...) */
+/** 소설 읽기 제목 — MD 첫 줄에서 ST/EP/제N화 접두를 제거한 본제목 */
 export function extractStoryReaderTitle(content, fallback = '') {
   const line = (content || '').split('\n').map((l) => l.trim()).find(Boolean) || '';
   const cleaned = line.replace(/^#+\s*/, '').trim();
-  if (!cleaned) return fallback;
+  if (!cleaned) return String(fallback || '').trim();
 
-  if (cleaned.length >= 7) {
-    const from7 = cleaned.slice(6).trim();
-    if (from7) return from7;
-  }
+  // ST003 · 제목 / EP003_제목 / Ep003-제목 / ST003. 제목
+  const prefixed = cleaned.match(/^(?:ST|EP)\d+\s*[_\-·.:]\s*(.+)$/i);
+  if (prefixed?.[1]?.trim()) return prefixed[1].trim();
 
-  const episode = cleaned.match(/제\d+화.*$/);
-  if (episode) return episode[0].trim();
+  // ST003 제목 (구분자 없이 공백)
+  const spaced = cleaned.match(/^(?:ST|EP)\d+\s+(.+)$/i);
+  if (spaced?.[1]?.trim()) return spaced[1].trim();
 
-  return fallback || cleaned;
+  // 제3화 · 제목 / 제3화 제목
+  const epKo = cleaned.match(/^제\d+화\s*[·.\-]?\s*(.+)$/);
+  if (epKo?.[1]?.trim()) return epKo[1].trim();
+
+  // 레거시 Ep006_제6화… (Ep/ST + 숫자3 + _)
+  const legacy = cleaned.match(/^(?:Ep|EP|ST)\d{3}_(.+)$/i);
+  if (legacy?.[1]?.trim()) return legacy[1].trim();
+
+  return String(fallback || cleaned).trim();
 }
 
-/** 소설 읽기 목록 라벨 — "제1화 자막 1초" 형식 */
+/** 소설 읽기 목록 라벨 — "제3화 유진이의 모험" 형식 */
 export function formatStoryReaderLabel(story) {
   const num = story?.number ?? 0;
   const epLabel = `제${num}화`;
   let subtitle = extractStoryReaderTitle(story?.content || '', story?.title || '');
-  subtitle = subtitle.replace(/^제\d+화[.\s·]*/, '').trim();
+  // 본제목에 남은 회차 접두 제거 (중복 "제3화 제3화 …" 방지)
+  subtitle = subtitle.replace(/^제\d+화\s*[·.\-]?\s*/, '').trim();
+  subtitle = subtitle.replace(/^(?:ST|EP)\d+\s*[_\-·.:]?\s*/i, '').trim();
   return subtitle ? `${epLabel} ${subtitle}` : epLabel;
 }
 
