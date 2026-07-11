@@ -6,6 +6,7 @@ import * as autosave from '../core/autosave.js';
 import { showDialog, showAlert } from './dialog.js';
 import { openCharacterPanel, getSelectedCharacterId, deleteCharacterWithConfirm } from './character-panel.js';
 import { initCharacterAutoAdd } from './character-autoadd.js';
+import { canUpload } from '../core/auth.js';
 
 const CHARACTER_VIEWS = new Set(['character', 'graph-character']);
 
@@ -23,9 +24,18 @@ export function initCharacterActions() {
 
 function toggleControls(viewId) {
   const el = document.getElementById('character-controls');
-  if (el) el.hidden = !CHARACTER_VIEWS.has(viewId);
+  const showBar = CHARACTER_VIEWS.has(viewId);
+  if (el) el.hidden = !showBar;
   const graphControls = document.getElementById('graph-relation-controls');
   if (graphControls) graphControls.hidden = viewId !== 'graph-character';
+
+  // 일반 사용자: 인물 추가/삭제/자동추가·관계선 편집 숨김
+  if (!canUpload()) {
+    ['character-add', 'character-delete', 'character-autoadd'].forEach((action) => {
+      document.querySelectorAll(`[data-action="${action}"]`).forEach((btn) => { btn.hidden = true; });
+    });
+    if (graphControls) graphControls.hidden = true;
+  }
 }
 
 async function runAddCharacter() {

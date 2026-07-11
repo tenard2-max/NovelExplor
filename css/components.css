@@ -1895,8 +1895,14 @@ body.auth-locked #app {
   font-size: 13px;
 }
 
-.settings-user-info span {
-  color: var(--text-dim);
-  font-size: 12px;
+.role-hidden,
+[hidden].role-hidden {
+  display: none !important;
 }
+
+body.role-user .upload-panel.upload-user-mode #drop-zone,
+body.role-user .upload-panel.upload-user-mode .upload-actions {
+  display: none !important;
+}
+
 
