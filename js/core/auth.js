@@ -1,4 +1,9 @@
-/** 사용자 인증 · 역할 · 세션 */
+/** 사용자 인증 · 역할 · 세션
+ *
+ * 저장소: IndexedDB `users` 스토어 (브라우저 로컬 DB)
+ * - 아이디: SHA-256 조회 해시 + AES-GCM 암호문 (평문 미저장)
+ * - 비밀번호: PBKDF2(SHA-256, 120000회) + salt 해시
+ */
 
 import * as storage from './storage.js';
 import { nowIso, uuid } from './utils.js';
@@ -21,6 +26,8 @@ export const ROLE_LABELS = {
 export const MAX_USER_PROJECTS = 3;
 export const MASTER_USERNAME = 'master';
 const SESSION_KEY = 'ne-auth-session';
+/** 클라이언트 앱 페퍼 — 로컬 DB 평문 노출 완화용(서버 비밀키 수준은 아님) */
+const APP_PEPPER = 'NovelExplor/auth/v1/id-pepper';
 
 let currentUser = null;
 
@@ -54,11 +61,13 @@ export function roleLabel(role) {
 /** 앱 시작 시 마스터 계정 보장 + 세션 복원 */
 export async function initAuth() {
   await ensureMasterAccount();
+  await migrateAllUsers();
+
   const session = readSession();
   if (session?.userId) {
     const user = await storage.get('users', session.userId);
     if (user && !user.disabled) {
-      currentUser = publicUser(user);
+      currentUser = await toPublicUser(user);
       emit('auth:changed', currentUser);
       return currentUser;
     }
@@ -71,14 +80,24 @@ export async function initAuth() {
 
 async function ensureMasterAccount() {
   const users = await storage.getAll('users');
-  const master = users.find((u) => u.role === ROLES.MASTER || u.username === MASTER_USERNAME);
-  if (master) return master;
+  let master = users.find((u) => u.role === ROLES.MASTER);
+  if (!master) {
+    const masterHash = await hashUsername(MASTER_USERNAME);
+    master = users.find((u) => u.usernameHash === masterHash || u.username === MASTER_USERNAME);
+  }
+  if (master) {
+    await migrateUserRecord(master);
+    return master;
+  }
 
   const salt = uuid().replace(/-/g, '').slice(0, 16);
   const passwordHash = await hashPassword('master', salt);
+  const usernameHash = await hashUsername(MASTER_USERNAME);
+  const usernameEnc = await encryptUsername(MASTER_USERNAME, salt);
   const record = {
     id: 'user-master',
-    username: MASTER_USERNAME,
+    usernameHash,
+    usernameEnc,
     passwordHash,
     salt,
     role: ROLES.MASTER,
@@ -89,6 +108,41 @@ async function ensureMasterAccount() {
   };
   await storage.put('users', record);
   return record;
+}
+
+async function migrateAllUsers() {
+  const users = await storage.getAll('users');
+  for (const u of users) {
+    await migrateUserRecord(u);
+  }
+}
+
+/** 구버전 평문 username → 해시+암호문 */
+async function migrateUserRecord(user) {
+  if (!user) return user;
+  let changed = false;
+
+  if (user.username && (!user.usernameHash || !user.usernameEnc)) {
+    const salt = user.salt || uuid().replace(/-/g, '').slice(0, 16);
+    if (!user.salt) {
+      user.salt = salt;
+      changed = true;
+    }
+    user.usernameHash = await hashUsername(user.username);
+    user.usernameEnc = await encryptUsername(String(user.username).toLowerCase(), salt);
+    changed = true;
+  }
+
+  if (user.username != null) {
+    delete user.username;
+    changed = true;
+  }
+
+  if (changed) {
+    user.updatedAt = nowIso();
+    await storage.put('users', user);
+  }
+  return user;
 }
 
 export async function signup(username, password) {
@@ -109,9 +163,12 @@ export async function signup(username, password) {
 
   const salt = uuid().replace(/-/g, '').slice(0, 16);
   const passwordHash = await hashPassword(pw, salt);
+  const usernameHash = await hashUsername(id);
+  const usernameEnc = await encryptUsername(id, salt);
   const record = {
     id: `user-${uuid()}`,
-    username: id,
+    usernameHash,
+    usernameEnc,
     passwordHash,
     salt,
     role: ROLES.USER,
@@ -121,7 +178,7 @@ export async function signup(username, password) {
     updatedAt: nowIso(),
   };
   await storage.put('users', record);
-  return publicUser(record);
+  return toPublicUser(record);
 }
 
 export async function login(username, password) {
@@ -132,7 +189,7 @@ export async function login(username, password) {
   const ok = await verifyPassword(password, user.salt, user.passwordHash);
   if (!ok) throw new Error('아이디 또는 비밀번호가 올바르지 않습니다.');
 
-  currentUser = publicUser(user);
+  currentUser = await toPublicUser(user);
   writeSession(currentUser);
   emit('auth:changed', currentUser);
   return currentUser;
@@ -155,13 +212,16 @@ export async function changePassword(currentPassword, newPassword) {
   const ok = await verifyPassword(currentPassword, user.salt, user.passwordHash);
   if (!ok) throw new Error('현재 비밀번호가 올바르지 않습니다.');
 
+  // salt 변경 시 아이디 암호문도 재암호화
+  const plainId = await decryptUsername(user.usernameEnc, user.salt);
   const salt = uuid().replace(/-/g, '').slice(0, 16);
   user.passwordHash = await hashPassword(newPassword, salt);
   user.salt = salt;
+  user.usernameEnc = await encryptUsername(plainId, salt);
   user.mustChangePassword = false;
   user.updatedAt = nowIso();
   await storage.put('users', user);
-  currentUser = publicUser(user);
+  currentUser = await toPublicUser(user);
   writeSession(currentUser);
   emit('auth:changed', currentUser);
   return currentUser;
@@ -169,7 +229,11 @@ export async function changePassword(currentPassword, newPassword) {
 
 export async function listUsers() {
   const users = await storage.getAll('users');
-  return users.map(publicUser).sort((a, b) => a.username.localeCompare(b.username));
+  const out = [];
+  for (const u of users) {
+    out.push(await toPublicUser(u));
+  }
+  return out.sort((a, b) => a.username.localeCompare(b.username));
 }
 
 /** 마스터만: 역할 변경 */
@@ -194,22 +258,34 @@ export async function setUserRole(userId, role) {
   await storage.put('users', user);
 
   if (user.id === currentUser.id) {
-    currentUser = publicUser(user);
+    currentUser = await toPublicUser(user);
     writeSession(currentUser);
     emit('auth:changed', currentUser);
   }
-  return publicUser(user);
+  return toPublicUser(user);
 }
 
 async function findUserByUsername(username) {
+  const hash = await hashUsername(String(username || '').trim().toLowerCase());
   const users = await storage.getAll('users');
-  return users.find((u) => u.username === username) || null;
+  return users.find((u) => u.usernameHash === hash
+    || u.username === String(username || '').trim().toLowerCase()) || null;
 }
 
-function publicUser(user) {
+async function toPublicUser(user) {
+  let username = '';
+  try {
+    if (user.usernameEnc && user.salt) {
+      username = await decryptUsername(user.usernameEnc, user.salt);
+    } else if (user.username) {
+      username = user.username;
+    }
+  } catch {
+    username = '(복호화 실패)';
+  }
   return {
     id: user.id,
-    username: user.username,
+    username,
     role: user.role,
     mustChangePassword: !!user.mustChangePassword,
     createdAt: user.createdAt,
@@ -225,9 +301,9 @@ function readSession() {
 }
 
 function writeSession(user) {
+  // 세션에는 userId·역할만 — 아이디 평문은 메모리(currentUser)에만
   localStorage.setItem(SESSION_KEY, JSON.stringify({
     userId: user.id,
-    username: user.username,
     role: user.role,
     loginAt: nowIso(),
   }));
@@ -235,6 +311,60 @@ function writeSession(user) {
 
 function clearSession() {
   localStorage.removeItem(SESSION_KEY);
+}
+
+/** 아이디 조회용 결정적 해시 (DB에 평문 아이디 없음) */
+async function hashUsername(username) {
+  const enc = new TextEncoder();
+  const data = enc.encode(`${APP_PEPPER}|id|${String(username).trim().toLowerCase()}`);
+  const digest = await crypto.subtle.digest('SHA-256', data);
+  return bufferToBase64(digest);
+}
+
+async function deriveUsernameKey(salt) {
+  const enc = new TextEncoder();
+  const keyMaterial = await crypto.subtle.importKey(
+    'raw',
+    enc.encode(APP_PEPPER),
+    'PBKDF2',
+    false,
+    ['deriveKey']
+  );
+  return crypto.subtle.deriveKey(
+    {
+      name: 'PBKDF2',
+      salt: enc.encode(`id-aes|${salt}`),
+      iterations: 100000,
+      hash: 'SHA-256',
+    },
+    keyMaterial,
+    { name: 'AES-GCM', length: 256 },
+    false,
+    ['encrypt', 'decrypt']
+  );
+}
+
+async function encryptUsername(plain, salt) {
+  const key = await deriveUsernameKey(salt);
+  const iv = crypto.getRandomValues(new Uint8Array(12));
+  const cipher = await crypto.subtle.encrypt(
+    { name: 'AES-GCM', iv },
+    key,
+    new TextEncoder().encode(String(plain).toLowerCase())
+  );
+  return `${bufferToBase64(iv)}.${bufferToBase64(cipher)}`;
+}
+
+async function decryptUsername(payload, salt) {
+  const [ivB64, dataB64] = String(payload || '').split('.');
+  if (!ivB64 || !dataB64) throw new Error('invalid username cipher');
+  const key = await deriveUsernameKey(salt);
+  const plainBuf = await crypto.subtle.decrypt(
+    { name: 'AES-GCM', iv: base64ToBuffer(ivB64) },
+    key,
+    base64ToBuffer(dataB64)
+  );
+  return new TextDecoder().decode(plainBuf);
 }
 
 async function hashPassword(password, salt) {
@@ -269,4 +399,11 @@ function bufferToBase64(buf) {
   let s = '';
   for (let i = 0; i < bytes.length; i += 1) s += String.fromCharCode(bytes[i]);
   return btoa(s);
+}
+
+function base64ToBuffer(b64) {
+  const bin = atob(b64);
+  const bytes = new Uint8Array(bin.length);
+  for (let i = 0; i < bin.length; i += 1) bytes[i] = bin.charCodeAt(i);
+  return bytes.buffer;
 }
