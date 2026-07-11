@@ -88,39 +88,52 @@ export function extractDocTitle(content, fallback = '') {
   return fallback || first.slice(0, 80);
 }
 
+/** 회차·ST/EP 접두를 반복 제거 (제1화 제1화. 제목 → 제목) */
+function stripEpisodePrefixes(text) {
+  let s = String(text || '').trim().replace(/^[\u200B\uFEFF\u00A0]+/, '');
+  for (let i = 0; i < 5; i++) {
+    const next = s
+      .replace(/^(?:ST|EP)\s*\d+\s*[_\-·.:]?\s*/i, '')
+      .replace(/^제\s*\d+\s*화\s*[_\-·.:]?\s*/u, '')
+      .trim();
+    if (next === s) break;
+    s = next;
+  }
+  return s;
+}
+
 /** 소설 읽기 제목 — MD 첫 줄에서 ST/EP/제N화 접두를 제거한 본제목 */
 export function extractStoryReaderTitle(content, fallback = '') {
   const line = (content || '').split('\n').map((l) => l.trim()).find(Boolean) || '';
   const cleaned = line.replace(/^#+\s*/, '').trim();
-  if (!cleaned) return String(fallback || '').trim();
+  if (!cleaned) return stripEpisodePrefixes(fallback);
 
   // ST003 · 제목 / EP003_제목 / Ep003-제목 / ST003. 제목
   const prefixed = cleaned.match(/^(?:ST|EP)\d+\s*[_\-·.:]\s*(.+)$/i);
-  if (prefixed?.[1]?.trim()) return prefixed[1].trim();
+  if (prefixed?.[1]?.trim()) return stripEpisodePrefixes(prefixed[1]);
 
   // ST003 제목 (구분자 없이 공백)
   const spaced = cleaned.match(/^(?:ST|EP)\d+\s+(.+)$/i);
-  if (spaced?.[1]?.trim()) return spaced[1].trim();
+  if (spaced?.[1]?.trim()) return stripEpisodePrefixes(spaced[1]);
 
-  // 제3화 · 제목 / 제3화 제목
-  const epKo = cleaned.match(/^제\d+화\s*[·.\-]?\s*(.+)$/);
-  if (epKo?.[1]?.trim()) return epKo[1].trim();
+  // 제3화 · 제목 / 제3화. 제목 / 제3화 제목
+  const epKo = cleaned.match(/^제\s*\d+\s*화\s*[_\-·.:]?\s*(.+)$/u);
+  if (epKo?.[1]?.trim()) return stripEpisodePrefixes(epKo[1]);
 
   // 레거시 Ep006_제6화… (Ep/ST + 숫자3 + _)
   const legacy = cleaned.match(/^(?:Ep|EP|ST)\d{3}_(.+)$/i);
-  if (legacy?.[1]?.trim()) return legacy[1].trim();
+  if (legacy?.[1]?.trim()) return stripEpisodePrefixes(legacy[1]);
 
-  return String(fallback || cleaned).trim();
+  return stripEpisodePrefixes(fallback || cleaned);
 }
 
-/** 소설 읽기 목록 라벨 — "제3화 유진이의 모험" 형식 */
+/** 소설 읽기 목록 라벨 — "제1화 혼자 떠난 산속 모험" (회차 한 번만) */
 export function formatStoryReaderLabel(story) {
   const num = story?.number ?? 0;
   const epLabel = `제${num}화`;
-  let subtitle = extractStoryReaderTitle(story?.content || '', story?.title || '');
-  // 본제목에 남은 회차 접두 제거 (중복 "제3화 제3화 …" 방지)
-  subtitle = subtitle.replace(/^제\d+화\s*[·.\-]?\s*/, '').trim();
-  subtitle = subtitle.replace(/^(?:ST|EP)\d+\s*[_\-·.:]?\s*/i, '').trim();
+  const fromContent = extractStoryReaderTitle(story?.content || '', '');
+  const fromTitle = stripEpisodePrefixes(story?.title || '');
+  const subtitle = fromContent || fromTitle;
   return subtitle ? `${epLabel} ${subtitle}` : epLabel;
 }
 
