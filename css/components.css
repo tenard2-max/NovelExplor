@@ -682,6 +682,14 @@
   margin: 0 0 1rem;
 }
 
+.reader-content p.tts-active,
+.reader-content h1.tts-active {
+  background: rgba(96, 165, 250, 0.2);
+  border-radius: 4px;
+  box-shadow: inset 0 0 0 1px rgba(96, 165, 250, 0.4);
+  transition: background 0.25s ease, box-shadow 0.25s ease;
+}
+
 /* ── 카드 리스트 ── */
 .card-grid {
   display: grid;

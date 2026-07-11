@@ -1,8 +1,8 @@
-/** 리더 TTS — Web Speech API + 캐릭터 등장 시 배경 전환 */
+/** 리더 TTS — Web Speech API + 캐릭터 등장 시 배경 전환 + 문단 하이라이트 */
 
 import { on } from '../core/events.js';
 import * as project from '../core/project.js';
-import { getCurrentStoryMarkdown } from './reader.js';
+import { getCurrentStoryMarkdownSync, tagReaderBlocksForTts } from './reader.js';
 import { setTtsWallpaper } from './canvas-wallpaper.js';
 
 const synth = typeof window !== 'undefined' ? window.speechSynthesis : null;
@@ -12,10 +12,13 @@ let koreanVoice = null;
 let playing = false;
 let paused = false;
 let chunkIndex = 0;
+/** @type {Array<{ text: string, paraIndex: number }>} */
 let chunks = [];
 let nameEntries = [];
 let statusTimer = null;
 let statusRestore = '';
+let keepAliveTimer = null;
+let startGuardTimer = null;
 
 /** @type {SpeechSynthesisUtterance | null} */
 let currentUtterance = null;
@@ -63,18 +66,27 @@ function initVoices() {
   }
 }
 
-async function start() {
+/** 클릭 제스처 컨텍스트 안에서 첫 speak() 호출을 보장 */
+function primeSpeechOnGesture() {
+  if (!synth) return;
+  if (synth.paused) synth.resume();
+  initVoices();
+  const warm = new SpeechSynthesisUtterance('\u200b');
+  warm.volume = 0;
+  warm.lang = 'ko-KR';
+  if (koreanVoice) warm.voice = koreanVoice;
+  synth.speak(warm);
+}
+
+function start() {
   if (!synth) {
     showStatus('이 브라우저는 음성 읽기를 지원하지 않습니다.');
     return;
   }
 
-  if (!voicesReady) initVoices();
-  if (!koreanVoice) {
-    showStatus('한국어 음성이 없습니다. 시스템 TTS 설정을 확인하세요.');
-  }
+  initVoices();
 
-  const markdown = await getCurrentStoryMarkdown();
+  const markdown = getCurrentStoryMarkdownSync();
   const plain = markdownToSpeakableText(markdown);
   if (!plain.trim()) {
     showStatus('읽을 내용이 없습니다.');
@@ -88,18 +100,37 @@ async function start() {
     return;
   }
 
-  stop({ silent: true });
+  tagReaderBlocksForTts(document.querySelector('#reader-content .reader-inner'));
+
+  const needsCancel = playing || synth.speaking || synth.pending;
+  resetPlaybackState({ silent: true });
+
   playing = true;
   paused = false;
   chunkIndex = 0;
   updateButtons();
-  showStatus('읽는 중…');
+  showStatus('준비 중…');
 
-  speakNextChunk();
+  const begin = () => {
+    if (!playing) return;
+    primeSpeechOnGesture();
+    speakNextChunk();
+  };
+
+  if (needsCancel) {
+    synth.cancel();
+    window.setTimeout(begin, 60);
+  } else {
+    begin();
+  }
 }
 
 function speakNextChunk() {
   if (!playing || !synth) return;
+
+  while (chunkIndex < chunks.length && !chunks[chunkIndex]?.text?.trim()) {
+    chunkIndex += 1;
+  }
 
   if (chunkIndex >= chunks.length) {
     finish();
@@ -109,30 +140,37 @@ function speakNextChunk() {
   const chunk = chunks[chunkIndex];
   onChunkStart(chunk);
 
-  const utterance = new SpeechSynthesisUtterance(chunk);
+  const utterance = new SpeechSynthesisUtterance(chunk.text);
   utterance.lang = 'ko-KR';
   if (koreanVoice) utterance.voice = koreanVoice;
   utterance.rate = 1;
   utterance.pitch = 1;
 
+  clearTimeout(startGuardTimer);
+  startGuardTimer = window.setTimeout(() => {
+    if (!playing || paused || currentUtterance !== utterance) return;
+    handleSpeakFailure('음성 재생이 시작되지 않았습니다. 다시 시도해 주세요.');
+  }, 4500);
+
   utterance.onstart = () => {
     if (!playing) return;
+    clearTimeout(startGuardTimer);
+    startKeepAlive();
     updateButtons();
+    showStatus('읽는 중…');
   };
 
   utterance.onend = () => {
     if (!playing) return;
+    clearTimeout(startGuardTimer);
     chunkIndex += 1;
     speakNextChunk();
   };
 
   utterance.onerror = (e) => {
     if (e.error === 'interrupted' || e.error === 'canceled') return;
-    playing = false;
-    paused = false;
-    currentUtterance = null;
-    updateButtons();
-    showStatus('음성 읽기 오류가 발생했습니다.');
+    clearTimeout(startGuardTimer);
+    handleSpeakFailure(ttsErrorMessage(e.error));
   };
 
   currentUtterance = utterance;
@@ -140,21 +178,79 @@ function speakNextChunk() {
 }
 
 function onChunkStart(chunk) {
-  const match = findCharacterInText(chunk, nameEntries);
+  highlightChunk(chunk.paraIndex);
+  const match = findCharacterInText(chunk.text, nameEntries);
   if (match?.avatar) {
     setTtsWallpaper(match.avatar);
   }
 }
 
-function stop(opts = {}) {
+function highlightChunk(paraIndex) {
+  clearHighlight();
+  if (paraIndex == null || paraIndex < 0) return;
+
+  const el = document.querySelector(`#reader-content .reader-inner [data-tts-idx="${paraIndex}"]`);
+  if (!el) return;
+
+  el.classList.add('tts-active');
+  el.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+}
+
+function clearHighlight() {
+  document.querySelectorAll('#reader-content .tts-active').forEach((el) => {
+    el.classList.remove('tts-active');
+  });
+}
+
+function startKeepAlive() {
+  stopKeepAlive();
+  keepAliveTimer = window.setInterval(() => {
+    if (!playing || paused || !synth) {
+      stopKeepAlive();
+      return;
+    }
+    if (synth.speaking) synth.resume();
+  }, 8000);
+}
+
+function stopKeepAlive() {
+  if (keepAliveTimer) {
+    clearInterval(keepAliveTimer);
+    keepAliveTimer = null;
+  }
+}
+
+function handleSpeakFailure(message) {
+  playing = false;
+  paused = false;
+  currentUtterance = null;
+  stopKeepAlive();
+  clearHighlight();
+  synth?.cancel();
+  updateButtons();
+  showStatus(message);
+}
+
+function resetPlaybackState(opts = {}) {
   const wasPlaying = playing;
   playing = false;
   paused = false;
   chunkIndex = 0;
   chunks = [];
   currentUtterance = null;
-  synth?.cancel();
+  clearTimeout(startGuardTimer);
+  stopKeepAlive();
+  clearHighlight();
   updateButtons();
+  if (!opts.silent && wasPlaying) {
+    showStatus('읽기를 정지했습니다.');
+  }
+}
+
+function stop(opts = {}) {
+  const wasPlaying = playing;
+  resetPlaybackState({ silent: true });
+  synth?.cancel();
   if (!opts.silent && wasPlaying) {
     showStatus('읽기를 정지했습니다.');
   }
@@ -173,6 +269,7 @@ function pause() {
   if (!playing || !synth || paused) return;
   synth.pause();
   paused = true;
+  stopKeepAlive();
   updateButtons();
   showStatus('일시정지');
 }
@@ -181,6 +278,7 @@ function resume() {
   if (!playing || !synth || !paused) return;
   synth.resume();
   paused = false;
+  startKeepAlive();
   updateButtons();
   showStatus('읽는 중…');
 }
@@ -189,8 +287,28 @@ function finish() {
   playing = false;
   paused = false;
   currentUtterance = null;
+  clearTimeout(startGuardTimer);
+  stopKeepAlive();
+  clearHighlight();
   updateButtons();
   showStatus('읽기 완료');
+}
+
+function ttsErrorMessage(error) {
+  switch (error) {
+    case 'not-allowed':
+      return '음성 재생 권한이 거부되었습니다.';
+    case 'network':
+      return '네트워크 음성 로드에 실패했습니다.';
+    case 'synthesis-unavailable':
+      return '음성 합성을 사용할 수 없습니다.';
+    case 'audio-busy':
+      return '다른 앱이 오디오를 사용 중입니다.';
+    case 'language-unavailable':
+      return '한국어 음성을 사용할 수 없습니다.';
+    default:
+      return '음성 읽기 오류가 발생했습니다.';
+  }
 }
 
 function updateButtons() {
@@ -253,16 +371,21 @@ export function markdownToSpeakableText(md) {
   return text.trim();
 }
 
+/** @returns {Array<{ text: string, paraIndex: number }>} */
 export function chunkSpeakableText(text) {
   const paragraphs = text.split(/\n\s*\n/).map((p) => p.replace(/\s+/g, ' ').trim()).filter(Boolean);
-  if (!paragraphs.length) return text.trim() ? [text.trim()] : [];
+  if (!paragraphs.length) {
+    const trimmed = text.trim();
+    return trimmed ? [{ text: trimmed, paraIndex: 0 }] : [];
+  }
 
-  const chunks = [];
+  const result = [];
   const maxLen = 280;
 
-  for (const para of paragraphs) {
+  for (let paraIndex = 0; paraIndex < paragraphs.length; paraIndex += 1) {
+    const para = paragraphs[paraIndex];
     if (para.length <= maxLen) {
-      chunks.push(para);
+      result.push({ text: para, paraIndex });
       continue;
     }
 
@@ -271,16 +394,16 @@ export function chunkSpeakableText(text) {
     for (const sentence of sentences) {
       const next = buf ? `${buf} ${sentence}` : sentence;
       if (next.length > maxLen && buf) {
-        chunks.push(buf);
+        result.push({ text: buf, paraIndex });
         buf = sentence;
       } else {
         buf = next;
       }
     }
-    if (buf) chunks.push(buf);
+    if (buf) result.push({ text: buf, paraIndex });
   }
 
-  return chunks;
+  return result;
 }
 
 function characterAvatarUrl(ch) {

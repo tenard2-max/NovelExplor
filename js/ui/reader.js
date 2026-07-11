@@ -177,6 +177,7 @@ export async function showStory(num, contentEl, selectEl) {
   try {
     const markdown = await resolveStoryContent(entry);
     contentEl.innerHTML = `<div class="reader-inner">${simpleMarkdownToHtml(markdown)}</div>`;
+    tagReaderBlocksForTts(contentEl.querySelector('.reader-inner'));
   } catch (err) {
     contentEl.innerHTML = `<p class="inspector-empty">로드 실패: ${escapeHtml(err.message)}</p>`;
   }
@@ -192,10 +193,14 @@ export function getCurrentStoryNumber() {
   return currentStoryNum;
 }
 
-export async function getCurrentStoryMarkdown() {
+export function getCurrentStoryMarkdownSync() {
   const entry = catalog.find((s) => s.number === currentStoryNum);
   if (!entry) return '';
   return resolveStoryContent(entry);
+}
+
+export async function getCurrentStoryMarkdown() {
+  return getCurrentStoryMarkdownSync();
 }
 
 async function deleteCurrentStory() {
@@ -242,6 +247,14 @@ async function deleteAllStories() {
   await project.deleteAllStories();
   autosave.markDirty();
   emit('project:loaded', project.getCurrentProject());
+}
+
+/** TTS 하이라이트용 — 문단·제목 블록에 순번 부여 */
+export function tagReaderBlocksForTts(inner) {
+  if (!inner) return;
+  inner.querySelectorAll('p, h1').forEach((el, i) => {
+    el.dataset.ttsIdx = String(i);
+  });
 }
 
 function escapeHtml(str) {
