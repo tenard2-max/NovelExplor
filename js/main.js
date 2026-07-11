@@ -32,7 +32,7 @@ import { initGithubPanel } from './ui/github-panel.js';
 import { initGithubSync } from './core/github-sync.js';
 import { initStorySync } from './ui/story-sync.js';
 import { initTimeline } from './ui/timeline-panel.js';
-import { initAuth, isLoggedIn, getCurrentUser, ROLES, canUpload } from './core/auth.js';
+import { initAuth, isLoggedIn, getCurrentUser, ROLES, canUpload, canSaveProject } from './core/auth.js';
 import { initAuthGate, showAuthGate, hideAuthGate, whenAuthenticated } from './ui/auth-gate.js';
 import { initSettings, updateUserBadge } from './ui/settings-panel.js';
 import { initPermissions, applyUploadPermissions } from './ui/permissions.js';
@@ -92,14 +92,17 @@ async function boot() {
   } else {
     const recovered = await offerLocalRecovery();
     if (!recovered) {
-      await project.createProject('인류 생존 프로젝트', true);
+      if (canSaveProject(user)) {
+        await project.createProject('인류 생존 프로젝트', true);
+      }
+      // 일반 사용자: 프로젝트 없음 → 열기로 불러와야 함
     }
   }
   warnIfWrongOrigin();
   refreshNavVersions();
   await refreshNavVersionsFromGithub();
   initAppVersion();
-  switchView('master');
+  switchView(canSaveProject(user) ? 'master' : 'character');
 
   if (user?.mustChangePassword) {
     switchView('settings');
@@ -131,6 +134,10 @@ function warnIfWrongOrigin() {
 
 function initActions() {
   bindAction('new-project', async () => {
+    if (!canSaveProject()) {
+      alert('일반 사용자는 프로젝트를 만들 수 없습니다. 프로젝트 열기만 가능합니다.');
+      return;
+    }
     const title = prompt('프로젝트 제목:', '새 프로젝트');
     if (title === null) return;
     try {
@@ -158,11 +165,17 @@ function initActions() {
         if (!ok) return;
         await flushPendingSave();
         await autosave.flushSave(true);
-        const filename = await exportTimestampedBackup({ notify: false });
+        // 관리자만 열기 직후 동기화 파일 재기록
+        let filename = picked.name || '';
+        if (canSaveProject()) {
+          filename = await exportTimestampedBackup({ notify: false });
+        }
         switchView('character');
         await showAlert(
           '프로젝트 열기',
-          `동기화 파일을 적용했습니다. (브라우저 DB 1개 프로젝트)<br><code>${picked.name || filename}</code>`
+          canSaveProject()
+            ? `동기화 파일을 적용했습니다. (브라우저 DB 1개 프로젝트)<br><code>${picked.name || filename}</code>`
+            : `프로젝트를 불러왔습니다.<br><code>${picked.name || filename}</code>`
         );
       }
     } catch (err) {
@@ -186,7 +199,7 @@ function initActions() {
     'NovelExplor',
     '인류 생존 프로젝트 — 복선·스토리·세계관 워크스페이스<br><br>' +
     '<strong>XML</strong>: Pages 고정 원본<br>' +
-    '<strong>프로젝트 저장</strong>: 브라우저 DB + 저장 폴더에 YYYYMMDDHHMMSS.json<br>' +
+    '<strong>프로젝트 저장</strong>: 관리자만 — 브라우저 DB + 저장 폴더에 YYYYMMDDHHMMSS.json<br>' +
     '<strong>프로젝트 열기</strong>: 저장 폴더 목록에서 불러오기'
   ));
 
@@ -195,6 +208,10 @@ function initActions() {
 }
 
 async function saveCurrentProject() {
+  if (!canSaveProject()) {
+    alert('일반 사용자는 프로젝트를 저장할 수 없습니다. 프로젝트 열기만 가능합니다.');
+    return;
+  }
   try {
     await flushPendingSave();
     await autosave.flushSave(true);

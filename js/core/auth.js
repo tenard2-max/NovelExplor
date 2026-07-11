@@ -45,6 +45,16 @@ export function canUpload(user = currentUser) {
   return user.role !== ROLES.USER;
 }
 
+/** 관리자(마스터·개발자·소설가)만 프로젝트 저장·생성 가능. 일반 사용자는 열기만 */
+export function canSaveProject(user = currentUser) {
+  return canUpload(user);
+}
+
+/** 로그인한 사용자는 프로젝트 열기 가능 */
+export function canOpenProject(user = currentUser) {
+  return !!user;
+}
+
 /** 마스터만 사용자/관리자 권한 변경 */
 export function canManageRoles(user = currentUser) {
   return user?.role === ROLES.MASTER;

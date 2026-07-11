@@ -36,6 +36,17 @@
           <span class="nav-icon">📖</span><span class="nav-label">Story Bible</span>
         </button>
 
+        <p class="nav-section-label" data-nav-section="project">프로젝트</p>
+        <button class="nav-item" data-action="new-project" data-icon="＋" title="새 프로젝트 만들기">
+          <span class="nav-icon">＋</span><span class="nav-label">새 프로젝트</span>
+        </button>
+        <button class="nav-item" data-action="open-project" data-icon="📂" title="동기화 JSON 열기">
+          <span class="nav-icon">📂</span><span class="nav-label">프로젝트 열기</span>
+        </button>
+        <button class="nav-item" data-action="save-project" data-icon="💾" title="DB 저장 + 동기화 파일 기록">
+          <span class="nav-icon">💾</span><span class="nav-label">프로젝트 저장</span>
+        </button>
+
         <p class="nav-section-label">세계관 · 스토리</p>
         <button class="nav-item" data-view="world" data-icon="🌍">
           <span class="nav-icon">🌍</span><span class="nav-label">세계관</span>
@@ -377,18 +388,6 @@
       </div>
 
       <div class="upload-section">
-        <h3>프로젝트</h3>
-        <p class="local-db-hint">
-          <strong>저장</strong> = DB 반영 + 연결 폴더에 <code>YYYYMMDDHHMMSS.json</code> 기록<br>
-          <strong>열기</strong> = JSON 선택 후 미리보기 → <strong>적용</strong>
-        </p>
-        <button class="upload-btn full" data-action="new-project">＋ 새 프로젝트</button>
-        <button class="upload-btn full" data-action="open-project">📂 프로젝트 열기</button>
-        <button class="upload-btn full upload-btn-primary" data-action="save-project">💾 프로젝트 저장</button>
-        <p id="backup-status" class="backup-status">최근 동기화: —</p>
-      </div>
-
-      <div class="upload-section">
         <h3>최근 Import</h3>
         <ul id="import-log" class="import-log">
           <li class="import-log-empty">아직 없음</li>
@@ -403,6 +402,7 @@
           <dt>복선</dt><dd id="info-foreshadows">0</dd>
           <dt>인물</dt><dd id="info-characters">0</dd>
         </dl>
+        <p id="backup-status" class="backup-status">최근 동기화: —</p>
       </div>
     </aside>
   </div>

@@ -24,6 +24,15 @@ body {
   overflow: hidden;
 }
 
+/* 일반 사용자: 우측 업로드 패널 숨김 → 2열 레이아웃 */
+body.role-user .app {
+  grid-template-columns: minmax(200px, 10vw) minmax(400px, 1fr);
+}
+
+body.role-user .upload-panel {
+  display: none !important;
+}
+
 .app > * {
   min-height: 0;
   min-width: 0;
@@ -865,6 +874,10 @@ body {
 @media (max-width: 900px) {
   .app {
     grid-template-columns: 56px minmax(0, 1fr) 56px;
+  }
+
+  body.role-user .app {
+    grid-template-columns: 56px minmax(0, 1fr);
   }
 
   .nav-label,

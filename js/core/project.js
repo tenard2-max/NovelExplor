@@ -15,6 +15,7 @@ import { dedupeTimelineByEpisode } from './story-sync-engine.js';
 import {
   getCurrentUser,
   canCreateUnlimitedProjects,
+  canSaveProject,
   MAX_USER_PROJECTS,
 } from './auth.js';
 
@@ -163,6 +164,9 @@ export function characterHasPhoto(ch) {
 export async function createProject(title = '새 프로젝트', useSeed = true) {
   const user = getCurrentUser();
   if (!user) throw new Error('로그인이 필요합니다.');
+  if (!canSaveProject(user)) {
+    throw new Error('일반 사용자는 프로젝트를 만들 수 없습니다. 프로젝트 열기만 가능합니다.');
+  }
 
   if (!canCreateUnlimitedProjects(user)) {
     const owned = await countOwnedProjects(user.id);
@@ -1418,12 +1422,8 @@ export async function importProjectJson(jsonText) {
   const user = getCurrentUser();
   if (!user) throw new Error('로그인이 필요합니다.');
 
-  if (!canCreateUnlimitedProjects(user)) {
-    const owned = await countOwnedProjects(user.id);
-    if (owned >= MAX_USER_PROJECTS) {
-      throw new Error(`일반 사용자는 프로젝트를 최대 ${MAX_USER_PROJECTS}개까지 가질 수 있습니다.`);
-    }
-  }
+  // 열기(import)는 모든 로그인 사용자 허용. 생성·저장만 관리자 제한.
+  // clearAllProjects 이후 호출되므로 소유 개수 제한은 적용하지 않음.
 
   const data = JSON.parse(jsonText);
 
