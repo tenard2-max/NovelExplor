@@ -237,26 +237,24 @@ function renderTimelineSection(doc) {
   const rows = list.map((t) => `
     <div class="xml-tl-row">
       <span>EP${escapeHtml(String(t.episode).padStart(3, '0'))}</span>
-      <strong>${escapeHtml(t.title)}</strong>
-      <small>${escapeHtml(t.date)}</small>
+      <strong>${escapeHtml(t.date || '—')}</strong>
     </div>`).join('');
   return `<div class="xml-tl-list">${rows || '<p class="xml-section-empty">이벤트 없음</p>'}</div>`;
 }
 
-/** 타임라인: IndexedDB 우선, 없으면 XML 폴백 */
+/** 타임라인: IndexedDB 우선 — 년월일만 표시 */
 function renderTimelineSectionFromIdb(doc) {
   const idb = [...(project.getCache().timeline || [])]
-    .sort((a, b) => (a.episode - b.episode) || String(a.title).localeCompare(String(b.title)));
+    .sort((a, b) => (a.episode - b.episode) || String(a.date || '').localeCompare(String(b.date || '')));
   if (idb.length) {
-    const rows = idb.map((t) => `
-      <article class="xml-tl-row xml-tl-row--rich">
-        <div class="xml-tl-row-main">
-          <span>EP${escapeHtml(String(t.episode).padStart(3, '0'))}</span>
-          <strong>${escapeHtml(t.title)}</strong>
-          <small>${escapeHtml(t.source === 'story-sync' ? (t.keywords || []).join('·') : (t.date || ''))}</small>
-        </div>
-        ${t.description ? `<p class="xml-tl-desc">${escapeHtml(t.description)}</p>` : ''}
-      </article>`).join('');
+    const rows = idb.map((t) => {
+      const date = t.date || (/^\d{4}-\d{2}-\d{2}$/.test(String(t.title || '')) ? t.title : '—');
+      return `
+      <div class="xml-tl-row">
+        <span>EP${escapeHtml(String(t.episode).padStart(3, '0'))}</span>
+        <strong>${escapeHtml(date)}</strong>
+      </div>`;
+    }).join('');
     return `<div class="xml-tl-list">${rows}</div>`;
   }
   if (doc) return renderTimelineSection(doc);

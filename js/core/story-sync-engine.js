@@ -199,6 +199,7 @@ function collectCooccurrencePairs(episodes, characters, nameStats) {
 
 /**
  * 키워드가 있는 문단/구간만 타임라인 후보로 추출
+ * 표시용 필드는 년월일(date) 중심
  */
 export function extractTimelineCandidates(episodes) {
   const results = [];
@@ -219,15 +220,12 @@ export function extractTimelineCandidates(episodes) {
       const hits = [...block.matchAll(kwRe)].map((m) => m[0]);
       if (!hits.length) continue;
       const uniq = [...new Set(hits)];
-      const firstLine = block.split(/\n/).find((l) => l.trim()) || '';
-      const title = truncate(
-        firstLine.replace(/^#+\s*/, '').replace(/^제?\d+화[.\s]*/, '').trim() || uniq.join('·'),
-        40
-      );
+      const date = extractDateFromText(block) || episodeFallbackDate(ep.number);
       matched.push({
         episode: ep.number,
-        title,
-        description: truncate(block.replace(/\s+/g, ' '), 120),
+        title: date, // 목록·그래프에서도 년월일만 쓰도록
+        date,
+        description: '',
         keywords: uniq,
         source: 'story-sync',
       });
@@ -235,12 +233,46 @@ export function extractTimelineCandidates(episodes) {
 
     if (!matched.length) continue;
 
-    // 화당 과도한 후보 제한: 키워드 다양성 높은 상위 3개
+    // 화당 과도한 후보 제한: 키워드 다양성 높은 상위 3개 · 날짜 중복 제거
     matched.sort((a, b) => b.keywords.length - a.keywords.length);
-    results.push(...matched.slice(0, 3));
+    const seenDates = new Set();
+    for (const row of matched) {
+      if (seenDates.has(row.date)) continue;
+      seenDates.add(row.date);
+      results.push(row);
+      if (seenDates.size >= 3) break;
+    }
   }
 
   return results;
+}
+
+/** 본문에서 YYYY-MM-DD / 2024년 3월 15일 등 추출 */
+export function extractDateFromText(text = '') {
+  const s = String(text || '');
+  const iso = s.match(/(20\d{2})[.\-\/](\d{1,2})[.\-\/](\d{1,2})/);
+  if (iso) return formatYmd(iso[1], iso[2], iso[3]);
+  const kor = s.match(/(20\d{2})\s*년\s*(\d{1,2})\s*월\s*(\d{1,2})\s*일?/);
+  if (kor) return formatYmd(kor[1], kor[2], kor[3]);
+  const korYm = s.match(/(20\d{2})\s*년\s*(\d{1,2})\s*월/);
+  if (korYm) return formatYmd(korYm[1], korYm[2], '1');
+  return '';
+}
+
+function formatYmd(y, m, d) {
+  const yy = String(y).padStart(4, '0');
+  const mm = String(Number(m)).padStart(2, '0');
+  const dd = String(Number(d)).padStart(2, '0');
+  return `${yy}-${mm}-${dd}`;
+}
+
+/** 본문에 날짜가 없을 때 EP 번호 기반 표시용 날짜 */
+function episodeFallbackDate(episodeNumber) {
+  const n = Math.max(1, Number(episodeNumber) || 1);
+  // 2024-01-01 부터 EP마다 7일 간격
+  const base = Date.UTC(2024, 0, 1);
+  const dt = new Date(base + (n - 1) * 7 * 24 * 60 * 60 * 1000);
+  return formatYmd(dt.getUTCFullYear(), dt.getUTCMonth() + 1, dt.getUTCDate());
 }
 
 function truncate(s, max) {
@@ -282,20 +314,19 @@ ${relRows || '| - | - | - | - | - |'}
 `;
 }
 
-/** 타임라인 → 05_TIMELINE.md */
+/** 타임라인 → 05_TIMELINE.md (년월일만) */
 export function buildTimelineMarkdown(timeline = []) {
   const rows = [...timeline]
-    .sort((a, b) => (a.episode - b.episode) || String(a.title).localeCompare(String(b.title)))
+    .sort((a, b) => (a.episode - b.episode) || String(a.date || '').localeCompare(String(b.date || '')))
     .map((t) => {
       const ep = `EP${String(t.episode).padStart(2, '0')}`;
-      const kw = (t.keywords || []).length ? ` · ${(t.keywords || []).join('/')}` : '';
-      const desc = t.description ? `\n  - ${String(t.description).replace(/\s+/g, ' ').slice(0, 120)}` : '';
-      return `${ep} — ${t.title || '사건'}${kw}${desc}`;
+      const date = t.date || t.title || '—';
+      return `${ep} — ${date}`;
     });
 
   return `# 05_TIMELINE
 
-> 스토리 동기화로 자동 갱신 · ${new Date().toISOString()}
+> 년월일 표시 · 스토리 동기화 · ${new Date().toISOString()}
 
 ${rows.join('\n') || '(사건 없음)'}
 `;

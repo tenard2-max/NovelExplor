@@ -512,9 +512,10 @@ function buildTimelineGraph(cache) {
   const step = items.length > 1 ? (w - padding * 2) / (items.length - 1) : 0;
 
   items.forEach((ev, i) => {
+    const date = ev.date || (/^\d{4}-\d{2}-\d{2}$/.test(String(ev.title || '')) ? ev.title : '—');
     nodes.push({
       id: ev.id,
-      label: ev.title,
+      label: date,
       sub: `EP${ev.episode}`,
       color: '#34d399',
       x: padding + step * i,

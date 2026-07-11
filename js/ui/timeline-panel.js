@@ -28,11 +28,12 @@ function render() {
   if (sort === 'date') items.sort((a, b) => (a.date || '').localeCompare(b.date || ''));
   else items.sort((a, b) => a.episode - b.episode);
 
-  list.innerHTML = items.map((t) => `
+  list.innerHTML = items.map((t) => {
+    const date = t.date || (/^\d{4}-\d{2}-\d{2}$/.test(String(t.title || '')) ? t.title : '—');
+    return `
     <div class="timeline-item">
       <span>EP${String(t.episode).padStart(3, '0')}</span>
-      <span><strong>${t.title}</strong><br><small>${t.description || ''}</small></span>
-      <span><small>${t.date || ''}</small></span>
-    </div>
-  `).join('');
+      <span><strong>${date}</strong></span>
+    </div>`;
+  }).join('');
 }
