@@ -309,6 +309,8 @@ async function buildBackupJson({ lite = false } = {}) {
   return payload ? JSON.stringify(payload, null, 2) : null;
 }
 
+export { buildBackupJson };
+
 export async function buildBackupPayload({ lite = false } = {}) {
   const proj = project.getCurrentProject();
   if (!proj) return null;

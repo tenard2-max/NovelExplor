@@ -1,4 +1,4 @@
-/** 기본 프로젝트 — 마스터가 지정, 일반 사용자는 열람만 */
+/** 기본 프로젝트 — 일반 스냅샷과 동일, 사용자가 브라우저에 프로젝트가 없을 때 자동 로드용 포인터 */
 
 import * as storage from './storage.js';
 import { nowIso } from './utils.js';
@@ -7,11 +7,13 @@ import { getGithubConfig, snapshotsDir, hasGithubToken } from './github-config.j
 import { getRepoFileJson, listRepoDir } from './github-api.js';
 import { pullProjectFromGithub } from './github-pull.js';
 import { syncProjectToGithub, waitUntilGithubIdle } from './github-sync.js';
-import { exportTimestampedBackup } from './backup.js';
+import { exportTimestampedBackup, buildBackupJson, restoreFromBackup } from './backup.js';
 import { getCurrentProject } from './project.js';
 import { flushSave } from './autosave.js';
+import { emit } from './events.js';
 
 const SETTINGS_KEY = 'app-default-project';
+const BACKUP_KEY = 'app-default-project-backup';
 
 /**
  * @typedef {{ snapshotId: string, title: string, updatedAt: string, filename?: string }} DefaultProjectMeta
@@ -95,10 +97,11 @@ function formatStampLabel(stamp) {
 }
 
 /**
- * 마스터: 현재 프로젝트를 기본 프로젝트로 저장
- * 1) 로컬 DB·백업 파일 저장
- * 2) GitHub에 스냅샷 + default.json 포인터 커밋
- * @returns {Promise<{ snapshotId: string, filename: string }>}
+ * 마스터: 현재 프로젝트를 기본으로 지정
+ * - 일반 프로젝트 저장과 동일 (타임스탬프 JSON)
+ * - 로컬 IndexedDB에 백업 보관 → 사용자 자동 로드용
+ * - GitHub PAT가 있으면 default.json 포인터도 시도 (실패해도 로컬 지정은 성공)
+ * @returns {Promise<{ snapshotId: string, filename: string, githubOk: boolean, githubError: string }>}
  */
 export async function saveAsDefaultProject() {
   const user = getCurrentUser();
@@ -107,57 +110,99 @@ export async function saveAsDefaultProject() {
   }
   const proj = getCurrentProject();
   if (!proj) throw new Error('열린 프로젝트가 없습니다.');
-  if (!hasGithubToken()) {
-    throw new Error(
-      '기본 프로젝트 저장에는 GitHub PAT가 필요합니다.\n'
-      + '우측 「파일」패널 → GitHub → Token 입력 후 「GitHub 설정 저장」을 눌러 주세요.'
-    );
-  }
 
   await flushSave(true);
 
-  // 로컬 백업만 먼저 (GitHub는 아래에서 명시적으로 처리)
+  // 일반 저장과 동일 — 테마 태그만 default 로 구분 (없어도 됨)
   const filename = await exportTimestampedBackup({
     notify: false,
+    theme: 'default',
     skipGithub: true,
   });
   const snapshotId = String(filename).replace(/\.json$/i, '');
 
-  await waitUntilGithubIdle();
-  let result;
-  try {
-    result = await syncProjectToGithub({
-      snapshotId,
-      reason: 'default',
-      asDefault: true,
-      defaultTitle: proj.title || '기본 프로젝트',
-    });
-  } catch (err) {
-    throw new Error(`GitHub 업로드 실패: ${err?.message || err}`);
-  }
-  if (!result?.snapshotId) {
-    throw new Error('GitHub 동기화가 시작되지 않았습니다. 잠시 후 다시 시도하세요.');
-  }
+  // 로컬 전체 백업 보관 (브라우저에 프로젝트 없을 때 자동 로드)
+  const jsonText = await buildBackupJson({ lite: false });
+  if (!jsonText) throw new Error('백업 데이터를 만들 수 없습니다.');
 
-  const meta = {
-    snapshotId: result.snapshotId,
+  await storage.put('settings', {
+    id: BACKUP_KEY,
+    jsonText,
+    snapshotId,
     title: proj.title || '기본 프로젝트',
     updatedAt: nowIso(),
-    filename: `${result.snapshotId}.json`,
+  });
+
+  const meta = {
+    snapshotId,
+    title: proj.title || '기본 프로젝트',
+    updatedAt: nowIso(),
+    filename,
   };
   await setLocalDefaultMeta(meta);
-  return { snapshotId: meta.snapshotId, filename: meta.filename };
+
+  let githubOk = false;
+  let githubError = '';
+  if (hasGithubToken()) {
+    try {
+      await waitUntilGithubIdle();
+      const result = await syncProjectToGithub({
+        snapshotId,
+        reason: 'default',
+        asDefault: true,
+        defaultTitle: proj.title || '기본 프로젝트',
+      });
+      githubOk = Boolean(result?.snapshotId);
+      if (!githubOk) {
+        githubError = 'GitHub 동기화가 시작되지 않았습니다.';
+      }
+    } catch (err) {
+      githubError = err?.message || String(err);
+      console.warn('[default-project] GitHub 반영 실패(로컬 지정은 완료):', err);
+    }
+  } else {
+    githubError = 'GitHub PAT 없음 — 로컬만 지정됨';
+  }
+
+  return {
+    snapshotId: meta.snapshotId,
+    filename: meta.filename,
+    githubOk,
+    githubError,
+  };
 }
 
 /**
- * 기본 프로젝트 불러오기 (GitHub default → 로컬 메타)
+ * 기본 프로젝트 불러오기
+ * 1) 로컬 IndexedDB 백업  2) GitHub default.json  3) 로컬 메타+GitHub 스냅샷
  * @returns {Promise<string|null>} snapshotId
  */
 export async function loadDefaultProject({ skipConfirm = false } = {}) {
+  // 1) 로컬 백업 (마스터가 이 브라우저에서 지정한 경우)
+  const localBackup = await storage.get('settings', BACKUP_KEY);
+  if (localBackup?.jsonText) {
+    await restoreFromBackup(localBackup.jsonText, {
+      replaceAll: true,
+      sourceFilename: localBackup.filename || `${localBackup.snapshotId || 'default'}.json`,
+      exportedAt: localBackup.updatedAt || '',
+    });
+    emit('project:loaded', getCurrentProject());
+    if (localBackup.snapshotId) {
+      await setLocalDefaultMeta({
+        snapshotId: localBackup.snapshotId,
+        title: localBackup.title || '기본 프로젝트',
+        updatedAt: localBackup.updatedAt || nowIso(),
+        filename: localBackup.filename || `${localBackup.snapshotId}.json`,
+      });
+    }
+    return localBackup.snapshotId || 'local-default';
+  }
+
+  // 2) GitHub default 포인터
   let meta = await fetchGithubDefaultMeta();
   if (!meta) meta = await getLocalDefaultMeta();
   if (!meta?.snapshotId) {
-    throw new Error('설정된 기본 프로젝트가 없습니다. 마스터가 먼저 지정해야 합니다.');
+    throw new Error('설정된 기본 프로젝트가 없습니다. 마스터가 「기본 프로젝트 저장」으로 지정해야 합니다.');
   }
 
   const id = await pullProjectFromGithub({
