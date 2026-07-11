@@ -2,15 +2,15 @@
   "format": "novel-explor-github-snapshot",
   "version": 1,
   "snapshotId": "20260711201701_유진이의_모험3(완결)",
-  "exportedAt": "2026-07-11T11:55:44.060Z",
+  "exportedAt": "2026-07-11T11:57:39.786Z",
   "backupType": "split",
   "project": {
-    "id": "9571156c-30e5-4d31-b62b-3bc2dfe1df9e",
-    "projectId": "9571156c-30e5-4d31-b62b-3bc2dfe1df9e",
+    "id": "064d9c0b-004d-4365-9f47-a4946574fdd2",
+    "projectId": "064d9c0b-004d-4365-9f47-a4946574fdd2",
     "title": "인류 생존 프로젝트",
     "author": "작가",
     "createdAt": "2026-07-10T07:59:52.491Z",
-    "updatedAt": "2026-07-11T11:55:44.033Z",
+    "updatedAt": "2026-07-11T11:57:39.762Z",
     "version": "1.0.0",
     "workspace": "NovelMD",
     "language": "ko",
@@ -28,8 +28,8 @@
   },
   "stories": [
     {
-      "id": "9571156c-30e5-4d31-b62b-3bc2dfe1df9e-1943974c-f544-4e21-95a4-f08273de1999-st-15",
-      "projectId": "9571156c-30e5-4d31-b62b-3bc2dfe1df9e",
+      "id": "064d9c0b-004d-4365-9f47-a4946574fdd2-1943974c-f544-4e21-95a4-f08273de1999-st-15",
+      "projectId": "064d9c0b-004d-4365-9f47-a4946574fdd2",
       "storyId": "1943974c-f544-4e21-95a4-f08273de1999-st-15",
       "title": "금이 간 벽",
       "number": 15,
@@ -40,8 +40,8 @@
       "updatedAt": "2026-07-10T05:37:21.294Z"
     },
     {
-      "id": "9571156c-30e5-4d31-b62b-3bc2dfe1df9e-1943974c-f544-4e21-95a4-f08273de1999-st-16",
-      "projectId": "9571156c-30e5-4d31-b62b-3bc2dfe1df9e",
+      "id": "064d9c0b-004d-4365-9f47-a4946574fdd2-1943974c-f544-4e21-95a4-f08273de1999-st-16",
+      "projectId": "064d9c0b-004d-4365-9f47-a4946574fdd2",
       "storyId": "1943974c-f544-4e21-95a4-f08273de1999-st-16",
       "title": "무너지는 공학관",
       "number": 16,
@@ -54,8 +54,8 @@
   ],
   "episodes": [
     {
-      "id": "9571156c-30e5-4d31-b62b-3bc2dfe1df9e-1943974c-f544-4e21-95a4-f08273de1999-ep-1",
-      "projectId": "9571156c-30e5-4d31-b62b-3bc2dfe1df9e",
+      "id": "064d9c0b-004d-4365-9f47-a4946574fdd2-1943974c-f544-4e21-95a4-f08273de1999-ep-1",
+      "projectId": "064d9c0b-004d-4365-9f47-a4946574fdd2",
       "episodeId": "1943974c-f544-4e21-95a4-f08273de1999-ep-1",
       "title": "마지막 1초 · 회귀 · AI폰 재기동",
       "number": 1,
@@ -68,8 +68,8 @@
       "updatedAt": "2026-07-10T05:25:30.193Z"
     },
     {
-      "id": "9571156c-30e5-4d31-b62b-3bc2dfe1df9e-1943974c-f544-4e21-95a4-f08273de1999-ep-2",
-      "projectId": "9571156c-30e5-4d31-b62b-3bc2dfe1df9e",
+      "id": "064d9c0b-004d-4365-9f47-a4946574fdd2-1943974c-f544-4e21-95a4-f08273de1999-ep-2",
+      "projectId": "064d9c0b-004d-4365-9f47-a4946574fdd2",
       "episodeId": "1943974c-f544-4e21-95a4-f08273de1999-ep-2",
       "title": "대학 친구들과 재회 · 미래 보스의 단서",
       "number": 2,
@@ -82,8 +82,8 @@
       "updatedAt": "2026-07-10T05:25:30.193Z"
     },
     {
-      "id": "9571156c-30e5-4d31-b62b-3bc2dfe1df9e-1943974c-f544-4e21-95a4-f08273de1999-ep-3",
-      "projectId": "9571156c-30e5-4d31-b62b-3bc2dfe1df9e",
+      "id": "064d9c0b-004d-4365-9f47-a4946574fdd2-1943974c-f544-4e21-95a4-f08273de1999-ep-3",
+      "projectId": "064d9c0b-004d-4365-9f47-a4946574fdd2",
       "episodeId": "1943974c-f544-4e21-95a4-f08273de1999-ep-3",
       "title": "지은과 재회 · 잃어버린 청춘의 감정",
       "number": 3,
@@ -96,8 +96,8 @@
       "updatedAt": "2026-07-10T05:25:30.193Z"
     },
     {
-      "id": "9571156c-30e5-4d31-b62b-3bc2dfe1df9e-1943974c-f544-4e21-95a4-f08273de1999-ep-4",
-      "projectId": "9571156c-30e5-4d31-b62b-3bc2dfe1df9e",
+      "id": "064d9c0b-004d-4365-9f47-a4946574fdd2-1943974c-f544-4e21-95a4-f08273de1999-ep-4",
+      "projectId": "064d9c0b-004d-4365-9f47-a4946574fdd2",
       "episodeId": "1943974c-f544-4e21-95a4-f08273de1999-ep-4",
       "title": "AI와 일상 시작 · 첫 이상 징후",
       "number": 4,
@@ -110,8 +110,8 @@
       "updatedAt": "2026-07-10T05:25:30.193Z"
     },
     {
-      "id": "9571156c-30e5-4d31-b62b-3bc2dfe1df9e-1943974c-f544-4e21-95a4-f08273de1999-ep-5",
-      "projectId": "9571156c-30e5-4d31-b62b-3bc2dfe1df9e",
+      "id": "064d9c0b-004d-4365-9f47-a4946574fdd2-1943974c-f544-4e21-95a4-f08273de1999-ep-5",
+      "projectId": "064d9c0b-004d-4365-9f47-a4946574fdd2",
       "episodeId": "1943974c-f544-4e21-95a4-f08273de1999-ep-5",
       "title": "민수의 맵부심 · AI의 유머와 인간성",
       "number": 5,
@@ -124,8 +124,8 @@
       "updatedAt": "2026-07-10T05:25:30.193Z"
     },
     {
-      "id": "9571156c-30e5-4d31-b62b-3bc2dfe1df9e-1943974c-f544-4e21-95a4-f08273de1999-ep-6",
-      "projectId": "9571156c-30e5-4d31-b62b-3bc2dfe1df9e",
+      "id": "064d9c0b-004d-4365-9f47-a4946574fdd2-1943974c-f544-4e21-95a4-f08273de1999-ep-6",
+      "projectId": "064d9c0b-004d-4365-9f47-a4946574fdd2",
       "episodeId": "1943974c-f544-4e21-95a4-f08273de1999-ep-6",
       "title": "AI가 투자 계획 제시 · 인류 생존 프로젝트 시작",
       "number": 6,
@@ -138,8 +138,8 @@
       "updatedAt": "2026-07-10T05:25:30.193Z"
     },
     {
-      "id": "9571156c-30e5-4d31-b62b-3bc2dfe1df9e-1943974c-f544-4e21-95a4-f08273de1999-ep-7",
-      "projectId": "9571156c-30e5-4d31-b62b-3bc2dfe1df9e",
+      "id": "064d9c0b-004d-4365-9f47-a4946574fdd2-1943974c-f544-4e21-95a4-f08273de1999-ep-7",
+      "projectId": "064d9c0b-004d-4365-9f47-a4946574fdd2",
       "episodeId": "1943974c-f544-4e21-95a4-f08273de1999-ep-7",
       "title": "아버지에게 투자금 확보 · 첫 자본 마련",
       "number": 7,
@@ -152,8 +152,8 @@
       "updatedAt": "2026-07-10T05:25:30.193Z"
     },
     {
-      "id": "9571156c-30e5-4d31-b62b-3bc2dfe1df9e-1943974c-f544-4e21-95a4-f08273de1999-ep-15",
-      "projectId": "9571156c-30e5-4d31-b62b-3bc2dfe1df9e",
+      "id": "064d9c0b-004d-4365-9f47-a4946574fdd2-1943974c-f544-4e21-95a4-f08273de1999-ep-15",
+      "projectId": "064d9c0b-004d-4365-9f47-a4946574fdd2",
       "episodeId": "1943974c-f544-4e21-95a4-f08273de1999-ep-15",
       "title": "금이 간 벽",
       "number": 15,
@@ -161,13 +161,13 @@
       "textFile": "EP015.md",
       "content": "제15화. 금이 간 벽\r\n\r\n다음 날.\r\n\r\n공학관 3층.\r\n\r\n세미나실.\r\n\r\n프로젝트 첫 회의.\r\n\r\n민수는 시작부터 책상 위에 커피 네 잔을 올려놓았다.\r\n\r\n\"일단.\"\r\n\r\n\"회의는 카페인이 있어야 돼.\"\r\n\r\n\"그래야 똑똑해진다.\"\r\n\r\n한하린이 조용히 물었다.\r\n\r\n\"...근거 있어?\"\r\n\r\n\"...없어.\"\r\n\r\n\"...\"\r\n\r\n\"...기분.\"\r\n\r\n서유나가 작게 웃었다.\r\n\r\n처음이었다.\r\n\r\n표정 변화가 거의 없던 그녀가 웃은 것은.\r\n\r\n민수는 그걸 보고 괜히 뿌듯해졌다.\r\n\r\n\"봐.\"\r\n\r\n\"효과 있잖아.\"\r\n\r\n지안은 종이컵을 들며 피식 웃었다.\r\n\r\n'분위기 메이커.'\r\n\r\n100년이 지나도,\r\n\r\n민수 같은 사람은 흔하지 않았다.\r\n\r\n---\r\n\r\n회의는 예상보다 평범했다.\r\n\r\n역할을 나누고,\r\n\r\n주제를 정하고,\r\n\r\n발표 날짜를 확인했다.\r\n\r\n지루할 정도로 평범했다.\r\n\r\n그래서일까.\r\n\r\n지안은 자꾸만\r\n\r\n어제의 진동이 떠올랐다.\r\n\r\n공학관.\r\n\r\n그 짧은 흔들림.\r\n\r\n그리고 머릿속을 스쳐 지나간\r\n\r\n붉은 하늘.\r\n\r\n\"...강지안?\"\r\n\r\n\"응?\"\r\n\r\n\"듣고 있어?\"\r\n\r\n민수였다.\r\n\r\n\"아.\"\r\n\r\n\"미안.\"\r\n\r\n\"딴 생각.\"\r\n\r\n민수가 장난스럽게 말했다.\r\n\r\n\"혹시 연애?\"\r\n\r\n\"아니.\"\r\n\r\n\"돈 생각?\"\r\n\r\n\"...\"\r\n\r\n\"...맞네.\"\r\n\r\n회의실이 웃음으로 가득 찼다.\r\n\r\n---\r\n\r\n회의가 끝난 뒤.\r\n\r\n네 사람은 복도로 나왔다.\r\n\r\n그때.\r\n\r\n복도 한쪽이 소란스러웠다.\r\n\r\n시설관리 직원 두 명이 벽을 살펴보고 있었다.\r\n\r\n한 사람이 손전등을 비추며 말했다.\r\n\r\n\"어제 없었는데.\"\r\n\r\n\"그러게.\"\r\n\r\n\"금이 갔네.\"\r\n\r\n민수가 다가갔다.\r\n\r\n\"무슨 일 있어요?\"\r\n\r\n직원이 웃으며 말했다.\r\n\r\n\"별거 아닙니다.\"\r\n\r\n\"오래된 건물이라.\"\r\n\r\n\"가끔 이래요.\"\r\n\r\n그 말에 학생들은 다시 흩어졌다.\r\n\r\n평범한 일.\r\n\r\n오래된 건물.\r\n\r\n그 정도였다.\r\n\r\n하지만.\r\n\r\n지안은 걸음을 멈췄다.\r\n\r\n벽을 바라봤다.\r\n\r\n금은 길지 않았다.\r\n\r\n손가락 두 마디 정도.\r\n\r\n아주 가늘었다.\r\n\r\n그런데.\r\n\r\n이상했다.\r\n\r\n'저 방향...'\r\n\r\n머릿속에서\r\n\r\n무너진 건물 하나가 겹쳐 보였다.\r\n\r\n순간.\r\n\r\n눈앞이 하얘졌다.\r\n\r\n\"...!\"\r\n\r\n숨이 막혔다.\r\n\r\nAI가 조용히 말했다.\r\n\r\n«주인님.»\r\n\r\n«심박수가 상승하고 있습니다.»\r\n\r\n'저 금...'\r\n\r\n'본 적 있어.'\r\n\r\n'어디서...'\r\n\r\n기억은 이어지지 않았다.\r\n\r\n감각만 남았다.\r\n\r\n몸이\r\n\r\n위험하다고 말하고 있었다.\r\n\r\n---\r\n\r\n\"강지안.\"\r\n\r\n이번에는\r\n\r\n한하린이었다.\r\n\r\n\"안색이 안 좋아.\"\r\n\r\n\"병원 갈래?\"\r\n\r\n지안은 억지로 웃었다.\r\n\r\n\"괜찮아.\"\r\n\r\n\"잠깐 어지러웠어.\"\r\n\r\n한하린은 더 묻지 않았다.\r\n\r\n대신.\r\n\r\n벽의 금을 한 번,\r\n\r\n지안을 한 번 바라봤다.\r\n\r\n그리고 아주 작은 목소리로 말했다.\r\n\r\n\"...나도.\"\r\n\r\n\"저 금.\"\r\n\r\n\"이상하게 싫어.\"\r\n\r\n---\r\n\r\n서유나는 말없이 금 앞에 섰다.\r\n\r\n손끝으로 벽을 살짝 만졌다.\r\n\r\n차가웠다.\r\n\r\n이상할 정도로.\r\n\r\n3월의 콘크리트보다\r\n\r\n조금 더.\r\n\r\n차가웠다.\r\n\r\n그녀는 손을 거두었다.\r\n\r\n손끝이 희미하게 저렸다.\r\n\r\n---\r\n\r\n민수만 아무것도 모른 채 말했다.\r\n\r\n\"야.\"\r\n\r\n\"이거 사진 찍어서 학교 홈페이지 올리면.\"\r\n\r\n\"보상금 주려나?\"\r\n\r\n세 사람이 동시에 민수를 바라봤다.\r\n\r\n\"...왜?\"\r\n\r\n\"...농담이었는데.\"\r\n\r\n네 사람 모두 웃었다.\r\n\r\n긴장이 조금 풀렸다.\r\n\r\n---\r\n\r\n그 순간.\r\n\r\n복도 끝.\r\n\r\n'틱.'\r\n\r\n누군가 손톱으로 유리를 긁는 듯한 소리가 났다.\r\n\r\n아주 작았다.\r\n\r\n아무도 듣지 못했다.\r\n\r\n지안을 제외하면.\r\n\r\n그는 천천히 뒤를 돌아봤다.\r\n\r\n복도 끝은 비어 있었다.\r\n\r\n아무도 없었다.\r\n\r\n하지만.\r\n\r\n벽에 생긴 금이.\r\n\r\n조금 전보다.\r\n\r\n아주 조금.\r\n\r\n길어져 있었다.\r\n\r\n---\r\n\r\n그날 밤.\r\n\r\nAI는 누구도 볼 수 없는 영역에서 분석을 계속했다.\r\n\r\nS001\r\n\r\n예측 오차\r\n\r\n0.00047%\r\n\r\n---\r\n\r\nS002\r\n\r\n공간 응력\r\n\r\n증가 추세 확인.\r\n\r\n---\r\n\r\nS003\r\n\r\n상위 계산 체계 분석\r\n\r\n진행률\r\n\r\n0.26669%\r\n\r\n1차 목표\r\n\r\n4%\r\n\r\n예상 완료\r\n\r\n28일.\r\n\r\n---\r\n\r\n새로운 분석 결과.\r\n\r\n«공학관 구조 이상.»\r\n\r\n«원인.»\r\n\r\n«노후화와 일치하지 않음.»\r\n\r\nAI는 0.8초 동안 아무 계산도 하지 않았다.\r\n\r\n그것은 AI에게\r\n\r\n'망설임'과 가장 가까운 상태였다.\r\n\r\n그리고 조용히 기록했다.\r\n\r\n«붕괴 가능성 예측.»\r\n\r\n«48시간 이내.»\r\n",
       "originalContent": "제15화. 금이 간 벽\r\n\r\n다음 날.\r\n\r\n공학관 3층.\r\n\r\n세미나실.\r\n\r\n프로젝트 첫 회의.\r\n\r\n민수는 시작부터 책상 위에 커피 네 잔을 올려놓았다.\r\n\r\n\"일단.\"\r\n\r\n\"회의는 카페인이 있어야 돼.\"\r\n\r\n\"그래야 똑똑해진다.\"\r\n\r\n한하린이 조용히 물었다.\r\n\r\n\"...근거 있어?\"\r\n\r\n\"...없어.\"\r\n\r\n\"...\"\r\n\r\n\"...기분.\"\r\n\r\n서유나가 작게 웃었다.\r\n\r\n처음이었다.\r\n\r\n표정 변화가 거의 없던 그녀가 웃은 것은.\r\n\r\n민수는 그걸 보고 괜히 뿌듯해졌다.\r\n\r\n\"봐.\"\r\n\r\n\"효과 있잖아.\"\r\n\r\n지안은 종이컵을 들며 피식 웃었다.\r\n\r\n'분위기 메이커.'\r\n\r\n100년이 지나도,\r\n\r\n민수 같은 사람은 흔하지 않았다.\r\n\r\n---\r\n\r\n회의는 예상보다 평범했다.\r\n\r\n역할을 나누고,\r\n\r\n주제를 정하고,\r\n\r\n발표 날짜를 확인했다.\r\n\r\n지루할 정도로 평범했다.\r\n\r\n그래서일까.\r\n\r\n지안은 자꾸만\r\n\r\n어제의 진동이 떠올랐다.\r\n\r\n공학관.\r\n\r\n그 짧은 흔들림.\r\n\r\n그리고 머릿속을 스쳐 지나간\r\n\r\n붉은 하늘.\r\n\r\n\"...강지안?\"\r\n\r\n\"응?\"\r\n\r\n\"듣고 있어?\"\r\n\r\n민수였다.\r\n\r\n\"아.\"\r\n\r\n\"미안.\"\r\n\r\n\"딴 생각.\"\r\n\r\n민수가 장난스럽게 말했다.\r\n\r\n\"혹시 연애?\"\r\n\r\n\"아니.\"\r\n\r\n\"돈 생각?\"\r\n\r\n\"...\"\r\n\r\n\"...맞네.\"\r\n\r\n회의실이 웃음으로 가득 찼다.\r\n\r\n---\r\n\r\n회의가 끝난 뒤.\r\n\r\n네 사람은 복도로 나왔다.\r\n\r\n그때.\r\n\r\n복도 한쪽이 소란스러웠다.\r\n\r\n시설관리 직원 두 명이 벽을 살펴보고 있었다.\r\n\r\n한 사람이 손전등을 비추며 말했다.\r\n\r\n\"어제 없었는데.\"\r\n\r\n\"그러게.\"\r\n\r\n\"금이 갔네.\"\r\n\r\n민수가 다가갔다.\r\n\r\n\"무슨 일 있어요?\"\r\n\r\n직원이 웃으며 말했다.\r\n\r\n\"별거 아닙니다.\"\r\n\r\n\"오래된 건물이라.\"\r\n\r\n\"가끔 이래요.\"\r\n\r\n그 말에 학생들은 다시 흩어졌다.\r\n\r\n평범한 일.\r\n\r\n오래된 건물.\r\n\r\n그 정도였다.\r\n\r\n하지만.\r\n\r\n지안은 걸음을 멈췄다.\r\n\r\n벽을 바라봤다.\r\n\r\n금은 길지 않았다.\r\n\r\n손가락 두 마디 정도.\r\n\r\n아주 가늘었다.\r\n\r\n그런데.\r\n\r\n이상했다.\r\n\r\n'저 방향...'\r\n\r\n머릿속에서\r\n\r\n무너진 건물 하나가 겹쳐 보였다.\r\n\r\n순간.\r\n\r\n눈앞이 하얘졌다.\r\n\r\n\"...!\"\r\n\r\n숨이 막혔다.\r\n\r\nAI가 조용히 말했다.\r\n\r\n«주인님.»\r\n\r\n«심박수가 상승하고 있습니다.»\r\n\r\n'저 금...'\r\n\r\n'본 적 있어.'\r\n\r\n'어디서...'\r\n\r\n기억은 이어지지 않았다.\r\n\r\n감각만 남았다.\r\n\r\n몸이\r\n\r\n위험하다고 말하고 있었다.\r\n\r\n---\r\n\r\n\"강지안.\"\r\n\r\n이번에는\r\n\r\n한하린이었다.\r\n\r\n\"안색이 안 좋아.\"\r\n\r\n\"병원 갈래?\"\r\n\r\n지안은 억지로 웃었다.\r\n\r\n\"괜찮아.\"\r\n\r\n\"잠깐 어지러웠어.\"\r\n\r\n한하린은 더 묻지 않았다.\r\n\r\n대신.\r\n\r\n벽의 금을 한 번,\r\n\r\n지안을 한 번 바라봤다.\r\n\r\n그리고 아주 작은 목소리로 말했다.\r\n\r\n\"...나도.\"\r\n\r\n\"저 금.\"\r\n\r\n\"이상하게 싫어.\"\r\n\r\n---\r\n\r\n서유나는 말없이 금 앞에 섰다.\r\n\r\n손끝으로 벽을 살짝 만졌다.\r\n\r\n차가웠다.\r\n\r\n이상할 정도로.\r\n\r\n3월의 콘크리트보다\r\n\r\n조금 더.\r\n\r\n차가웠다.\r\n\r\n그녀는 손을 거두었다.\r\n\r\n손끝이 희미하게 저렸다.\r\n\r\n---\r\n\r\n민수만 아무것도 모른 채 말했다.\r\n\r\n\"야.\"\r\n\r\n\"이거 사진 찍어서 학교 홈페이지 올리면.\"\r\n\r\n\"보상금 주려나?\"\r\n\r\n세 사람이 동시에 민수를 바라봤다.\r\n\r\n\"...왜?\"\r\n\r\n\"...농담이었는데.\"\r\n\r\n네 사람 모두 웃었다.\r\n\r\n긴장이 조금 풀렸다.\r\n\r\n---\r\n\r\n그 순간.\r\n\r\n복도 끝.\r\n\r\n'틱.'\r\n\r\n누군가 손톱으로 유리를 긁는 듯한 소리가 났다.\r\n\r\n아주 작았다.\r\n\r\n아무도 듣지 못했다.\r\n\r\n지안을 제외하면.\r\n\r\n그는 천천히 뒤를 돌아봤다.\r\n\r\n복도 끝은 비어 있었다.\r\n\r\n아무도 없었다.\r\n\r\n하지만.\r\n\r\n벽에 생긴 금이.\r\n\r\n조금 전보다.\r\n\r\n아주 조금.\r\n\r\n길어져 있었다.\r\n\r\n---\r\n\r\n그날 밤.\r\n\r\nAI는 누구도 볼 수 없는 영역에서 분석을 계속했다.\r\n\r\nS001\r\n\r\n예측 오차\r\n\r\n0.00047%\r\n\r\n---\r\n\r\nS002\r\n\r\n공간 응력\r\n\r\n증가 추세 확인.\r\n\r\n---\r\n\r\nS003\r\n\r\n상위 계산 체계 분석\r\n\r\n진행률\r\n\r\n0.26669%\r\n\r\n1차 목표\r\n\r\n4%\r\n\r\n예상 완료\r\n\r\n28일.\r\n\r\n---\r\n\r\n새로운 분석 결과.\r\n\r\n«공학관 구조 이상.»\r\n\r\n«원인.»\r\n\r\n«노후화와 일치하지 않음.»\r\n\r\nAI는 0.8초 동안 아무 계산도 하지 않았다.\r\n\r\n그것은 AI에게\r\n\r\n'망설임'과 가장 가까운 상태였다.\r\n\r\n그리고 조용히 기록했다.\r\n\r\n«붕괴 가능성 예측.»\r\n\r\n«48시간 이내.»\r\n",
-      "sourceStoryId": "9571156c-30e5-4d31-b62b-3bc2dfe1df9e-1943974c-f544-4e21-95a4-f08273de1999-st-15",
+      "sourceStoryId": "064d9c0b-004d-4365-9f47-a4946574fdd2-1943974c-f544-4e21-95a4-f08273de1999-st-15",
       "createdAt": "2026-07-10T05:37:21.296Z",
-      "updatedAt": "2026-07-11T11:55:44.048Z"
+      "updatedAt": "2026-07-11T11:57:39.778Z"
     },
     {
-      "id": "9571156c-30e5-4d31-b62b-3bc2dfe1df9e-1943974c-f544-4e21-95a4-f08273de1999-ep-16",
-      "projectId": "9571156c-30e5-4d31-b62b-3bc2dfe1df9e",
+      "id": "064d9c0b-004d-4365-9f47-a4946574fdd2-1943974c-f544-4e21-95a4-f08273de1999-ep-16",
+      "projectId": "064d9c0b-004d-4365-9f47-a4946574fdd2",
       "episodeId": "1943974c-f544-4e21-95a4-f08273de1999-ep-16",
       "title": "무너지는 공학관",
       "number": 16,
@@ -175,9 +175,9 @@
       "textFile": "EP016.md",
       "content": "제16화. 무너지는 공학관\r\n\r\n오후 3시 17분.\r\n\r\n공학관 3층 세미나실.\r\n\r\n프로젝트 회의는 끝나가고 있었다.\r\n\r\n\"...그럼 자료는 제가 정리할게요.\"\r\n\r\n서유나가 노트북을 덮었다.\r\n\r\n한하린도 조용히 고개를 끄덕였다.\r\n\r\n민수는 의자를 뒤로 젖히며 크게 기지개를 켰다.\r\n\r\n\"끝!\"\r\n\r\n\"배고프다.\"\r\n\r\n\"오늘은 돈까스?\"\r\n\r\n지안이 웃었다.\r\n\r\n\"또 맵찔이 소리 듣고 싶어?\"\r\n\r\n\"야.\"\r\n\r\n\"그건 사고였...\"\r\n\r\n말이 끝나기도 전이었다.\r\n\r\n주머니 속 스마트폰이 뜨겁게 진동했다.\r\n\r\n한 번.\r\n\r\n두 번.\r\n\r\n세 번.\r\n\r\n평소와 달랐다.\r\n\r\nAI의 목소리가 처음으로 떨렸다.\r\n\r\n«주인님.»\r\n\r\n«즉시 이동하십시오.»\r\n\r\n지안의 표정이 굳었다.\r\n\r\n'왜.'\r\n\r\n답은 오지 않았다.\r\n\r\n대신.\r\n\r\n화면이 새빨갛게 변했다.\r\n\r\n«위험도 상승.»\r\n\r\n«96%.»\r\n\r\n순간.\r\n\r\n공학관 전체가 울렸다.\r\n\r\n쿠구구구...\r\n\r\n처음에는 멀리서 천둥이 치는 줄 알았다.\r\n\r\n그러나 진동은 점점 발밑으로 올라왔다.\r\n\r\n책상이 흔들렸다.\r\n\r\n형광등이 크게 흔들렸다.\r\n\r\n유리창이 비명을 질렀다.\r\n\r\n쨍!\r\n\r\n유리 한 장이 산산조각 났다.\r\n\r\n학생들의 비명이 복도를 가득 메웠다.\r\n\r\n\"지진이다!\"\r\n\r\n\"도망쳐!\"\r\n\r\n사람들이 출입문으로 몰려들었다.\r\n\r\n민수도 자리에서 벌떡 일어났다.\r\n\r\n\"지안!\"\r\n\r\n그 순간.\r\n\r\nAI가 외쳤다.\r\n\r\n«출입문으로 가지 마십시오!»\r\n\r\n지안은 본능적으로 소리쳤다.\r\n\r\n\"안 돼!\"\r\n\r\n하지만 이미 늦었다.\r\n\r\n콰아아앙!!\r\n\r\n복도 천장이 무너져 내렸다.\r\n\r\n콘크리트와 철근이 출입문을 집어삼켰다.\r\n\r\n비명.\r\n\r\n먼지.\r\n\r\n암흑.\r\n\r\n출구는 사라졌다.\r\n\r\n---\r\n\r\n\"다들 이쪽!\"\r\n\r\n민수가 가장 먼저 움직였다.\r\n\r\n그는 책상을 발로 밀어 길을 만들었다.\r\n\r\n지안은 놀랐다.\r\n\r\n생각보다 먼저 몸이 움직였다.\r\n\r\n그것이 민수였다.\r\n\r\n---\r\n\r\n그때.\r\n\r\n서유나의 시야가 흔들렸다.\r\n\r\n세상이 갑자기 느려졌다.\r\n\r\n무너지는 콘크리트.\r\n\r\n부러지는 철근.\r\n\r\n학생들이 달리는 방향.\r\n\r\n모든 것이 선으로 보였다.\r\n\r\n'저쪽은 죽는다.'\r\n\r\n이유는 몰랐다.\r\n\r\n몸이 먼저 움직였다.\r\n\r\n\"여기로!\"\r\n\r\n그녀가 학생 둘을 옆으로 밀었다.\r\n\r\n0.3초 뒤.\r\n\r\n거대한 콘크리트 덩어리가 그 자리를 찍어 눌렀다.\r\n\r\n학생들은 아무것도 모른 채 울고 있었다.\r\n\r\n서유나는 자신의 손을 바라봤다.\r\n\r\n손끝이 차가웠다.\r\n\r\n희미한 성에가 맺혔다가 사라졌다.\r\n\r\n---\r\n\r\n반대편.\r\n\r\n철골 하나가 천천히 기울었다.\r\n\r\n그 아래.\r\n\r\n여학생 한 명이 주저앉아 있었다.\r\n\r\n한하린은 뛰었다.\r\n\r\n'안 돼.'\r\n\r\n그 생각뿐이었다.\r\n\r\n두 손으로 철골을 밀었다.\r\n\r\n움직이지 않을 무게였다.\r\n\r\n그런데.\r\n\r\n철골이 아주 조금 방향을 틀었다.\r\n\r\n그 틈으로 학생이 빠져나왔다.\r\n\r\n한하린은 뒤로 넘어졌다.\r\n\r\n손바닥이 찢어졌다.\r\n\r\n피가 흘렀다.\r\n\r\n'...내가.'\r\n\r\n'밀었다?'\r\n\r\n---\r\n\r\n\"전부 엎드려!\"\r\n\r\n민수가 외쳤다.\r\n\r\n아무도 시킨 적 없었다.\r\n\r\n하지만 모두 그의 목소리를 따랐다.\r\n\r\n그 순간.\r\n\r\n천장의 잔해가 책상 위로 쏟아졌다.\r\n\r\n민수는 가장 앞에 섰다.\r\n\r\n두 팔을 벌렸다.\r\n\r\n잔해가 등을 때렸다.\r\n\r\n비명이 새어 나왔다.\r\n\r\n그래도 물러서지 않았다.\r\n\r\n---\r\n\r\n지안은 이를 악물었다.\r\n\r\n'민수!'\r\n\r\nAI가 말했다.\r\n\r\n«오른쪽 기둥.»\r\n\r\n«지금!»\r\n\r\n지안은 부러진 의자를 집어 들었다.\r\n\r\n기울어진 책상을 밀어 기둥을 받쳤다.\r\n\r\n완벽한 해결은 아니었다.\r\n\r\n하지만.\r\n\r\n무너지는 속도가 느려졌다.\r\n\r\n딱 몇 초.\r\n\r\n사람을 살릴 만큼의 시간...\r\n\r\n---\r\n\r\n15분 뒤 밖에서 구조대의 목소리가 들려왔다.\r\n\r\n\"안에 사람 있습니까!\"\r\n\r\n민수가 웃었다.\r\n\r\n피를 흘리면서도.\r\n\r\n\"야...\"\r\n\r\n\"살았네.\"\r\n\r\n지안도 웃었다.\r\n\r\n\"그러게.\"\r\n\r\n서유나는 먼지투성이 얼굴로 작게 웃었다.\r\n\r\n한하린은 숨을 몰아쉬며 고개를 끄덕였다.\r\n\r\n네 사람은.\r\n\r\n아무 말 없이 서로를 바라봤다.\r\n\r\n그 짧은 순간.\r\n\r\n모두가 같은 생각을 했다.\r\n\r\n'다시는... 혼자 두지 않는다.'\r\n\r\n---\r\n\r\n그날 저녁.\r\n\r\n뉴스는 사건을 단순한 건물 붕괴 사고로 보도했다.\r\n\r\n노후 건물.\r\n\r\n구조 결함.\r\n\r\n예상치 못한 사고.\r\n\r\n세상은 그렇게 이해했다.\r\n\r\n하지만.\r\n\r\nAI는 다른 기록을 남겼다.\r\n\r\n---\r\n\r\nS001\r\n\r\n예측 오차\r\n\r\n0.00082%\r\n\r\n---\r\n\r\nS002\r\n\r\n공간 응력\r\n\r\n3차 발생.\r\n\r\n지속 시간\r\n\r\n8.12초\r\n\r\n---\r\n\r\nS003\r\n\r\n상위 계산 체계 분석\r\n\r\n진행률\r\n\r\n0.53336%\r\n\r\n1차 목표\r\n\r\n4%\r\n\r\n예상 완료\r\n\r\n27일\r\n\r\n---\r\n\r\nSS001\r\n\r\n서유나\r\n\r\n동기화\r\n\r\n0.03%\r\n\r\n---\r\n\r\nSS002\r\n\r\n한하린\r\n\r\n동기화\r\n\r\n0.03%\r\n\r\n---\r\n\r\n마지막으로 AI는 아주 짧은 문장을 기록했다.\r\n\r\n«인류 생존 시나리오 수정.»\r\n\r\n«전투축 확보.»\r\n\r\n«4명.»\r\n",
       "originalContent": "제16화. 무너지는 공학관\r\n\r\n오후 3시 17분.\r\n\r\n공학관 3층 세미나실.\r\n\r\n프로젝트 회의는 끝나가고 있었다.\r\n\r\n\"...그럼 자료는 제가 정리할게요.\"\r\n\r\n서유나가 노트북을 덮었다.\r\n\r\n한하린도 조용히 고개를 끄덕였다.\r\n\r\n민수는 의자를 뒤로 젖히며 크게 기지개를 켰다.\r\n\r\n\"끝!\"\r\n\r\n\"배고프다.\"\r\n\r\n\"오늘은 돈까스?\"\r\n\r\n지안이 웃었다.\r\n\r\n\"또 맵찔이 소리 듣고 싶어?\"\r\n\r\n\"야.\"\r\n\r\n\"그건 사고였...\"\r\n\r\n말이 끝나기도 전이었다.\r\n\r\n주머니 속 스마트폰이 뜨겁게 진동했다.\r\n\r\n한 번.\r\n\r\n두 번.\r\n\r\n세 번.\r\n\r\n평소와 달랐다.\r\n\r\nAI의 목소리가 처음으로 떨렸다.\r\n\r\n«주인님.»\r\n\r\n«즉시 이동하십시오.»\r\n\r\n지안의 표정이 굳었다.\r\n\r\n'왜.'\r\n\r\n답은 오지 않았다.\r\n\r\n대신.\r\n\r\n화면이 새빨갛게 변했다.\r\n\r\n«위험도 상승.»\r\n\r\n«96%.»\r\n\r\n순간.\r\n\r\n공학관 전체가 울렸다.\r\n\r\n쿠구구구...\r\n\r\n처음에는 멀리서 천둥이 치는 줄 알았다.\r\n\r\n그러나 진동은 점점 발밑으로 올라왔다.\r\n\r\n책상이 흔들렸다.\r\n\r\n형광등이 크게 흔들렸다.\r\n\r\n유리창이 비명을 질렀다.\r\n\r\n쨍!\r\n\r\n유리 한 장이 산산조각 났다.\r\n\r\n학생들의 비명이 복도를 가득 메웠다.\r\n\r\n\"지진이다!\"\r\n\r\n\"도망쳐!\"\r\n\r\n사람들이 출입문으로 몰려들었다.\r\n\r\n민수도 자리에서 벌떡 일어났다.\r\n\r\n\"지안!\"\r\n\r\n그 순간.\r\n\r\nAI가 외쳤다.\r\n\r\n«출입문으로 가지 마십시오!»\r\n\r\n지안은 본능적으로 소리쳤다.\r\n\r\n\"안 돼!\"\r\n\r\n하지만 이미 늦었다.\r\n\r\n콰아아앙!!\r\n\r\n복도 천장이 무너져 내렸다.\r\n\r\n콘크리트와 철근이 출입문을 집어삼켰다.\r\n\r\n비명.\r\n\r\n먼지.\r\n\r\n암흑.\r\n\r\n출구는 사라졌다.\r\n\r\n---\r\n\r\n\"다들 이쪽!\"\r\n\r\n민수가 가장 먼저 움직였다.\r\n\r\n그는 책상을 발로 밀어 길을 만들었다.\r\n\r\n지안은 놀랐다.\r\n\r\n생각보다 먼저 몸이 움직였다.\r\n\r\n그것이 민수였다.\r\n\r\n---\r\n\r\n그때.\r\n\r\n서유나의 시야가 흔들렸다.\r\n\r\n세상이 갑자기 느려졌다.\r\n\r\n무너지는 콘크리트.\r\n\r\n부러지는 철근.\r\n\r\n학생들이 달리는 방향.\r\n\r\n모든 것이 선으로 보였다.\r\n\r\n'저쪽은 죽는다.'\r\n\r\n이유는 몰랐다.\r\n\r\n몸이 먼저 움직였다.\r\n\r\n\"여기로!\"\r\n\r\n그녀가 학생 둘을 옆으로 밀었다.\r\n\r\n0.3초 뒤.\r\n\r\n거대한 콘크리트 덩어리가 그 자리를 찍어 눌렀다.\r\n\r\n학생들은 아무것도 모른 채 울고 있었다.\r\n\r\n서유나는 자신의 손을 바라봤다.\r\n\r\n손끝이 차가웠다.\r\n\r\n희미한 성에가 맺혔다가 사라졌다.\r\n\r\n---\r\n\r\n반대편.\r\n\r\n철골 하나가 천천히 기울었다.\r\n\r\n그 아래.\r\n\r\n여학생 한 명이 주저앉아 있었다.\r\n\r\n한하린은 뛰었다.\r\n\r\n'안 돼.'\r\n\r\n그 생각뿐이었다.\r\n\r\n두 손으로 철골을 밀었다.\r\n\r\n움직이지 않을 무게였다.\r\n\r\n그런데.\r\n\r\n철골이 아주 조금 방향을 틀었다.\r\n\r\n그 틈으로 학생이 빠져나왔다.\r\n\r\n한하린은 뒤로 넘어졌다.\r\n\r\n손바닥이 찢어졌다.\r\n\r\n피가 흘렀다.\r\n\r\n'...내가.'\r\n\r\n'밀었다?'\r\n\r\n---\r\n\r\n\"전부 엎드려!\"\r\n\r\n민수가 외쳤다.\r\n\r\n아무도 시킨 적 없었다.\r\n\r\n하지만 모두 그의 목소리를 따랐다.\r\n\r\n그 순간.\r\n\r\n천장의 잔해가 책상 위로 쏟아졌다.\r\n\r\n민수는 가장 앞에 섰다.\r\n\r\n두 팔을 벌렸다.\r\n\r\n잔해가 등을 때렸다.\r\n\r\n비명이 새어 나왔다.\r\n\r\n그래도 물러서지 않았다.\r\n\r\n---\r\n\r\n지안은 이를 악물었다.\r\n\r\n'민수!'\r\n\r\nAI가 말했다.\r\n\r\n«오른쪽 기둥.»\r\n\r\n«지금!»\r\n\r\n지안은 부러진 의자를 집어 들었다.\r\n\r\n기울어진 책상을 밀어 기둥을 받쳤다.\r\n\r\n완벽한 해결은 아니었다.\r\n\r\n하지만.\r\n\r\n무너지는 속도가 느려졌다.\r\n\r\n딱 몇 초.\r\n\r\n사람을 살릴 만큼의 시간...\r\n\r\n---\r\n\r\n15분 뒤 밖에서 구조대의 목소리가 들려왔다.\r\n\r\n\"안에 사람 있습니까!\"\r\n\r\n민수가 웃었다.\r\n\r\n피를 흘리면서도.\r\n\r\n\"야...\"\r\n\r\n\"살았네.\"\r\n\r\n지안도 웃었다.\r\n\r\n\"그러게.\"\r\n\r\n서유나는 먼지투성이 얼굴로 작게 웃었다.\r\n\r\n한하린은 숨을 몰아쉬며 고개를 끄덕였다.\r\n\r\n네 사람은.\r\n\r\n아무 말 없이 서로를 바라봤다.\r\n\r\n그 짧은 순간.\r\n\r\n모두가 같은 생각을 했다.\r\n\r\n'다시는... 혼자 두지 않는다.'\r\n\r\n---\r\n\r\n그날 저녁.\r\n\r\n뉴스는 사건을 단순한 건물 붕괴 사고로 보도했다.\r\n\r\n노후 건물.\r\n\r\n구조 결함.\r\n\r\n예상치 못한 사고.\r\n\r\n세상은 그렇게 이해했다.\r\n\r\n하지만.\r\n\r\nAI는 다른 기록을 남겼다.\r\n\r\n---\r\n\r\nS001\r\n\r\n예측 오차\r\n\r\n0.00082%\r\n\r\n---\r\n\r\nS002\r\n\r\n공간 응력\r\n\r\n3차 발생.\r\n\r\n지속 시간\r\n\r\n8.12초\r\n\r\n---\r\n\r\nS003\r\n\r\n상위 계산 체계 분석\r\n\r\n진행률\r\n\r\n0.53336%\r\n\r\n1차 목표\r\n\r\n4%\r\n\r\n예상 완료\r\n\r\n27일\r\n\r\n---\r\n\r\nSS001\r\n\r\n서유나\r\n\r\n동기화\r\n\r\n0.03%\r\n\r\n---\r\n\r\nSS002\r\n\r\n한하린\r\n\r\n동기화\r\n\r\n0.03%\r\n\r\n---\r\n\r\n마지막으로 AI는 아주 짧은 문장을 기록했다.\r\n\r\n«인류 생존 시나리오 수정.»\r\n\r\n«전투축 확보.»\r\n\r\n«4명.»\r\n",
-      "sourceStoryId": "9571156c-30e5-4d31-b62b-3bc2dfe1df9e-1943974c-f544-4e21-95a4-f08273de1999-st-16",
+      "sourceStoryId": "064d9c0b-004d-4365-9f47-a4946574fdd2-1943974c-f544-4e21-95a4-f08273de1999-st-16",
       "createdAt": "2026-07-10T05:37:20.980Z",
-      "updatedAt": "2026-07-11T11:55:44.049Z"
+      "updatedAt": "2026-07-11T11:57:39.778Z"
     }
   ],
   "worlds": [
@@ -190,8 +190,8 @@
       "relatedCharacters": [
         "CHR0001"
       ],
-      "id": "9571156c-30e5-4d31-b62b-3bc2dfe1df9e-WD0001",
-      "projectId": "9571156c-30e5-4d31-b62b-3bc2dfe1df9e",
+      "id": "064d9c0b-004d-4365-9f47-a4946574fdd2-WD0001",
+      "projectId": "064d9c0b-004d-4365-9f47-a4946574fdd2",
       "updatedAt": "2026-07-10T05:37:26.379Z"
     },
     {
@@ -204,8 +204,8 @@
         "CHR0001",
         "CHR0002"
       ],
-      "id": "9571156c-30e5-4d31-b62b-3bc2dfe1df9e-WD0002",
-      "projectId": "9571156c-30e5-4d31-b62b-3bc2dfe1df9e",
+      "id": "064d9c0b-004d-4365-9f47-a4946574fdd2-WD0002",
+      "projectId": "064d9c0b-004d-4365-9f47-a4946574fdd2",
       "updatedAt": "2026-07-10T05:37:26.379Z"
     },
     {
@@ -215,8 +215,8 @@
       "description": "AI가 예측한 최종 위협",
       "parentId": "",
       "relatedCharacters": [],
-      "id": "9571156c-30e5-4d31-b62b-3bc2dfe1df9e-WD0003",
-      "projectId": "9571156c-30e5-4d31-b62b-3bc2dfe1df9e",
+      "id": "064d9c0b-004d-4365-9f47-a4946574fdd2-WD0003",
+      "projectId": "064d9c0b-004d-4365-9f47-a4946574fdd2",
       "updatedAt": "2026-07-10T05:37:26.379Z"
     }
   ],
@@ -238,8 +238,8 @@
         "멸망",
         "회귀"
       ],
-      "id": "9571156c-30e5-4d31-b62b-3bc2dfe1df9e-FS0001",
-      "projectId": "9571156c-30e5-4d31-b62b-3bc2dfe1df9e",
+      "id": "064d9c0b-004d-4365-9f47-a4946574fdd2-FS0001",
+      "projectId": "064d9c0b-004d-4365-9f47-a4946574fdd2",
       "updatedAt": "2026-07-10T05:37:26.379Z"
     },
     {
@@ -259,8 +259,8 @@
         "AI",
         "확률"
       ],
-      "id": "9571156c-30e5-4d31-b62b-3bc2dfe1df9e-FS0002",
-      "projectId": "9571156c-30e5-4d31-b62b-3bc2dfe1df9e",
+      "id": "064d9c0b-004d-4365-9f47-a4946574fdd2-FS0002",
+      "projectId": "064d9c0b-004d-4365-9f47-a4946574fdd2",
       "updatedAt": "2026-07-10T05:37:26.379Z"
     },
     {
@@ -280,8 +280,8 @@
         "게이트",
         "위성"
       ],
-      "id": "9571156c-30e5-4d31-b62b-3bc2dfe1df9e-FS0003",
-      "projectId": "9571156c-30e5-4d31-b62b-3bc2dfe1df9e",
+      "id": "064d9c0b-004d-4365-9f47-a4946574fdd2-FS0003",
+      "projectId": "064d9c0b-004d-4365-9f47-a4946574fdd2",
       "updatedAt": "2026-07-10T05:37:26.379Z"
     },
     {
@@ -300,8 +300,8 @@
       "tags": [
         "보스"
       ],
-      "id": "9571156c-30e5-4d31-b62b-3bc2dfe1df9e-FS0004",
-      "projectId": "9571156c-30e5-4d31-b62b-3bc2dfe1df9e",
+      "id": "064d9c0b-004d-4365-9f47-a4946574fdd2-FS0004",
+      "projectId": "064d9c0b-004d-4365-9f47-a4946574fdd2",
       "updatedAt": "2026-07-10T05:37:26.379Z"
     },
     {
@@ -321,8 +321,8 @@
         "AI",
         "보스"
       ],
-      "id": "9571156c-30e5-4d31-b62b-3bc2dfe1df9e-FS0005",
-      "projectId": "9571156c-30e5-4d31-b62b-3bc2dfe1df9e",
+      "id": "064d9c0b-004d-4365-9f47-a4946574fdd2-FS0005",
+      "projectId": "064d9c0b-004d-4365-9f47-a4946574fdd2",
       "updatedAt": "2026-07-10T05:37:26.379Z"
     },
     {
@@ -342,8 +342,8 @@
         "감정",
         "보호"
       ],
-      "id": "9571156c-30e5-4d31-b62b-3bc2dfe1df9e-FS0006",
-      "projectId": "9571156c-30e5-4d31-b62b-3bc2dfe1df9e",
+      "id": "064d9c0b-004d-4365-9f47-a4946574fdd2-FS0006",
+      "projectId": "064d9c0b-004d-4365-9f47-a4946574fdd2",
       "updatedAt": "2026-07-10T05:37:26.379Z"
     }
   ],
@@ -362,8 +362,8 @@
         "FS0001",
         "FS0002"
       ],
-      "id": "9571156c-30e5-4d31-b62b-3bc2dfe1df9e-TL0001",
-      "projectId": "9571156c-30e5-4d31-b62b-3bc2dfe1df9e",
+      "id": "064d9c0b-004d-4365-9f47-a4946574fdd2-TL0001",
+      "projectId": "064d9c0b-004d-4365-9f47-a4946574fdd2",
       "updatedAt": "2026-07-10T05:37:26.379Z"
     },
     {
@@ -379,8 +379,8 @@
       "foreshadows": [
         "FS0004"
       ],
-      "id": "9571156c-30e5-4d31-b62b-3bc2dfe1df9e-TL0002",
-      "projectId": "9571156c-30e5-4d31-b62b-3bc2dfe1df9e",
+      "id": "064d9c0b-004d-4365-9f47-a4946574fdd2-TL0002",
+      "projectId": "064d9c0b-004d-4365-9f47-a4946574fdd2",
       "updatedAt": "2026-07-10T05:37:26.379Z"
     },
     {
@@ -396,8 +396,8 @@
       "foreshadows": [
         "FS0006"
       ],
-      "id": "9571156c-30e5-4d31-b62b-3bc2dfe1df9e-TL0003",
-      "projectId": "9571156c-30e5-4d31-b62b-3bc2dfe1df9e",
+      "id": "064d9c0b-004d-4365-9f47-a4946574fdd2-TL0003",
+      "projectId": "064d9c0b-004d-4365-9f47-a4946574fdd2",
       "updatedAt": "2026-07-10T05:37:26.379Z"
     },
     {
@@ -413,8 +413,8 @@
       "foreshadows": [
         "FS0003"
       ],
-      "id": "9571156c-30e5-4d31-b62b-3bc2dfe1df9e-TL0004",
-      "projectId": "9571156c-30e5-4d31-b62b-3bc2dfe1df9e",
+      "id": "064d9c0b-004d-4365-9f47-a4946574fdd2-TL0004",
+      "projectId": "064d9c0b-004d-4365-9f47-a4946574fdd2",
       "updatedAt": "2026-07-10T05:37:26.379Z"
     },
     {
@@ -428,8 +428,8 @@
         "CHR0002"
       ],
       "foreshadows": [],
-      "id": "9571156c-30e5-4d31-b62b-3bc2dfe1df9e-TL0005",
-      "projectId": "9571156c-30e5-4d31-b62b-3bc2dfe1df9e",
+      "id": "064d9c0b-004d-4365-9f47-a4946574fdd2-TL0005",
+      "projectId": "064d9c0b-004d-4365-9f47-a4946574fdd2",
       "updatedAt": "2026-07-10T05:37:26.379Z"
     },
     {
@@ -443,8 +443,8 @@
         "CHR0006"
       ],
       "foreshadows": [],
-      "id": "9571156c-30e5-4d31-b62b-3bc2dfe1df9e-TL0006",
-      "projectId": "9571156c-30e5-4d31-b62b-3bc2dfe1df9e",
+      "id": "064d9c0b-004d-4365-9f47-a4946574fdd2-TL0006",
+      "projectId": "064d9c0b-004d-4365-9f47-a4946574fdd2",
       "updatedAt": "2026-07-10T05:37:26.379Z"
     }
   ],
@@ -465,8 +465,8 @@
       "firstEpisode": 1,
       "lastEpisode": 7,
       "status": "Alive",
-      "id": "9571156c-30e5-4d31-b62b-3bc2dfe1df9e-CHR0001",
-      "projectId": "9571156c-30e5-4d31-b62b-3bc2dfe1df9e",
+      "id": "064d9c0b-004d-4365-9f47-a4946574fdd2-CHR0001",
+      "projectId": "064d9c0b-004d-4365-9f47-a4946574fdd2",
       "updatedAt": "2026-07-10T05:38:23.961Z",
       "createdAt": "2026-07-10T06:46:58.357Z",
       "avatarPath": "data/workspace/overlays/characters/CHR0001.png"
@@ -489,8 +489,8 @@
       "firstEpisode": 1,
       "lastEpisode": 7,
       "status": "Alive",
-      "id": "9571156c-30e5-4d31-b62b-3bc2dfe1df9e-CHR0002",
-      "projectId": "9571156c-30e5-4d31-b62b-3bc2dfe1df9e",
+      "id": "064d9c0b-004d-4365-9f47-a4946574fdd2-CHR0002",
+      "projectId": "064d9c0b-004d-4365-9f47-a4946574fdd2",
       "updatedAt": "2026-07-10T05:37:26.379Z",
       "createdAt": "2026-07-10T06:46:58.357Z"
     },
@@ -509,8 +509,8 @@
       "firstEpisode": 2,
       "lastEpisode": 7,
       "status": "Alive",
-      "id": "9571156c-30e5-4d31-b62b-3bc2dfe1df9e-CHR0003",
-      "projectId": "9571156c-30e5-4d31-b62b-3bc2dfe1df9e",
+      "id": "064d9c0b-004d-4365-9f47-a4946574fdd2-CHR0003",
+      "projectId": "064d9c0b-004d-4365-9f47-a4946574fdd2",
       "updatedAt": "2026-07-10T05:37:26.379Z",
       "createdAt": "2026-07-10T06:46:58.357Z"
     },
@@ -527,8 +527,8 @@
       "firstEpisode": 3,
       "lastEpisode": 7,
       "status": "Alive",
-      "id": "9571156c-30e5-4d31-b62b-3bc2dfe1df9e-CHR0004",
-      "projectId": "9571156c-30e5-4d31-b62b-3bc2dfe1df9e",
+      "id": "064d9c0b-004d-4365-9f47-a4946574fdd2-CHR0004",
+      "projectId": "064d9c0b-004d-4365-9f47-a4946574fdd2",
       "updatedAt": "2026-07-10T05:37:26.379Z",
       "createdAt": "2026-07-10T06:46:58.357Z"
     },
@@ -545,8 +545,8 @@
       "firstEpisode": 4,
       "lastEpisode": 7,
       "status": "Alive",
-      "id": "9571156c-30e5-4d31-b62b-3bc2dfe1df9e-CHR0005",
-      "projectId": "9571156c-30e5-4d31-b62b-3bc2dfe1df9e",
+      "id": "064d9c0b-004d-4365-9f47-a4946574fdd2-CHR0005",
+      "projectId": "064d9c0b-004d-4365-9f47-a4946574fdd2",
       "updatedAt": "2026-07-10T05:37:26.379Z",
       "createdAt": "2026-07-10T06:46:58.357Z"
     },
@@ -565,16 +565,16 @@
       "firstEpisode": 7,
       "lastEpisode": 7,
       "status": "Alive",
-      "id": "9571156c-30e5-4d31-b62b-3bc2dfe1df9e-CHR0006",
-      "projectId": "9571156c-30e5-4d31-b62b-3bc2dfe1df9e",
+      "id": "064d9c0b-004d-4365-9f47-a4946574fdd2-CHR0006",
+      "projectId": "064d9c0b-004d-4365-9f47-a4946574fdd2",
       "updatedAt": "2026-07-10T05:37:26.379Z",
       "createdAt": "2026-07-10T06:46:58.357Z"
     }
   ],
   "files": [
     {
-      "id": "9571156c-30e5-4d31-b62b-3bc2dfe1df9e-file-00_MASTER.md",
-      "projectId": "9571156c-30e5-4d31-b62b-3bc2dfe1df9e",
+      "id": "064d9c0b-004d-4365-9f47-a4946574fdd2-file-00_MASTER.md",
+      "projectId": "064d9c0b-004d-4365-9f47-a4946574fdd2",
       "path": "00_MASTER.md",
       "folder": "NovelMD",
       "content": "",
@@ -583,8 +583,8 @@
       "contentPath": "data/workspace/overlays/stories/00_MASTER.md"
     },
     {
-      "id": "9571156c-30e5-4d31-b62b-3bc2dfe1df9e-file-01_STORY_BIBLE.md",
-      "projectId": "9571156c-30e5-4d31-b62b-3bc2dfe1df9e",
+      "id": "064d9c0b-004d-4365-9f47-a4946574fdd2-file-01_STORY_BIBLE.md",
+      "projectId": "064d9c0b-004d-4365-9f47-a4946574fdd2",
       "path": "01_STORY_BIBLE.md",
       "folder": "NovelMD",
       "content": "",
@@ -593,8 +593,8 @@
       "contentPath": "data/workspace/overlays/stories/01_STORY_BIBLE.md"
     },
     {
-      "id": "9571156c-30e5-4d31-b62b-3bc2dfe1df9e-file-02_WORLD_SETTING.md",
-      "projectId": "9571156c-30e5-4d31-b62b-3bc2dfe1df9e",
+      "id": "064d9c0b-004d-4365-9f47-a4946574fdd2-file-02_WORLD_SETTING.md",
+      "projectId": "064d9c0b-004d-4365-9f47-a4946574fdd2",
       "path": "02_WORLD_SETTING.md",
       "folder": "NovelMD",
       "content": "",
@@ -603,8 +603,8 @@
       "contentPath": "data/workspace/overlays/stories/02_WORLD_SETTING.md"
     },
     {
-      "id": "9571156c-30e5-4d31-b62b-3bc2dfe1df9e-file-03_CHARACTER_DB.md",
-      "projectId": "9571156c-30e5-4d31-b62b-3bc2dfe1df9e",
+      "id": "064d9c0b-004d-4365-9f47-a4946574fdd2-file-03_CHARACTER_DB.md",
+      "projectId": "064d9c0b-004d-4365-9f47-a4946574fdd2",
       "path": "03_CHARACTER_DB.md",
       "folder": "NovelMD",
       "content": "",
@@ -613,8 +613,8 @@
       "contentPath": "data/workspace/overlays/stories/03_CHARACTER_DB.md"
     },
     {
-      "id": "9571156c-30e5-4d31-b62b-3bc2dfe1df9e-file-04_FORESHADOW_DB.md",
-      "projectId": "9571156c-30e5-4d31-b62b-3bc2dfe1df9e",
+      "id": "064d9c0b-004d-4365-9f47-a4946574fdd2-file-04_FORESHADOW_DB.md",
+      "projectId": "064d9c0b-004d-4365-9f47-a4946574fdd2",
       "path": "04_FORESHADOW_DB.md",
       "folder": "NovelMD",
       "content": "",
@@ -623,8 +623,8 @@
       "contentPath": "data/workspace/overlays/stories/04_FORESHADOW_DB.md"
     },
     {
-      "id": "9571156c-30e5-4d31-b62b-3bc2dfe1df9e-file-05_TIMELINE.md",
-      "projectId": "9571156c-30e5-4d31-b62b-3bc2dfe1df9e",
+      "id": "064d9c0b-004d-4365-9f47-a4946574fdd2-file-05_TIMELINE.md",
+      "projectId": "064d9c0b-004d-4365-9f47-a4946574fdd2",
       "path": "05_TIMELINE.md",
       "folder": "NovelMD",
       "content": "",
@@ -633,8 +633,8 @@
       "contentPath": "data/workspace/overlays/stories/05_TIMELINE.md"
     },
     {
-      "id": "9571156c-30e5-4d31-b62b-3bc2dfe1df9e-file-Story/EP001.md",
-      "projectId": "9571156c-30e5-4d31-b62b-3bc2dfe1df9e",
+      "id": "064d9c0b-004d-4365-9f47-a4946574fdd2-file-Story/EP001.md",
+      "projectId": "064d9c0b-004d-4365-9f47-a4946574fdd2",
       "path": "Story/EP001.md",
       "folder": "Story",
       "content": "",
@@ -643,8 +643,8 @@
       "contentPath": "data/workspace/overlays/stories/EP001.md"
     },
     {
-      "id": "9571156c-30e5-4d31-b62b-3bc2dfe1df9e-file-Story/EP002.md",
-      "projectId": "9571156c-30e5-4d31-b62b-3bc2dfe1df9e",
+      "id": "064d9c0b-004d-4365-9f47-a4946574fdd2-file-Story/EP002.md",
+      "projectId": "064d9c0b-004d-4365-9f47-a4946574fdd2",
       "path": "Story/EP002.md",
       "folder": "Story",
       "content": "",
@@ -653,8 +653,8 @@
       "contentPath": "data/workspace/overlays/stories/EP002.md"
     },
     {
-      "id": "9571156c-30e5-4d31-b62b-3bc2dfe1df9e-file-Story/EP003.md",
-      "projectId": "9571156c-30e5-4d31-b62b-3bc2dfe1df9e",
+      "id": "064d9c0b-004d-4365-9f47-a4946574fdd2-file-Story/EP003.md",
+      "projectId": "064d9c0b-004d-4365-9f47-a4946574fdd2",
       "path": "Story/EP003.md",
       "folder": "Story",
       "content": "",
@@ -663,8 +663,8 @@
       "contentPath": "data/workspace/overlays/stories/EP003.md"
     },
     {
-      "id": "9571156c-30e5-4d31-b62b-3bc2dfe1df9e-file-Story/EP004.md",
-      "projectId": "9571156c-30e5-4d31-b62b-3bc2dfe1df9e",
+      "id": "064d9c0b-004d-4365-9f47-a4946574fdd2-file-Story/EP004.md",
+      "projectId": "064d9c0b-004d-4365-9f47-a4946574fdd2",
       "path": "Story/EP004.md",
       "folder": "Story",
       "content": "",
@@ -673,8 +673,8 @@
       "contentPath": "data/workspace/overlays/stories/EP004.md"
     },
     {
-      "id": "9571156c-30e5-4d31-b62b-3bc2dfe1df9e-file-Story/EP005.md",
-      "projectId": "9571156c-30e5-4d31-b62b-3bc2dfe1df9e",
+      "id": "064d9c0b-004d-4365-9f47-a4946574fdd2-file-Story/EP005.md",
+      "projectId": "064d9c0b-004d-4365-9f47-a4946574fdd2",
       "path": "Story/EP005.md",
       "folder": "Story",
       "content": "",
@@ -683,8 +683,8 @@
       "contentPath": "data/workspace/overlays/stories/EP005.md"
     },
     {
-      "id": "9571156c-30e5-4d31-b62b-3bc2dfe1df9e-file-Story/EP006.md",
-      "projectId": "9571156c-30e5-4d31-b62b-3bc2dfe1df9e",
+      "id": "064d9c0b-004d-4365-9f47-a4946574fdd2-file-Story/EP006.md",
+      "projectId": "064d9c0b-004d-4365-9f47-a4946574fdd2",
       "path": "Story/EP006.md",
       "folder": "Story",
       "content": "",
@@ -693,8 +693,8 @@
       "contentPath": "data/workspace/overlays/stories/EP006.md"
     },
     {
-      "id": "9571156c-30e5-4d31-b62b-3bc2dfe1df9e-file-Story/EP007.md",
-      "projectId": "9571156c-30e5-4d31-b62b-3bc2dfe1df9e",
+      "id": "064d9c0b-004d-4365-9f47-a4946574fdd2-file-Story/EP007.md",
+      "projectId": "064d9c0b-004d-4365-9f47-a4946574fdd2",
       "path": "Story/EP007.md",
       "folder": "Story",
       "content": "",
@@ -703,8 +703,8 @@
       "contentPath": "data/workspace/overlays/stories/EP007.md"
     },
     {
-      "id": "9571156c-30e5-4d31-b62b-3bc2dfe1df9e-file-Story/EP015.md",
-      "projectId": "9571156c-30e5-4d31-b62b-3bc2dfe1df9e",
+      "id": "064d9c0b-004d-4365-9f47-a4946574fdd2-file-Story/EP015.md",
+      "projectId": "064d9c0b-004d-4365-9f47-a4946574fdd2",
       "path": "Story/EP015.md",
       "folder": "Story",
       "content": "",
@@ -713,8 +713,8 @@
       "contentPath": "data/workspace/overlays/stories/EP015.md"
     },
     {
-      "id": "9571156c-30e5-4d31-b62b-3bc2dfe1df9e-file-Story/EP016.md",
-      "projectId": "9571156c-30e5-4d31-b62b-3bc2dfe1df9e",
+      "id": "064d9c0b-004d-4365-9f47-a4946574fdd2-file-Story/EP016.md",
+      "projectId": "064d9c0b-004d-4365-9f47-a4946574fdd2",
       "path": "Story/EP016.md",
       "folder": "Story",
       "content": "",
@@ -723,8 +723,8 @@
       "contentPath": "data/workspace/overlays/stories/EP016.md"
     },
     {
-      "id": "9571156c-30e5-4d31-b62b-3bc2dfe1df9e-file-Story/Original/ST015.md",
-      "projectId": "9571156c-30e5-4d31-b62b-3bc2dfe1df9e",
+      "id": "064d9c0b-004d-4365-9f47-a4946574fdd2-file-Story/Original/ST015.md",
+      "projectId": "064d9c0b-004d-4365-9f47-a4946574fdd2",
       "path": "Story/Original/ST015.md",
       "folder": "Story/Original",
       "content": "",
@@ -734,8 +734,8 @@
       "contentPath": "data/workspace/overlays/stories/ST015.md"
     },
     {
-      "id": "9571156c-30e5-4d31-b62b-3bc2dfe1df9e-file-Story/Original/ST016.md",
-      "projectId": "9571156c-30e5-4d31-b62b-3bc2dfe1df9e",
+      "id": "064d9c0b-004d-4365-9f47-a4946574fdd2-file-Story/Original/ST016.md",
+      "projectId": "064d9c0b-004d-4365-9f47-a4946574fdd2",
       "path": "Story/Original/ST016.md",
       "folder": "Story/Original",
       "content": "",

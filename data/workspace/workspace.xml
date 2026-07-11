@@ -1,8 +1,8 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <Workspace
   version="1"
-  projectTitle="인류 생존 프로젝트"
-  updatedAt="2026-07-11T11:55:44.060Z"
+  projectTitle="유진이의 모험2"
+  updatedAt="2026-07-11T12:08:15.320Z"
   schema="novelexplor-workspace/v1">
 
   <Sections>
@@ -19,22 +19,21 @@
 
   <Assets root="overlays/">
     <File id="chr0001-avatar" path="overlays/characters/CHR0001.png" mime="image/png"/>
-    <File id="story-00_MASTER-md" path="overlays/stories/00_MASTER.md" mime="text/markdown"/>
-    <File id="story-01_STORY_BIBLE-md" path="overlays/stories/01_STORY_BIBLE.md" mime="text/markdown"/>
-    <File id="story-02_WORLD_SETTING-md" path="overlays/stories/02_WORLD_SETTING.md" mime="text/markdown"/>
-    <File id="story-03_CHARACTER_DB-md" path="overlays/stories/03_CHARACTER_DB.md" mime="text/markdown"/>
-    <File id="story-04_FORESHADOW_DB-md" path="overlays/stories/04_FORESHADOW_DB.md" mime="text/markdown"/>
+    <File id="chr0002-avatar" path="overlays/characters/CHR0002.png" mime="image/png"/>
+    <File id="chr0003-avatar" path="overlays/characters/CHR0003.png" mime="image/png"/>
+    <File id="chr0004-avatar" path="overlays/characters/CHR0004.png" mime="image/png"/>
+    <File id="chr0005-avatar" path="overlays/characters/CHR0005.png" mime="image/png"/>
+    <File id="chr0006-avatar" path="overlays/characters/CHR0006.png" mime="image/png"/>
+    <File id="chr0007-avatar" path="overlays/characters/CHR0007.png" mime="image/png"/>
+    <File id="chr0008-avatar" path="overlays/characters/CHR0008.png" mime="image/png"/>
+    <File id="chr0009-avatar" path="overlays/characters/CHR0009.png" mime="image/png"/>
     <File id="story-05_TIMELINE-md" path="overlays/stories/05_TIMELINE.md" mime="text/markdown"/>
+    <File id="story-11_STORY_NAV-md" path="overlays/stories/11_STORY_NAV.md" mime="text/markdown"/>
     <File id="story-EP001-md" path="overlays/stories/EP001.md" mime="text/markdown"/>
     <File id="story-EP002-md" path="overlays/stories/EP002.md" mime="text/markdown"/>
     <File id="story-EP003-md" path="overlays/stories/EP003.md" mime="text/markdown"/>
-    <File id="story-EP004-md" path="overlays/stories/EP004.md" mime="text/markdown"/>
-    <File id="story-EP005-md" path="overlays/stories/EP005.md" mime="text/markdown"/>
-    <File id="story-EP006-md" path="overlays/stories/EP006.md" mime="text/markdown"/>
-    <File id="story-EP007-md" path="overlays/stories/EP007.md" mime="text/markdown"/>
-    <File id="story-EP015-md" path="overlays/stories/EP015.md" mime="text/markdown"/>
-    <File id="story-EP016-md" path="overlays/stories/EP016.md" mime="text/markdown"/>
-    <File id="story-ST015-md" path="overlays/stories/ST015.md" mime="text/markdown"/>
-    <File id="story-ST016-md" path="overlays/stories/ST016.md" mime="text/markdown"/>
+    <File id="story-ST001-md" path="overlays/stories/ST001.md" mime="text/markdown"/>
+    <File id="story-ST002-md" path="overlays/stories/ST002.md" mime="text/markdown"/>
+    <File id="story-ST003-md" path="overlays/stories/ST003.md" mime="text/markdown"/>
   </Assets>
 </Workspace>

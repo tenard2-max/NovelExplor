@@ -1,14 +1,8 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <Section id="story-nav" viewId="story-nav" title="스토리 네비" version="1">
   <Episodes>
-    <Episode id="EP001" number="1" title="마지막 1초 · 회귀 · AI폰 재기동" src="../overlays/stories/EP001.md"/>
-    <Episode id="EP002" number="2" title="대학 친구들과 재회 · 미래 보스의 단서" src="../overlays/stories/EP002.md"/>
-    <Episode id="EP003" number="3" title="지은과 재회 · 잃어버린 청춘의 감정" src="../overlays/stories/EP003.md"/>
-    <Episode id="EP004" number="4" title="AI와 일상 시작 · 첫 이상 징후" src="../overlays/stories/EP004.md"/>
-    <Episode id="EP005" number="5" title="민수의 맵부심 · AI의 유머와 인간성" src="../overlays/stories/EP005.md"/>
-    <Episode id="EP006" number="6" title="AI가 투자 계획 제시 · 인류 생존 프로젝트 시작" src="../overlays/stories/EP006.md"/>
-    <Episode id="EP007" number="7" title="아버지에게 투자금 확보 · 첫 자본 마련" src="../overlays/stories/EP007.md"/>
-    <Episode id="EP015" number="15" title="금이 간 벽" src="../overlays/stories/ST015.md"/>
-    <Episode id="EP016" number="16" title="무너지는 공학관" src="../overlays/stories/ST016.md"/>
+    <Episode id="EP001" number="1" title="혼자 떠난 산속 모험" src="../overlays/stories/ST001.md"/>
+    <Episode id="EP002" number="2" title="숲속의 대결과 뜻밖의 만남" src="../overlays/stories/ST002.md"/>
+    <Episode id="EP003" number="3" title="새로운 친구와 행복한 하루" src="../overlays/stories/ST003.md"/>
   </Episodes>
 </Section>
