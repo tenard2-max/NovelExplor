@@ -19,6 +19,7 @@ import {
   canManageProjectContent,
   canBeProjectWriter,
   normalizeWriters,
+  normalizeWriterNames,
   isMaster,
   listUsers,
   MAX_USER_PROJECTS,
@@ -116,10 +117,11 @@ export async function claimOrphanProjects(userId) {
   return n;
 }
 
-/** ownerId / writers 정규화 (레거시: writers 없으면 owner 를 writer 로) */
+/** ownerId / writers / writerUsernames 정규화 */
 export function ensureProjectAcl(project) {
   if (!project) return project;
   const writers = normalizeWriters(project.writers);
+  const writerUsernames = normalizeWriterNames(project.writerUsernames);
   if (writers.length) {
     project.writers = writers;
   } else if (project.ownerId) {
@@ -127,6 +129,7 @@ export function ensureProjectAcl(project) {
   } else {
     project.writers = [];
   }
+  project.writerUsernames = writerUsernames;
   return project;
 }
 
@@ -153,19 +156,20 @@ export async function setProjectWritersById(projectId, writerIds) {
 
   const users = await listUsers();
   const byId = new Map(users.map((u) => [u.id, u]));
-  const ids = normalizeWriters(writerIds).filter((id) => {
-    const u = byId.get(id);
-    return u && canBeProjectWriter(u);
-  });
+  const allowed = normalizeWriters(writerIds)
+    .map((id) => byId.get(id))
+    .filter((u) => u && canBeProjectWriter(u));
 
-  project.writers = ids;
-  if (!project.ownerId && ids[0]) project.ownerId = ids[0];
+  project.writers = allowed.map((u) => u.id);
+  project.writerUsernames = normalizeWriterNames(allowed.map((u) => u.username));
+  if (!project.ownerId && project.writers[0]) project.ownerId = project.writers[0];
   project.updatedAt = nowIso();
   ensureProjectAcl(project);
   await storage.put('projects', project);
 
   if (currentProject && (currentProject.id === projectId || currentProject.projectId === projectId)) {
     currentProject.writers = project.writers;
+    currentProject.writerUsernames = project.writerUsernames;
     currentProject.ownerId = project.ownerId;
     currentProject.updatedAt = project.updatedAt;
     emit('project:loaded', currentProject);
@@ -178,6 +182,7 @@ export async function setProjectWritersById(projectId, writerIds) {
  * @param {string} adminUserId
  * @param {string[]} grantProjectIds 권한 줄 프로젝트 id
  * @param {string[]} revokeProjectIds 권한 뺄 프로젝트 id
+ * @returns {Promise<{ changed: number, projectIds: string[] }>}
  */
 export async function applyAdminWriteAccess(adminUserId, grantProjectIds = [], revokeProjectIds = []) {
   if (!isMaster()) throw new Error('마스터만 프로젝트 쓰기 권한을 부여할 수 있습니다.');
@@ -189,22 +194,42 @@ export async function applyAdminWriteAccess(adminUserId, grantProjectIds = [], r
 
   const grant = new Set(grantProjectIds.filter(Boolean));
   const revoke = new Set(revokeProjectIds.filter(Boolean));
-  let changed = 0;
+  const touched = [];
 
   for (const id of new Set([...grant, ...revoke])) {
     const project = await storage.get('projects', id);
     if (!project) continue;
     ensureProjectAcl(project);
-    const before = normalizeWriters(project.writers).slice().sort().join('|');
-    const writers = new Set(normalizeWriters(project.writers));
-    if (grant.has(id)) writers.add(adminUserId);
-    if (revoke.has(id)) writers.delete(adminUserId);
-    const next = [...writers];
-    if (next.slice().sort().join('|') === before) continue;
-    await setProjectWritersById(id, next);
-    changed += 1;
+
+    const beforeIds = normalizeWriters(project.writers).slice().sort().join('|');
+    const beforeNames = normalizeWriterNames(project.writerUsernames).slice().sort().join('|');
+    const writerSet = new Set(normalizeWriters(project.writers));
+
+    if (grant.has(id)) writerSet.add(adminUserId);
+    if (revoke.has(id)) writerSet.delete(adminUserId);
+
+    const nextIds = [...writerSet];
+    await setProjectWritersById(id, nextIds);
+
+    // username 도 명시 저장 (다른 브라우저·재로그인 대비)
+    const saved = await storage.get('projects', id);
+    if (saved) {
+      const nameSet = new Set(normalizeWriterNames(saved.writerUsernames));
+      if (grant.has(id) && admin.username) nameSet.add(String(admin.username).toLowerCase());
+      if (revoke.has(id) && admin.username) nameSet.delete(String(admin.username).toLowerCase());
+      saved.writerUsernames = [...nameSet];
+      await storage.put('projects', saved);
+      if (currentProject && (currentProject.id === id || currentProject.projectId === id)) {
+        currentProject.writers = saved.writers;
+        currentProject.writerUsernames = saved.writerUsernames;
+      }
+    }
+
+    const afterIds = normalizeWriters(saved?.writers).slice().sort().join('|');
+    const afterNames = normalizeWriterNames(saved?.writerUsernames).slice().sort().join('|');
+    if (afterIds !== beforeIds || afterNames !== beforeNames) touched.push(id);
   }
-  return changed;
+  return { changed: touched.length, projectIds: touched };
 }
 
 export async function countOwnedProjects(userId) {
@@ -294,6 +319,9 @@ export async function createProject(title = '새 프로젝트', useSeed = true) 
   seed.project.ownerId = user.id;
   seed.project.author = user.username;
   seed.project.writers = [user.id];
+  seed.project.writerUsernames = user.username
+    ? [String(user.username).toLowerCase()]
+    : [];
   if (!useSeed) {
     seed.project.title = title || '새 프로젝트';
   }
@@ -354,6 +382,8 @@ function emptyProject(projectId, title) {
       ownerId: '',
 
       writers: [],
+
+      writerUsernames: [],
 
       versionMeta: { major: 1, minor: 0, patch: 0, build: 1 },
 
@@ -1575,6 +1605,7 @@ export async function importProjectJson(jsonText) {
   // 소유권·쓰기 권한은 JSON에 있는 값을 유지 (열람자가 가로채지 않음)
   let ownerId = String(incoming.ownerId || '').trim();
   let writers = normalizeWriters(incoming.writers);
+  let writerUsernames = normalizeWriterNames(incoming.writerUsernames);
   if (!writers.length && ownerId) writers = [ownerId];
 
   const project = ensureProjectAcl({
@@ -1583,6 +1614,7 @@ export async function importProjectJson(jsonText) {
     projectId,
     ownerId,
     writers,
+    writerUsernames,
     author: incoming.author || '',
     createdAt: incoming.createdAt || nowIso(),
     updatedAt: nowIso(),

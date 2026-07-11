@@ -55,6 +55,12 @@ export function normalizeWriters(writers) {
   return [...new Set(writers.map((id) => String(id || '').trim()).filter(Boolean))];
 }
 
+/** writerUsernames 정규화 (소문자) */
+export function normalizeWriterNames(names) {
+  if (!Array.isArray(names)) return [];
+  return [...new Set(names.map((n) => String(n || '').trim().toLowerCase()).filter(Boolean))];
+}
+
 /** 쓰기 권한 부여 대상(소설가·개발자). 마스터는 항상 쓰기 가능하므로 목록에서 제외 */
 export function canBeProjectWriter(user) {
   if (!user) return false;
@@ -64,16 +70,25 @@ export function canBeProjectWriter(user) {
 /**
  * 프로젝트 콘텐츠 관리(파일·소설·인물·관계도 등) 가능 여부
  * - 마스터: 모든 프로젝트
- * - 개발자·소설가: project.writers 에 포함된 경우만
- * - writers 없는 레거시: ownerId 와 일치하면 허용
+ * - 개발자·소설가: writers(userId) 또는 writerUsernames 에 포함된 경우
+ * - ACL 없으면 ownerId 일치 시 허용
  * - 일반 사용자: 불가(열람만)
  */
 export function canManageProjectContent(project, user = currentUser) {
   if (!user || user.role === ROLES.USER) return false;
   if (!project) return false;
   if (user.role === ROLES.MASTER) return true;
+
   const writers = normalizeWriters(project.writers);
-  if (writers.length) return writers.includes(user.id);
+  const writerNames = normalizeWriterNames(project.writerUsernames);
+  const uname = String(user.username || '').trim().toLowerCase();
+
+  if (writers.includes(user.id)) return true;
+  if (uname && writerNames.includes(uname)) return true;
+
+  // ACL이 명시되어 있으면 owner 폴백 없이 거부 (다른 기기·다른 userId 대비 writerUsernames 사용)
+  if (writers.length || writerNames.length) return false;
+
   return Boolean(project.ownerId && project.ownerId === user.id);
 }
 

@@ -4,8 +4,8 @@
  * 저장: 선택한 관리자에게 체크된 프로젝트 쓰기 권한 부여/해제
  */
 
-import { listUsers, canBeProjectWriter, normalizeWriters, isMaster, ROLE_LABELS } from '../core/auth.js';
-import { listProjects, applyAdminWriteAccess } from '../core/project.js';
+import { listUsers, canBeProjectWriter, normalizeWriters, normalizeWriterNames, isMaster, ROLE_LABELS } from '../core/auth.js';
+import { listProjects, applyAdminWriteAccess, loadProject, getCurrentProject } from '../core/project.js';
 import {
   listGithubProjectsDetailed,
   deleteGithubProjectSnapshots,
@@ -19,6 +19,8 @@ import {
   readBackupFile,
   getSyncFolderLabel,
 } from '../core/sync-folder.js';
+import { exportTimestampedBackup } from '../core/backup.js';
+import { flushSave } from '../core/autosave.js';
 import { applyRolePermissions } from './permissions.js';
 
 /**
@@ -108,12 +110,17 @@ export async function showProjectManageDialog() {
 
   function syncChecksToAdmin() {
     const adminId = selectedAdminId();
+    const admin = admins.find((u) => u.id === adminId);
+    const adminName = String(admin?.username || '').toLowerCase();
     listEl.querySelectorAll('input[name="proj-item"]').forEach((el) => {
       const item = catalog.find((c) => c.key === el.value);
       if (!item) return;
-      // 로컬 writers 기준. GitHub만 있으면 스냅샷 writers
       const writers = normalizeWriters(item.writers);
-      el.checked = Boolean(adminId && writers.includes(adminId));
+      const names = normalizeWriterNames(item.writerUsernames);
+      el.checked = Boolean(
+        adminId
+        && (writers.includes(adminId) || (adminName && names.includes(adminName)))
+      );
     });
     updateActionButtons();
   }
@@ -263,12 +270,25 @@ export async function showProjectManageDialog() {
       }
 
       try {
-        const n = await applyAdminWriteAccess(adminId, grantLocal, revokeLocal);
+        const { changed, projectIds } = await applyAdminWriteAccess(adminId, grantLocal, revokeLocal);
+        const cur = getCurrentProject();
+        const curId = cur?.id || cur?.projectId;
+        if (curId && projectIds.includes(curId)) {
+          await loadProject(curId);
+          await flushSave(true);
+          try {
+            await exportTimestampedBackup({ notify: false });
+          } catch (err) {
+            console.warn('[project-manage] 권한 반영 후 동기화 저장 실패:', err);
+          }
+        }
         applyRolePermissions();
         const admin = admins.find((u) => u.id === adminId);
         alert(
-          `${admin?.username || '관리자'} 쓰기 권한을 반영했습니다. (변경 ${n}건)\n`
-          + `체크됨 ${grantLocal.length} · 해제 ${revokeLocal.length}`
+          `${admin?.username || '관리자'} 쓰기 권한을 반영했습니다. (변경 ${changed}건)\n`
+          + `체크됨 ${grantLocal.length} · 해제 ${revokeLocal.length}\n`
+          + `같은 브라우저에서 해당 계정으로 다시 로그인하면 바로 적용됩니다.\n`
+          + `다른 PC는 프로젝트 저장(JSON/GitHub) 후 그 파일로 열어야 합니다.`
         );
         await refreshCatalog();
         finish(true);
@@ -313,6 +333,7 @@ async function buildProjectCatalog() {
       title: p.title || '(제목 없음)',
       author: p.author || '',
       writers: normalizeWriters(p.writers),
+      writerUsernames: normalizeWriterNames(p.writerUsernames),
       localId: id,
       ghSnapshotId: '',
       folderName: '',
@@ -354,6 +375,9 @@ async function buildProjectCatalog() {
             prev.latestLabel = f.label;
           }
           if (!prev.writers.length && writers.length) prev.writers = writers;
+          if (!prev.writerUsernames?.length && writers.length) {
+            /* folder peek may not have usernames */
+          }
           if (!prev.author && author) prev.author = author;
         } else {
           byKey.set(mergeKey, {
@@ -361,6 +385,7 @@ async function buildProjectCatalog() {
             title: title || f.name,
             author,
             writers,
+            writerUsernames: [],
             localId: '',
             ghSnapshotId: '',
             folderName: f.name,
@@ -413,6 +438,9 @@ async function buildProjectCatalog() {
           matched.latestLabel = s.label;
         }
         if (!matched.writers.length) matched.writers = normalizeWriters(s.writers);
+        if (!matched.writerUsernames?.length) {
+          matched.writerUsernames = normalizeWriterNames(s.writerUsernames);
+        }
         if (!matched.author && s.author) matched.author = s.author;
       } else {
         byKey.set(mk, {
@@ -420,6 +448,7 @@ async function buildProjectCatalog() {
           title: s.title || s.name,
           author: s.author || '',
           writers: normalizeWriters(s.writers),
+          writerUsernames: normalizeWriterNames(s.writerUsernames),
           localId: '',
           ghSnapshotId: s.snapshotId,
           folderName: '',

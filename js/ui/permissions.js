@@ -12,14 +12,28 @@ import {
   getCurrentUser,
   ROLES,
 } from '../core/auth.js';
-import { getCurrentProject } from '../core/project.js';
+import { getCurrentProject, loadProject } from '../core/project.js';
 import { getCurrentView, switchView } from './nav-menu.js';
 
 const USER_BLOCKED_VIEWS = new Set(['master', 'story-bible', 'editor']);
 
 export function initPermissions() {
   applyRolePermissions();
-  on('auth:changed', () => applyRolePermissions());
+  on('auth:changed', async (user) => {
+    // 계정 전환 시 IDB의 writers/writerUsernames 를 다시 읽어 권한 반영
+    if (user) {
+      const proj = getCurrentProject();
+      const pid = proj?.id || proj?.projectId;
+      if (pid) {
+        try {
+          await loadProject(pid);
+        } catch (err) {
+          console.warn('[permissions] 프로젝트 재로드 실패:', err);
+        }
+      }
+    }
+    applyRolePermissions();
+  });
   on('view:changed', () => applyRolePermissions());
   on('project:loaded', () => applyRolePermissions());
 }

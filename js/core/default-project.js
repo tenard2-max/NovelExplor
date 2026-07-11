@@ -115,6 +115,7 @@ export async function listGithubProjectsDetailed() {
           title: project.title || data?.title || '(제목 없음)',
           author: project.author || '',
           writers: Array.isArray(project.writers) ? project.writers : [],
+          writerUsernames: Array.isArray(project.writerUsernames) ? project.writerUsernames : [],
           ownerId: project.ownerId || '',
           exportedAt: data?.exportedAt || project.updatedAt || '',
         };
@@ -124,6 +125,7 @@ export async function listGithubProjectsDetailed() {
           title: '(메타 읽기 실패)',
           author: '',
           writers: [],
+          writerUsernames: [],
           ownerId: '',
           exportedAt: '',
         };
