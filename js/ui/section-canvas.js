@@ -13,7 +13,7 @@ import { escapeHtml } from '../core/utils.js';
 import * as project from '../core/project.js';
 import { openCharacterPanel } from './character-panel.js';
 import { on } from '../core/events.js';
-import { formatSummaryLineBreaks } from '../core/story-sync-engine.js';
+import { formatSummaryLineBreaks, dedupeTimelineByEpisode, timelineDisplayParts } from '../core/story-sync-engine.js';
 
 /** 인물 XML 카드 클릭용 메타 (id → xml 필드) */
 let characterXmlById = new Map();
@@ -233,26 +233,30 @@ function renderForeshadowSection(doc) {
 }
 
 function renderTimelineSection(doc) {
-  const list = parseTimeline(doc);
-  const rows = list.map((t) => `
+  const list = dedupeTimelineByEpisode(parseTimeline(doc));
+  const rows = list.map((t) => {
+    const { date, title } = timelineDisplayParts(t);
+    return `
     <div class="xml-tl-row">
       <span>EP${escapeHtml(String(t.episode).padStart(3, '0'))}</span>
-      <strong>${escapeHtml(t.date || '—')}</strong>
-    </div>`).join('');
+      <strong>${escapeHtml(date)}</strong>
+      <span>${escapeHtml(title)}</span>
+    </div>`;
+  }).join('');
   return `<div class="xml-tl-list">${rows || '<p class="xml-section-empty">이벤트 없음</p>'}</div>`;
 }
 
-/** 타임라인: IndexedDB 우선 — 년월일만 표시 */
+/** 타임라인: IndexedDB 우선 — EP당 1건 · 년월일 + 제목 한 줄 */
 function renderTimelineSectionFromIdb(doc) {
-  const idb = [...(project.getCache().timeline || [])]
-    .sort((a, b) => (a.episode - b.episode) || String(a.date || '').localeCompare(String(b.date || '')));
+  const idb = dedupeTimelineByEpisode(project.getCache().timeline || []);
   if (idb.length) {
     const rows = idb.map((t) => {
-      const date = t.date || (/^\d{4}-\d{2}-\d{2}$/.test(String(t.title || '')) ? t.title : '—');
+      const { date, title } = timelineDisplayParts(t);
       return `
       <div class="xml-tl-row">
         <span>EP${escapeHtml(String(t.episode).padStart(3, '0'))}</span>
         <strong>${escapeHtml(date)}</strong>
+        <span>${escapeHtml(title)}</span>
       </div>`;
     }).join('');
     return `<div class="xml-tl-list">${rows}</div>`;

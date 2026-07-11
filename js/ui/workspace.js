@@ -7,6 +7,7 @@ import { renderMasterDashboard, renderStoryBibleView, renderSettingDocsWorkspace
 import { findSettingMdFile, getSettingMdFiles, parseSettingMdIndex } from '../core/utils.js';
 import { showStory } from './reader.js';
 import { deleteCharacterWithConfirm } from './character-panel.js';
+import { dedupeTimelineByEpisode, timelineDisplayParts } from '../core/story-sync-engine.js';
 
 export function initWorkspace() {
   on('workspace:render', renderView);
@@ -73,11 +74,14 @@ function renderView(viewId) {
       deletable: true,
     }));
   } else if (viewId === 'timeline') {
-    renderCardList(el, cache.timeline, (t) => ({
-      id: t.id, type: 'timeline',
-      title: t.title, badge: `EP${t.episode}`,
-      desc: `${t.date || ''} — ${t.description || ''}`,
-    }));
+    renderCardList(el, dedupeTimelineByEpisode(cache.timeline), (t) => {
+      const { date, title } = timelineDisplayParts(t);
+      return {
+        id: t.id, type: 'timeline',
+        title: `${date}  ${title}`, badge: `EP${t.episode}`,
+        desc: '',
+      };
+    });
   }
 }
 

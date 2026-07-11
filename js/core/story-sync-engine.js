@@ -198,8 +198,8 @@ function collectCooccurrencePairs(episodes, characters, nameStats) {
 }
 
 /**
- * 키워드가 있는 문단/구간만 타임라인 후보로 추출
- * 표시용 필드는 년월일(date) 중심
+ * 키워드가 있는 에피소드만 타임라인 후보로 추출 — EP당 1건
+ * date = 년월일, title = 에피소드 제목 또는 키워드 요약
  */
 export function extractTimelineCandidates(episodes) {
   const results = [];
@@ -215,36 +215,73 @@ export function extractTimelineCandidates(episodes) {
       .map((b) => b.trim())
       .filter(Boolean);
 
-    const matched = [];
+    const allKeywords = new Set();
+    let bestDate = '';
+
     for (const block of blocks) {
       const hits = [...block.matchAll(kwRe)].map((m) => m[0]);
       if (!hits.length) continue;
-      const uniq = [...new Set(hits)];
-      const date = extractDateFromText(block) || episodeFallbackDate(ep.number);
-      matched.push({
-        episode: ep.number,
-        title: date, // 목록·그래프에서도 년월일만 쓰도록
-        date,
-        description: '',
-        keywords: uniq,
-        source: 'story-sync',
-      });
+      hits.forEach((h) => allKeywords.add(h));
+      const d = extractDateFromText(block);
+      if (d && !bestDate) bestDate = d;
     }
 
-    if (!matched.length) continue;
+    if (!allKeywords.size) continue;
 
-    // 화당 과도한 후보 제한: 키워드 다양성 높은 상위 3개 · 날짜 중복 제거
-    matched.sort((a, b) => b.keywords.length - a.keywords.length);
-    const seenDates = new Set();
-    for (const row of matched) {
-      if (seenDates.has(row.date)) continue;
-      seenDates.add(row.date);
-      results.push(row);
-      if (seenDates.size >= 3) break;
-    }
+    const keywords = [...allKeywords];
+    const date = bestDate || episodeFallbackDate(ep.number);
+    const epTitle = String(ep.title || '').trim();
+    const title = epTitle && !/^EP\s*\d+/i.test(epTitle)
+      ? epTitle
+      : keywords.slice(0, 3).join('·');
+
+    results.push({
+      episode: ep.number,
+      title,
+      date,
+      description: '',
+      keywords,
+      source: 'story-sync',
+    });
   }
 
   return results;
+}
+
+/** EP당 1건으로 정리 (날짜·제목 품질 우선) */
+export function dedupeTimelineByEpisode(timeline = []) {
+  const byEp = new Map();
+  for (const t of timeline) {
+    const ep = Number(t.episode) || 0;
+    const prev = byEp.get(ep);
+    if (!prev) {
+      byEp.set(ep, t);
+      continue;
+    }
+    if (timelineEntryScore(t) > timelineEntryScore(prev)) byEp.set(ep, t);
+  }
+  return [...byEp.values()].sort((a, b) => a.episode - b.episode);
+}
+
+function timelineEntryScore(t) {
+  let s = 0;
+  if (t.date && /^\d{4}-\d{2}-\d{2}$/.test(String(t.date))) s += 3;
+  const title = String(t.title || '').trim();
+  if (title && !/^\d{4}-\d{2}-\d{2}$/.test(title) && title !== t.date) s += 2;
+  if ((t.keywords || []).length) s += 1;
+  return s;
+}
+
+/** 표시용 년월일·제목 (한 줄) */
+export function timelineDisplayParts(t) {
+  const date = t.date && /^\d{4}-\d{2}-\d{2}$/.test(String(t.date))
+    ? t.date
+    : (/^\d{4}-\d{2}-\d{2}$/.test(String(t.title || '')) ? t.title : '—');
+  let title = String(t.title || '').trim();
+  if (!title || /^\d{4}-\d{2}-\d{2}$/.test(title) || title === date) {
+    title = (t.keywords || []).slice(0, 3).join('·') || '사건';
+  }
+  return { date, title };
 }
 
 /** 본문에서 YYYY-MM-DD / 2024년 3월 15일 등 추출 */
@@ -314,19 +351,18 @@ ${relRows || '| - | - | - | - | - |'}
 `;
 }
 
-/** 타임라인 → 05_TIMELINE.md (년월일만) */
+/** 타임라인 → 05_TIMELINE.md (EP당 1줄 · 년월일 + 제목) */
 export function buildTimelineMarkdown(timeline = []) {
-  const rows = [...timeline]
-    .sort((a, b) => (a.episode - b.episode) || String(a.date || '').localeCompare(String(b.date || '')))
+  const rows = dedupeTimelineByEpisode(timeline)
     .map((t) => {
-      const ep = `EP${String(t.episode).padStart(2, '0')}`;
-      const date = t.date || t.title || '—';
-      return `${ep} — ${date}`;
+      const ep = `EP${String(t.episode).padStart(3, '0')}`;
+      const { date, title } = timelineDisplayParts(t);
+      return `${ep}  ${date}  ${title}`;
     });
 
   return `# 05_TIMELINE
 
-> 년월일 표시 · 스토리 동기화 · ${new Date().toISOString()}
+> EP당 1건 · 년월일 + 제목 · 스토리 동기화 · ${new Date().toISOString()}
 
 ${rows.join('\n') || '(사건 없음)'}
 `;

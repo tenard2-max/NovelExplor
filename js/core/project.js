@@ -10,6 +10,8 @@ import { createSeedProject } from '../seed/seed-data.js';
 
 import { emit } from './events.js';
 
+import { dedupeTimelineByEpisode } from './story-sync-engine.js';
+
 import {
 
   createEpisodeFromStory,
@@ -1137,13 +1139,23 @@ export async function replaceStorySyncTimeline(candidates = []) {
   cache.timeline = keep;
 
   let added = 0;
-  for (const c of candidates) {
+  const unique = dedupeTimelineByEpisode(candidates);
+  for (const c of unique) {
     const rec = await addTimelineEvent({
       ...c,
       source: 'story-sync',
     }, { silent: true });
     if (rec) added += 1;
   }
+
+  // EP 중복 잔여분 정리 (이전 다중 추출 데이터 포함)
+  const collapsed = dedupeTimelineByEpisode(cache.timeline);
+  const keepIds = new Set(collapsed.map((t) => t.id));
+  for (const ev of [...(cache.timeline || [])]) {
+    if (!keepIds.has(ev.id)) await storage.remove('timeline', ev.id);
+  }
+  cache.timeline = collapsed;
+
   emit('timeline:updated', { count: added, source: 'story-sync' });
   return added;
 }

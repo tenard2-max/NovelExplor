@@ -5,6 +5,7 @@ import * as project from '../core/project.js';
 import * as autosave from '../core/autosave.js';
 import { openCharacterPanel, openImageLightbox } from '../ui/character-panel.js';
 import { showDialog, showAlert } from '../ui/dialog.js';
+import { dedupeTimelineByEpisode, timelineDisplayParts } from '../core/story-sync-engine.js';
 
 const GRADE_COLORS = {
   F: '#6b7280', D: '#60a5fa', C: '#4ade80', B: '#facc15',
@@ -587,14 +588,14 @@ function buildTimelineGraph(cache) {
   const w = canvas.clientWidth;
   const h = canvas.clientHeight;
   const padding = 60;
-  const items = [...cache.timeline].sort((a, b) => a.episode - b.episode);
+  const items = dedupeTimelineByEpisode(cache.timeline || []);
   const step = items.length > 1 ? (w - padding * 2) / (items.length - 1) : 0;
 
   items.forEach((ev, i) => {
-    const date = ev.date || (/^\d{4}-\d{2}-\d{2}$/.test(String(ev.title || '')) ? ev.title : '—');
+    const { date, title } = timelineDisplayParts(ev);
     nodes.push({
       id: ev.id,
-      label: date,
+      label: `${date} ${truncate(title, 10)}`,
       sub: `EP${ev.episode}`,
       color: '#34d399',
       x: padding + step * i,

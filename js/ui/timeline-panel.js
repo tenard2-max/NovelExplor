@@ -2,6 +2,7 @@
 
 import { on } from '../core/events.js';
 import * as project from '../core/project.js';
+import { dedupeTimelineByEpisode, timelineDisplayParts } from '../core/story-sync-engine.js';
 
 export function initTimeline() {
   on('project:loaded', render);
@@ -24,16 +25,15 @@ function render() {
   }
 
   const sort = document.getElementById('timeline-sort')?.value || 'episode';
-  const items = [...cache.timeline];
-  if (sort === 'date') items.sort((a, b) => (a.date || '').localeCompare(b.date || ''));
-  else items.sort((a, b) => a.episode - b.episode);
+  let items = dedupeTimelineByEpisode(cache.timeline);
+  if (sort === 'date') items = [...items].sort((a, b) => (a.date || '').localeCompare(b.date || ''));
 
   list.innerHTML = items.map((t) => {
-    const date = t.date || (/^\d{4}-\d{2}-\d{2}$/.test(String(t.title || '')) ? t.title : '—');
+    const { date, title } = timelineDisplayParts(t);
     return `
     <div class="timeline-item">
       <span>EP${String(t.episode).padStart(3, '0')}</span>
-      <span><strong>${date}</strong></span>
+      <span><strong>${date}</strong> ${title}</span>
     </div>`;
   }).join('');
 }

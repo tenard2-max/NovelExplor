@@ -3,6 +3,7 @@
 import { on, emit } from '../core/events.js';
 import { getSettingMdFiles } from '../core/utils.js';
 import * as project from '../core/project.js';
+import { dedupeTimelineByEpisode, timelineDisplayParts } from '../core/story-sync-engine.js';
 
 const FOLDERS = [
   { id: 'novelmd', label: 'NovelMD', icon: '📁' },
@@ -86,8 +87,9 @@ function render(treeEl) {
     }
 
     if (folder.id === 'timeline') {
-      for (const t of cache.timeline) {
-        parts.push(fileNode(t.id, `EP${t.episode} ${t.title}`, 1, 'timeline'));
+      for (const t of dedupeTimelineByEpisode(cache.timeline)) {
+        const { date, title } = timelineDisplayParts(t);
+        parts.push(fileNode(t.id, `EP${t.episode} ${date} ${title}`, 1, 'timeline'));
       }
     }
 

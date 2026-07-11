@@ -187,8 +187,8 @@ function buildTimelinePreviewHtml(candidates) {
   const rows = candidates.map((t, i) => `
     <label class="autoadd-row">
       <input type="checkbox" class="sync-tl-only" value="${i}" checked>
-      <span class="autoadd-name">EP${String(t.episode).padStart(3, '0')} ${esc(t.date || t.title)}</span>
-      <span class="autoadd-meta">년월일</span>
+      <span class="autoadd-name">EP${String(t.episode).padStart(3, '0')} ${esc(t.date || '—')} ${esc(t.title || '')}</span>
+      <span class="autoadd-meta">년월일·제목</span>
     </label>`).join('');
 
   return `
@@ -278,8 +278,8 @@ function buildPreviewHtml(analysis) {
   const tls = analysis.timelineCandidates.map((t, i) => `
     <label class="autoadd-row">
       <input type="checkbox" class="sync-tl" value="${i}" checked>
-      <span class="autoadd-name">EP${String(t.episode).padStart(3, '0')} ${esc(t.date || t.title)}</span>
-      <span class="autoadd-meta">년월일</span>
+      <span class="autoadd-name">EP${String(t.episode).padStart(3, '0')} ${esc(t.date || '—')} ${esc(t.title || '')}</span>
+      <span class="autoadd-meta">년월일·제목</span>
     </label>`).join('');
 
   return `
