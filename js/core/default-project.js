@@ -65,7 +65,7 @@ export async function fetchGithubDefaultMeta() {
 
 /**
  * GitHub 스냅샷 목록 (YYYYMMDDHHMMSS.json / YYYYMMDDHHMMSS_테마.json)
- * @returns {Promise<{ snapshotId: string, name: string, label: string }[]>}
+ * @returns {Promise<{ snapshotId: string, name: string, label: string, size?: number }[]>}
  */
 export async function listGithubProjectSnapshots() {
   const cfg = getGithubConfig();
@@ -84,9 +84,54 @@ export async function listGithubProjectSnapshots() {
         snapshotId,
         name: e.name,
         label: theme ? `${formatStampLabel(stamp)} · ${theme}` : formatStampLabel(stamp),
+        size: e.size || 0,
       };
     })
     .sort((a, b) => b.snapshotId.localeCompare(a.snapshotId));
+}
+
+/**
+ * 스냅샷 JSON에서 프로젝트 제목·작성자·writers 메타를 채워 전체 목록 반환 (마스터 관리용)
+ * @returns {Promise<{
+ *   snapshotId: string, name: string, label: string, size: number,
+ *   title: string, author: string, writers: string[], ownerId: string, exportedAt: string
+ * }[]>}
+ */
+export async function listGithubProjectsDetailed() {
+  const list = await listGithubProjectSnapshots();
+  const cfg = getGithubConfig();
+  const snapDir = snapshotsDir(cfg);
+  const out = [];
+  const batch = 4;
+
+  for (let i = 0; i < list.length; i += batch) {
+    const chunk = list.slice(i, i + batch);
+    const metas = await Promise.all(chunk.map(async (s) => {
+      try {
+        const data = await getRepoFileJson(`${snapDir}/${s.name}`);
+        const project = data?.project || {};
+        return {
+          ...s,
+          title: project.title || data?.title || '(제목 없음)',
+          author: project.author || '',
+          writers: Array.isArray(project.writers) ? project.writers : [],
+          ownerId: project.ownerId || '',
+          exportedAt: data?.exportedAt || project.updatedAt || '',
+        };
+      } catch {
+        return {
+          ...s,
+          title: '(메타 읽기 실패)',
+          author: '',
+          writers: [],
+          ownerId: '',
+          exportedAt: '',
+        };
+      }
+    }));
+    out.push(...metas);
+  }
+  return out;
 }
 
 function formatStampLabel(stamp) {

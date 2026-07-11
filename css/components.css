@@ -242,6 +242,11 @@
   box-shadow: var(--shadow);
 }
 
+.app-dialog.dialog-wide {
+  max-width: 640px;
+  width: min(640px, 94vw);
+}
+
 .dialog-form {
   padding: 20px;
 }
@@ -489,6 +494,71 @@
 
 .proj-manage-gh-list {
   max-height: 220px;
+}
+
+.proj-manage-project-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  max-height: 280px;
+  overflow: auto;
+  margin-bottom: 4px;
+}
+
+.proj-manage-card {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 10px 12px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: transparent;
+  color: inherit;
+  text-align: left;
+  cursor: pointer;
+  margin: 0;
+  width: 100%;
+  box-sizing: border-box;
+}
+
+.proj-manage-card:hover {
+  background: var(--bg-hover);
+}
+
+.proj-manage-card.is-active {
+  border-color: var(--accent, #38bdf8);
+  box-shadow: 0 0 0 1px var(--accent, #38bdf8);
+}
+
+.proj-manage-card input[type="checkbox"] {
+  margin-top: 3px;
+  flex-shrink: 0;
+}
+
+.proj-manage-card-body {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+  flex: 1;
+}
+
+.proj-manage-card-title {
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--text);
+}
+
+.proj-manage-card-file {
+  font-size: 11px;
+  color: var(--text-muted);
+  word-break: break-all;
+}
+
+.proj-manage-card-meta {
+  font-size: 11px;
+  color: var(--text-dim);
+  line-height: 1.4;
 }
 
 .proj-manage-gh-actions {
