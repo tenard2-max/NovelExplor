@@ -68,29 +68,43 @@ export async function downloadBackupFile() {
   return exportTimestampedBackup({ notify: true });
 }
 
-/** YYYYMMDDHHMMSS.json 파일명 */
-export function timestampBackupFilename(date = new Date()) {
+/** YYYYMMDDHHMMSS.json 또는 YYYYMMDDHHMMSS_테마.json */
+export function timestampBackupFilename(date = new Date(), theme = '') {
   const p = (n) => String(n).padStart(2, '0');
-  return (
+  const stamp = (
     `${date.getFullYear()}${p(date.getMonth() + 1)}${p(date.getDate())}` +
-    `${p(date.getHours())}${p(date.getMinutes())}${p(date.getSeconds())}.json`
+    `${p(date.getHours())}${p(date.getMinutes())}${p(date.getSeconds())}`
   );
+  const tag = sanitizeThemeTag(theme);
+  return tag ? `${stamp}_${tag}.json` : `${stamp}.json`;
+}
+
+/** 파일명 테일용 테마 태그 (경로 위험 문자 제거) */
+export function sanitizeThemeTag(theme) {
+  return String(theme || '')
+    .trim()
+    .replace(/\s+/g, '_')
+    .replace(/[\\/:*?"<>|.#]/g, '')
+    .replace(/_+/g, '_')
+    .replace(/^_+|_+$/g, '')
+    .slice(0, 40);
 }
 
 /**
  * 프로젝트 동기화 스냅샷: 저장 폴더 기록(가능 시) + JSON 다운로드 + 로컬 백업
- * @param {{ notify?: boolean, asDefault?: boolean, defaultTitle?: string, skipGithub?: boolean }} [options]
+ * @param {{ notify?: boolean, asDefault?: boolean, defaultTitle?: string, skipGithub?: boolean, theme?: string }} [options]
  */
 export async function exportTimestampedBackup({
   notify = false,
   asDefault = false,
   defaultTitle = '',
   skipGithub = false,
+  theme = '',
 } = {}) {
   const json = await buildBackupJson();
   if (!json) throw new Error('열린 프로젝트가 없습니다.');
 
-  const filename = timestampBackupFilename();
+  const filename = timestampBackupFilename(new Date(), theme);
   await initSyncFolder();
 
   let savedToFolder = false;

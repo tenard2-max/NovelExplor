@@ -7,7 +7,7 @@ const HANDLE_KEY = 'project-sync-dir';
 /** @type {FileSystemDirectoryHandle | null} */
 let dirHandle = null;
 
-const TS_JSON_RE = /^(\d{14})\.json$/i;
+const TS_JSON_RE = /^(\d{14})(?:_([^.]+))?\.json$/i;
 
 export function getSyncDirHandle() {
   return dirHandle;
@@ -48,8 +48,8 @@ export async function clearSyncDirectory() {
 }
 
 /**
- * 폴더 안 YYYYMMDDHHMMSS.json 목록 (최신순)
- * @returns {Promise<Array<{ name: string, stamp: string, label: string, handle: FileSystemFileHandle }>>}
+ * 폴더 안 YYYYMMDDHHMMSS.json / YYYYMMDDHHMMSS_테마.json 목록 (최신순)
+ * @returns {Promise<Array<{ name: string, stamp: string, theme: string, label: string, handle: FileSystemFileHandle }>>}
  */
 export async function listTimestampBackups() {
   if (!dirHandle) return [];
@@ -61,14 +61,17 @@ export async function listTimestampBackups() {
     if (handle.kind !== 'file') continue;
     const m = name.match(TS_JSON_RE);
     if (!m) continue;
+    const stamp = m[1];
+    const theme = m[2] || '';
     items.push({
       name,
-      stamp: m[1],
-      label: formatStampLabel(m[1]),
+      stamp,
+      theme,
+      label: theme ? `${formatStampLabel(stamp)} · ${theme}` : formatStampLabel(stamp),
       handle,
     });
   }
-  items.sort((a, b) => b.stamp.localeCompare(a.stamp));
+  items.sort((a, b) => b.stamp.localeCompare(a.stamp) || b.name.localeCompare(a.name));
   return items;
 }
 

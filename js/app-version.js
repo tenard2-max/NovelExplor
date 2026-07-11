@@ -102,9 +102,11 @@ export function stampFromExportedAt(iso) {
   return stampFromDate(d);
 }
 
-/** YYYYMMDDHHMMSS.json · ForeshadowBackup_..._2026-07-10T05-33-25.json */
+/** YYYYMMDDHHMMSS.json · YYYYMMDDHHMMSS_테마.json · ForeshadowBackup_... */
 export function stampFromBackupFilename(name = '') {
   const base = String(name).split(/[/\\]/).pop() || '';
+  const mTheme = base.match(/^(\d{14}(?:_[^.]+)?)\.json$/i);
+  if (mTheme) return mTheme[1];
   const m14 = base.match(/(\d{14})\.json$/i);
   if (m14) return m14[1];
   const mIso = base.match(/(\d{4})-(\d{2})-(\d{2})T(\d{2})-(\d{2})-(\d{2})/);

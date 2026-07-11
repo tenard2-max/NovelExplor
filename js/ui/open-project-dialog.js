@@ -214,7 +214,7 @@ async function showAdminOpenProjectDialog() {
           <button type="button" class="btn-sm" id="open-proj-pick-folder">📂 폴더 연결</button>
         </div>
         <p class="open-proj-hint">
-          연결 폴더의 <code>YYYYMMDDHHMMSS.json</code> 목록입니다.<br>
+          연결 폴더의 <code>YYYYMMDDHHMMSS.json</code> · <code>YYYYMMDDHHMMSS_테마.json</code> 목록입니다.<br>
           USB·다른 경로는 <strong>JSON 파일 직접 선택</strong> 또는 <strong>불러오기</strong>를 사용하세요.
         </p>
         <div id="open-proj-file-list" class="open-proj-file-list" role="listbox" aria-label="동기화 파일"></div>

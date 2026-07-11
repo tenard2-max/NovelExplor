@@ -62,32 +62,36 @@ export async function fetchGithubDefaultMeta() {
 }
 
 /**
- * GitHub 스냅샷 목록 (YYYYMMDDHHMMSS.json만)
+ * GitHub 스냅샷 목록 (YYYYMMDDHHMMSS.json / YYYYMMDDHHMMSS_테마.json)
  * @returns {Promise<{ snapshotId: string, name: string, label: string }[]>}
  */
 export async function listGithubProjectSnapshots() {
   const cfg = getGithubConfig();
   const snapDir = snapshotsDir(cfg);
   const entries = await listRepoDir(snapDir);
-  const stampRe = /^\d{14}\.json$/i;
+  const stampRe = /^(\d{14})(?:_([^.]+))?\.json$/i;
 
   return entries
     .filter((e) => e.type === 'file' && stampRe.test(e.name))
     .map((e) => {
+      const m = e.name.match(stampRe);
+      const stamp = m?.[1] || e.name.replace(/\.json$/i, '');
+      const theme = m?.[2] || '';
       const snapshotId = e.name.replace(/\.json$/i, '');
       return {
         snapshotId,
         name: e.name,
-        label: formatStampLabel(snapshotId),
+        label: theme ? `${formatStampLabel(stamp)} · ${theme}` : formatStampLabel(stamp),
       };
     })
     .sort((a, b) => b.snapshotId.localeCompare(a.snapshotId));
 }
 
 function formatStampLabel(stamp) {
-  if (!/^\d{14}$/.test(stamp)) return stamp;
-  return `${stamp.slice(0, 4)}-${stamp.slice(4, 6)}-${stamp.slice(6, 8)} `
-    + `${stamp.slice(8, 10)}:${stamp.slice(10, 12)}:${stamp.slice(12, 14)}`;
+  const s = String(stamp || '').slice(0, 14);
+  if (!/^\d{14}$/.test(s)) return stamp;
+  return `${s.slice(0, 4)}-${s.slice(4, 6)}-${s.slice(6, 8)} `
+    + `${s.slice(8, 10)}:${s.slice(10, 12)}:${s.slice(12, 14)}`;
 }
 
 /**

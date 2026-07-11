@@ -14,7 +14,7 @@ import { initCanvasLayout } from './ui/canvas-layout.js';
 import { initCanvasWallpaper } from './ui/canvas-wallpaper.js';
 import { initCharacterPanel } from './ui/character-panel.js';
 import { initCharacterActions } from './ui/character-actions.js';
-import { initBackup, offerLocalRecovery, exportTimestampedBackup, openBackupJsonFile } from './core/backup.js';
+import { initBackup, offerLocalRecovery, exportTimestampedBackup, openBackupJsonFile, sanitizeThemeTag } from './core/backup.js';
 import { initSyncFolder } from './core/sync-folder.js';
 import { showOpenProjectDialog } from './ui/open-project-dialog.js';
 import { loadWorkspaceManifest } from './core/workspace-xml.js';
@@ -245,7 +245,7 @@ function initActions() {
     'NovelExplor',
     '인류 생존 프로젝트 — 복선·스토리·세계관 워크스페이스<br><br>' +
     '<strong>XML</strong>: Pages 고정 원본<br>' +
-    '<strong>프로젝트 저장</strong>: 관리자 — DB + 동기화 파일 / 마스터 — 기본 프로젝트 지정<br>' +
+    '<strong>프로젝트 저장</strong>: 관리자 — DB + 동기화 파일(<code>시각_테마.json</code>) / 마스터 — 기본 프로젝트 지정<br>' +
     '<strong>프로젝트 열기</strong>: 사용자 — 기본·GitHub만 / 관리자 — 로컬 폴더'
   ));
 
@@ -259,13 +259,70 @@ async function saveCurrentProject() {
     return;
   }
   try {
+    const themeChoice = await promptSaveTheme();
+    if (themeChoice === null) return; // 취소
+
     await flushPendingSave();
     await autosave.flushSave(true);
-    const filename = await exportTimestampedBackup({ notify: true });
+    const filename = await exportTimestampedBackup({
+      notify: true,
+      theme: themeChoice,
+    });
     console.info('[NovelExplor] 동기화 파일:', filename);
   } catch (err) {
     alert(`프로젝트 저장 실패: ${err.message}`);
   }
+}
+
+const SAVE_THEME_KEY = 'ne-save-theme';
+
+/**
+ * 저장 파일명 테일 테마 입력
+ * @returns {Promise<string|null>} 테마 문자열(빈 문자열 허용) / 취소 시 null
+ */
+async function promptSaveTheme() {
+  let theme = '';
+  let last = '';
+  try {
+    last = localStorage.getItem(SAVE_THEME_KEY) || '';
+  } catch {
+    last = '';
+  }
+
+  const confirmed = await showDialog({
+    title: '프로젝트 저장',
+    bodyHtml: `
+      <p class="open-proj-hint">
+        파일명 형식: <code>YYYYMMDDHHMMSS</code> 또는 <code>YYYYMMDDHHMMSS_테마.json</code>
+      </p>
+      <label class="char-form-field">
+        <span class="char-form-label">테마 (선택 · 파일명 끝에 붙음)</span>
+        <input type="text" id="save-theme-input" class="char-form-input"
+          maxlength="40" placeholder="예: 판타지, 1부, 개정판" value="${escAttr(last)}" autocomplete="off">
+      </label>
+      <p class="open-proj-hint">비우면 시각만 사용합니다. 공백·특수문자는 자동으로 정리됩니다.</p>`,
+    onConfirm: () => {
+      theme = document.getElementById('save-theme-input')?.value?.trim() || '';
+    },
+  });
+  if (!confirmed) return null;
+
+  const safe = sanitizeThemeTag(theme);
+  try {
+    if (safe) localStorage.setItem(SAVE_THEME_KEY, safe);
+    else localStorage.removeItem(SAVE_THEME_KEY);
+  } catch {
+    /* ignore */
+  }
+
+  return safe;
+}
+
+function escAttr(str) {
+  return String(str ?? '')
+    .replace(/&/g, '&amp;')
+    .replace(/"/g, '&quot;')
+    .replace(/</g, '&lt;');
 }
 
 function bindAction(action, handler) {
