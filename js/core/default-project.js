@@ -6,6 +6,7 @@ import { canSetDefaultProject, getCurrentUser } from './auth.js';
 import { getGithubConfig, snapshotsDir, hasGithubToken } from './github-config.js';
 import { getRepoFileJson, listRepoDir } from './github-api.js';
 import { pullProjectFromGithub } from './github-pull.js';
+import { syncProjectToGithub, waitUntilGithubIdle } from './github-sync.js';
 import { exportTimestampedBackup } from './backup.js';
 import { getCurrentProject } from './project.js';
 import { flushSave } from './autosave.js';
@@ -91,6 +92,8 @@ function formatStampLabel(stamp) {
 
 /**
  * 마스터: 현재 프로젝트를 기본 프로젝트로 저장
+ * 1) 로컬 DB·백업 파일 저장
+ * 2) GitHub에 스냅샷 + default.json 포인터 커밋
  * @returns {Promise<{ snapshotId: string, filename: string }>}
  */
 export async function saveAsDefaultProject() {
@@ -101,22 +104,42 @@ export async function saveAsDefaultProject() {
   const proj = getCurrentProject();
   if (!proj) throw new Error('열린 프로젝트가 없습니다.');
   if (!hasGithubToken()) {
-    throw new Error('기본 프로젝트 저장에는 GitHub PAT가 필요합니다. 우측 패널에서 연결하세요.');
+    throw new Error(
+      '기본 프로젝트 저장에는 GitHub PAT가 필요합니다.\n'
+      + '우측 「파일」패널 → GitHub → Token 입력 후 「GitHub 설정 저장」을 눌러 주세요.'
+    );
   }
 
   await flushSave(true);
+
+  // 로컬 백업만 먼저 (GitHub는 아래에서 명시적으로 처리)
   const filename = await exportTimestampedBackup({
     notify: false,
-    asDefault: true,
-    defaultTitle: proj.title || '기본 프로젝트',
+    skipGithub: true,
   });
   const snapshotId = String(filename).replace(/\.json$/i, '');
 
+  await waitUntilGithubIdle();
+  let result;
+  try {
+    result = await syncProjectToGithub({
+      snapshotId,
+      reason: 'default',
+      asDefault: true,
+      defaultTitle: proj.title || '기본 프로젝트',
+    });
+  } catch (err) {
+    throw new Error(`GitHub 업로드 실패: ${err?.message || err}`);
+  }
+  if (!result?.snapshotId) {
+    throw new Error('GitHub 동기화가 시작되지 않았습니다. 잠시 후 다시 시도하세요.');
+  }
+
   const meta = {
-    snapshotId,
+    snapshotId: result.snapshotId,
     title: proj.title || '기본 프로젝트',
     updatedAt: nowIso(),
-    filename: `${snapshotId}.json`,
+    filename: `${result.snapshotId}.json`,
   };
   await setLocalDefaultMeta(meta);
   return { snapshotId: meta.snapshotId, filename: meta.filename };

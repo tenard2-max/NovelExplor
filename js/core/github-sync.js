@@ -25,6 +25,21 @@ let syncInFlight = false;
 let pendingReason = 'change';
 let progressClearTimer = null;
 
+export function isGithubSyncInFlight() {
+  return syncInFlight;
+}
+
+/** 진행 중인 GitHub 동기화가 끝날 때까지 대기 */
+export async function waitUntilGithubIdle(timeoutMs = 120000) {
+  const start = Date.now();
+  while (syncInFlight) {
+    if (Date.now() - start > timeoutMs) {
+      throw new Error('GitHub 동기화 대기 시간 초과. 잠시 후 다시 시도하세요.');
+    }
+    await new Promise((r) => setTimeout(r, 400));
+  }
+}
+
 /** 업로드 전용 — PNG·MD·TXT 등 (JSON 스냅샷 버전은 갱신하지 않음) */
 const UPLOAD_REASONS = new Set([
   'character-image',
@@ -66,6 +81,15 @@ export async function syncProjectToGithub({
   defaultTitle = '',
 } = {}) {
   if (!hasGithubToken()) return null;
+
+  // 기본 프로젝트 지정은 반드시 완료되어야 하므로 진행 중이면 대기 후 재시도
+  if (syncInFlight) {
+    if (asDefault || reason === 'default') {
+      await waitUntilGithubIdle();
+    } else {
+      return null;
+    }
+  }
   if (syncInFlight) return null;
 
   const uploadOnly = UPLOAD_REASONS.has(reason);

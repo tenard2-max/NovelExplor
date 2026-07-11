@@ -222,11 +222,13 @@ function initActions() {
       await showAlert(
         '기본 프로젝트 저장',
         `현재 프로젝트를 기본 프로젝트로 지정했습니다.<br>`
+        + `GitHub <code>snapshots/default.json</code>에 반영되었습니다.<br>`
         + `일반 사용자는 이 프로젝트를 열람할 수 있습니다.<br>`
         + `<code>${filename || `${snapshotId}.json`}</code>`
       );
     } catch (err) {
-      alert(`기본 프로젝트 저장 실패: ${err.message}`);
+      console.error('[NovelExplor] 기본 프로젝트 저장 실패:', err);
+      alert(`기본 프로젝트 저장 실패:\n${err.message || err}`);
     }
   });
   bindAction('export-json', exportJson);
