@@ -4,7 +4,7 @@ import { on, emit } from '../core/events.js';
 import * as project from '../core/project.js';
 import * as autosave from '../core/autosave.js';
 import { showDialog } from './dialog.js';
-import { canUpload } from '../core/auth.js';
+import { canManageCurrentProject } from '../core/project.js';
 
 // 저장 최대 해상도 (풀사이즈 뷰어에서 선명하게 보이도록 충분히 크게)
 const AVATAR_MAX_PX = 1200;
@@ -13,8 +13,8 @@ let currentId = null;
 let isEditing = false;
 
 function assertCanUploadImages() {
-  if (canUpload()) return true;
-  alert('일반 사용자는 인물 이미지를 등록·변경할 수 없습니다.');
+  if (canManageCurrentProject()) return true;
+  alert('이 프로젝트의 인물 이미지는 소유 관리자 또는 마스터만 등록·변경할 수 있습니다.');
   return false;
 }
 
@@ -53,7 +53,7 @@ export function initCharacterPanel() {
   // 대표 이미지 영역
   box?.addEventListener('click', onAvatarBoxClick);
   box?.addEventListener('dragover', (e) => {
-    if (!canUpload()) return;
+    if (!canManageCurrentProject()) return;
     e.preventDefault();
     box.classList.add('is-dragover');
   });
@@ -62,7 +62,7 @@ export function initCharacterPanel() {
 
   // 갤러리 영역 (여러 장 드롭)
   gallery?.addEventListener('dragover', (e) => {
-    if (!canUpload()) return;
+    if (!canManageCurrentProject()) return;
     e.preventDefault();
     gallery.classList.add('is-dragover');
   });
@@ -134,8 +134,8 @@ function setCharacterPanelOpen(open) {
 
 /** 확인 다이얼로그 후 인물을 삭제한다. 패널·목록 카드에서 공통 사용 */
 export async function deleteCharacterWithConfirm(characterOrId) {
-  if (!canUpload()) {
-    alert('일반 사용자는 인물을 삭제할 수 없습니다.');
+  if (!canManageCurrentProject()) {
+    alert('이 프로젝트의 인물은 소유 관리자 또는 마스터만 삭제할 수 있습니다.');
     return false;
   }
   const id = typeof characterOrId === 'string' ? characterOrId : characterOrId?.id;
@@ -204,7 +204,7 @@ function refresh() {
 function renderPanel(ch) {
   document.getElementById('char-panel-name').textContent = ch.name || '캐릭터';
 
-  const allowUpload = canUpload();
+  const allowUpload = canManageCurrentProject();
   document.getElementById('character-panel')
     ?.classList.toggle('char-panel--no-upload', !allowUpload);
   document.getElementById('character-panel')
@@ -308,8 +308,8 @@ function fillEditForm(ch) {
 }
 
 function startEdit() {
-  if (!canUpload()) {
-    alert('일반 사용자는 인물 정보를 수정할 수 없습니다.');
+  if (!canManageCurrentProject()) {
+    alert('이 프로젝트의 인물 정보는 소유 관리자 또는 마스터만 수정할 수 있습니다.');
     return;
   }
   if (!currentId) return;
@@ -390,7 +390,7 @@ function renderGallery(ch) {
   if (!gallery) return;
 
   const images = Array.isArray(ch.images) ? ch.images : [];
-  const allowUpload = canUpload();
+  const allowUpload = canManageCurrentProject();
   if (countEl) countEl.textContent = images.length ? `${images.length}장` : '';
 
   if (!images.length) {

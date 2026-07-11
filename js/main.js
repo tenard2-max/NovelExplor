@@ -32,7 +32,7 @@ import { initGithubPanel } from './ui/github-panel.js';
 import { initGithubSync } from './core/github-sync.js';
 import { initStorySync } from './ui/story-sync.js';
 import { initTimeline } from './ui/timeline-panel.js';
-import { initAuth, isLoggedIn, getCurrentUser, ROLES, canUpload, canSaveProject, canSetDefaultProject } from './core/auth.js';
+import { initAuth, isLoggedIn, getCurrentUser, ROLES, canSaveProject, canSetDefaultProject } from './core/auth.js';
 import { loadDefaultProject, saveAsDefaultProject } from './core/default-project.js';
 import { pullProjectFromGithub } from './core/github-pull.js';
 import { initAuthGate, showAuthGate, hideAuthGate, whenAuthenticated } from './ui/auth-gate.js';
@@ -254,8 +254,8 @@ function initActions() {
 }
 
 async function saveCurrentProject() {
-  if (!canSaveProject()) {
-    alert('일반 사용자는 프로젝트를 저장할 수 없습니다. 프로젝트 열기만 가능합니다.');
+  if (!project.canManageCurrentProject()) {
+    alert('이 프로젝트는 소유 관리자 또는 마스터만 저장할 수 있습니다.');
     return;
   }
   try {
@@ -285,8 +285,8 @@ function initUploadHandler() {
   });
 
   on('upload:files', async (files) => {
-    if (!canUpload()) {
-      alert('일반 사용자는 파일 업로드를 사용할 수 없습니다.');
+    if (!project.canManageCurrentProject()) {
+      alert('이 프로젝트에는 소유 관리자 또는 마스터만 파일을 등록할 수 있습니다.');
       return;
     }
     let lastView = null;

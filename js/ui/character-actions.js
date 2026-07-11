@@ -6,7 +6,6 @@ import * as autosave from '../core/autosave.js';
 import { showDialog, showAlert } from './dialog.js';
 import { openCharacterPanel, getSelectedCharacterId, deleteCharacterWithConfirm } from './character-panel.js';
 import { initCharacterAutoAdd } from './character-autoadd.js';
-import { canUpload } from '../core/auth.js';
 
 const CHARACTER_VIEWS = new Set(['character', 'graph-character']);
 
@@ -19,6 +18,10 @@ export function initCharacterActions() {
     ?.addEventListener('click', () => runDeleteCharacter().catch(console.error));
 
   on('view:changed', (viewId) => toggleControls(viewId));
+  on('project:loaded', () => {
+    const view = document.querySelector('.nav-item.active[data-view]')?.dataset.view || 'master';
+    toggleControls(view);
+  });
   toggleControls('master');
 }
 
@@ -29,8 +32,8 @@ function toggleControls(viewId) {
   const graphControls = document.getElementById('graph-relation-controls');
   if (graphControls) graphControls.hidden = viewId !== 'graph-character';
 
-  // 일반 사용자: 인물 추가/삭제/자동추가·관계선 편집 숨김
-  if (!canUpload()) {
+  // 관리 불가(일반 사용자·타인 프로젝트): 인물 추가/삭제/자동추가·관계선 편집 숨김
+  if (!project.canManageCurrentProject()) {
     ['character-add', 'character-delete', 'character-autoadd'].forEach((action) => {
       document.querySelectorAll(`[data-action="${action}"]`).forEach((btn) => { btn.hidden = true; });
     });
@@ -39,6 +42,10 @@ function toggleControls(viewId) {
 }
 
 async function runAddCharacter() {
+  if (!project.canManageCurrentProject()) {
+    await showAlert('권한', '인물 추가는 프로젝트 소유 관리자 또는 마스터만 가능합니다.');
+    return;
+  }
   let name = '';
   let description = '';
 

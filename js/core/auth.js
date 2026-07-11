@@ -39,10 +39,27 @@ export function isLoggedIn() {
   return !!currentUser;
 }
 
-/** 일반 사용자는 파일 업로드 기능 사용 불가 */
+/** 일반 사용자는 파일 업로드 기능 사용 불가 (역할만 확인) */
 export function canUpload(user = currentUser) {
   if (!user) return false;
   return user.role !== ROLES.USER;
+}
+
+export function isMaster(user = currentUser) {
+  return user?.role === ROLES.MASTER;
+}
+
+/**
+ * 프로젝트 콘텐츠 관리(파일·소설·인물·관계도 등) 가능 여부
+ * - 마스터: 모든 프로젝트
+ * - 개발자·소설가: 본인 소유(ownerId) 프로젝트만
+ * - 일반 사용자: 불가(열람만)
+ */
+export function canManageProjectContent(project, user = currentUser) {
+  if (!user || user.role === ROLES.USER) return false;
+  if (!project) return false;
+  if (user.role === ROLES.MASTER) return true;
+  return Boolean(project.ownerId && project.ownerId === user.id);
 }
 
 /** 관리자(마스터·개발자·소설가)만 프로젝트 저장·생성 가능. 일반 사용자는 열기만 */

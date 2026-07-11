@@ -18,12 +18,22 @@ export function initCanvasWallpaper() {
   const alpha = document.getElementById('wp-alpha');
   const size = document.getElementById('wp-size');
 
-  uploadBtn?.addEventListener('click', () => fileInput?.click());
+  uploadBtn?.addEventListener('click', () => {
+    if (!project.canManageCurrentProject()) {
+      alert('배경 이미지는 프로젝트 소유 관리자 또는 마스터만 등록할 수 있습니다.');
+      return;
+    }
+    fileInput?.click();
+  });
 
   fileInput?.addEventListener('change', async (e) => {
     const file = e.target.files?.[0];
     e.target.value = '';
     if (!file) return;
+    if (!project.canManageCurrentProject()) {
+      alert('배경 이미지는 프로젝트 소유 관리자 또는 마스터만 등록할 수 있습니다.');
+      return;
+    }
     if (!file.type.startsWith('image/')) {
       alert('이미지 파일만 등록할 수 있습니다.');
       return;

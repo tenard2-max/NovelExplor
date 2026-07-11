@@ -6,7 +6,6 @@ import * as autosave from '../core/autosave.js';
 import { openCharacterPanel, openImageLightbox } from '../ui/character-panel.js';
 import { showDialog, showAlert } from '../ui/dialog.js';
 import { collectMultiverseRows } from '../core/story-sync-engine.js';
-import { canUpload } from '../core/auth.js';
 
 const GRADE_COLORS = {
   F: '#6b7280', D: '#60a5fa', C: '#4ade80', B: '#facc15',
@@ -81,9 +80,9 @@ const EDGE_Y_ALIGN_TOL = 50;
 /** 관계선 라벨을 선 위로 띄우는 거리 */
 const EDGE_LABEL_ABOVE = 14;
 
-/** 인물 관계도 편집(드래그·줄 추가·관계 수정) — 관리자만 */
+/** 인물 관계도 편집(드래그·줄 추가·관계 수정) — 소유 관리자·마스터만 */
 function canEditCharacterGraph() {
-  return canUpload();
+  return project.canManageCurrentProject();
 }
 
 export function initGraph() {

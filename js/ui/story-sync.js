@@ -13,15 +13,14 @@ import {
 } from '../core/story-sync-engine.js';
 import { scheduleGithubSync } from '../core/github-sync.js';
 import { switchView } from './nav-menu.js';
-import { canUpload } from '../core/auth.js';
 
 const STORY_NAV_VIEWS = new Set(['story-nav', 'timeline']);
 
 export function initStorySync() {
   document.querySelectorAll('[data-action="story-sync"]').forEach((btn) => {
     btn.addEventListener('click', () => {
-      if (!canUpload()) {
-        showAlert('권한', '일반 사용자는 스토리 동기화(업로드 계열)를 사용할 수 없습니다.');
+      if (!project.canManageCurrentProject()) {
+        showAlert('권한', '스토리 동기화는 프로젝트 소유 관리자 또는 마스터만 사용할 수 있습니다.');
         return;
       }
       runStorySync().catch(console.error);

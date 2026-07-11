@@ -16,6 +16,8 @@ import {
   getCurrentUser,
   canCreateUnlimitedProjects,
   canSaveProject,
+  canManageProjectContent,
+  isMaster,
   MAX_USER_PROJECTS,
 } from './auth.js';
 
@@ -63,7 +65,10 @@ export function getCurrentProject() {
 
 }
 
-
+/** 현재 열린 프로젝트 콘텐츠 관리 가능 (마스터=전체, 개발자·소설가=본인만) */
+export function canManageCurrentProject() {
+  return canManageProjectContent(currentProject);
+}
 
 export function getCache() {
 
@@ -76,9 +81,11 @@ export function getCache() {
 export async function listProjects() {
   const all = await storage.getAll('projects');
   const user = getCurrentUser();
-  const mine = user
-    ? all.filter((p) => p.ownerId === user.id)
-    : [];
+  if (!user) return [];
+  // 마스터: 전체 / 그 외 관리자·사용자: 본인 소유만
+  const mine = isMaster(user)
+    ? all
+    : all.filter((p) => p.ownerId === user.id);
   return mine.sort((a, b) => (b.updatedAt || b.createdAt || '').localeCompare(a.updatedAt || a.createdAt || ''));
 }
 
@@ -102,13 +109,15 @@ export async function countOwnedProjects(userId) {
   return all.filter((p) => p.ownerId === userId).length;
 }
 
-/** JSON 복원 전 — 현재 사용자 소유 프로젝트·연관 데이터만 삭제 */
+/** JSON 복원 전 — 마스터는 전체, 그 외는 본인·무소유 프로젝트만 삭제 */
 export async function clearAllProjects() {
   const user = getCurrentUser();
   const projects = await storage.getAll('projects');
-  const targets = user
-    ? projects.filter((p) => p.ownerId === user.id || !p.ownerId)
-    : projects;
+  const targets = !user
+    ? projects
+    : isMaster(user)
+      ? projects
+      : projects.filter((p) => p.ownerId === user.id || !p.ownerId);
   const projectIds = new Set(targets.map((p) => p.id || p.projectId).filter(Boolean));
 
   const entityStores = ['stories', 'episodes', 'characters', 'worlds', 'foreshadows', 'timeline', 'files'];

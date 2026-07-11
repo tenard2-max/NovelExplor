@@ -5,7 +5,6 @@ import * as project from '../core/project.js';
 import * as autosave from '../core/autosave.js';
 import { simpleMarkdownToHtml, formatStoryReaderLabel } from '../core/utils.js';
 import { showDialog } from './dialog.js';
-import { canUpload } from '../core/auth.js';
 import {
   loadSectionForView,
   resolveAssetUrl,
@@ -180,7 +179,7 @@ function populateSelect(select, stories) {
 function updateReaderNavState(stories) {
   const hasStories = stories.length > 0;
   const current = stories.find((s) => s.number === currentStoryNum);
-  const allowDelete = canUpload();
+  const allowDelete = project.canManageCurrentProject();
   const canDelete = allowDelete && hasStories && (current?.source === 'idb' || current?.source === 'overlay');
 
   document.querySelector('[data-action="prev-episode"]')?.toggleAttribute('disabled', !hasStories);
@@ -249,8 +248,8 @@ export function getCurrentStoryNumber() {
 }
 
 async function deleteCurrentStory() {
-  if (!canUpload()) {
-    alert('일반 사용자는 소설을 삭제할 수 없습니다.');
+  if (!project.canManageCurrentProject()) {
+    alert('이 프로젝트의 소설은 소유 관리자 또는 마스터만 삭제할 수 있습니다.');
     return;
   }
   const entry = catalog.find((s) => s.number === currentStoryNum);
@@ -269,8 +268,8 @@ async function deleteCurrentStory() {
 }
 
 async function deleteAllStories() {
-  if (!canUpload()) {
-    alert('일반 사용자는 소설을 삭제할 수 없습니다.');
+  if (!project.canManageCurrentProject()) {
+    alert('이 프로젝트의 소설은 소유 관리자 또는 마스터만 삭제할 수 있습니다.');
     return;
   }
   const idbStories = catalog.filter((s) => s.source === 'idb' || s.source === 'overlay');
