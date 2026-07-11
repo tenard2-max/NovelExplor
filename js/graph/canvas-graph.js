@@ -12,6 +12,28 @@ const GRADE_COLORS = {
   A: '#fb923c', S: '#c084fc', SS: '#f472b6', SSS: '#f87171',
 };
 
+/** 복선 사다리 — 고대비 직사각형 (배경 어둡게 · 글자 밝게) */
+const GRADE_RECT_STYLE = {
+  SSS: { bg: '#450a0a', fg: '#fecaca', border: '#f87171' },
+  SS: { bg: '#500724', fg: '#fbcfe8', border: '#f472b6' },
+  S: { bg: '#3b0764', fg: '#f3e8ff', border: '#c084fc' },
+  A: { bg: '#7c2d12', fg: '#ffedd5', border: '#fb923c' },
+  B: { bg: '#713f12', fg: '#fef9c3', border: '#facc15' },
+  C: { bg: '#14532d', fg: '#dcfce7', border: '#4ade80' },
+  D: { bg: '#1e3a5f', fg: '#dbeafe', border: '#60a5fa' },
+  F: { bg: '#111827', fg: '#f3f4f6', border: '#9ca3af' },
+};
+const CHAR_RECT_STYLE = { bg: '#082f49', fg: '#e0f2fe', border: '#7dd3fc' };
+const FORESHADOW_LADDER = {
+  charW: 156,
+  fsW: 172,
+  boxH: 52,
+  corner: 6,
+  /** 기존 1.5px의 3배 */
+  lineWidth: 4.5,
+  lineColor: 'rgba(186, 230, 253, 0.95)',
+};
+
 const RELATION_COLORS = {
   neutral: '#ffffff',
   ally: '#93c5fd',
@@ -152,7 +174,7 @@ function buildAndDraw() {
     edges = [];
     buildForeshadowGraph(cache, filter);
     if (gen !== buildGeneration) return;
-    renderLegend('좌: 인물 · 우: 복선 · 연관 직교 연결');
+    renderLegend('좌: 인물 · 우: 복선 · 직사각형 · 두꺼운 직선');
     draw();
     updateStatus();
   } else if (mode === 'character') {
@@ -181,8 +203,8 @@ function buildAndDraw() {
 }
 
 /**
- * 복선 그래프 — 좌(인물) / 우(복선) 사다리(이분) 배치.
- * 연관 인물↔복선은 여러 직교 선으로 연결하며, 노드끼리 겹치지 않게 세로로 나열한다.
+ * 복선 그래프 — 좌(인물) / 우(복선) 사다리 배치.
+ * 직사각형 노드 + 고대비 텍스트 + 두꺼운 직선 연결.
  */
 function buildForeshadowGraph(cache, filter) {
   const foreshadows = cache.foreshadows.filter((f) =>
@@ -192,13 +214,13 @@ function buildForeshadowGraph(cache, filter) {
 
   const w = canvas.clientWidth || 800;
   const h = canvas.clientHeight || 600;
-  const padX = Math.max(90, w * 0.14);
-  const padY = Math.max(56, h * 0.08);
-  const leftX = padX;
-  const rightX = w - padX;
-  const minGap = 72;
+  const { charW, fsW, boxH } = FORESHADOW_LADDER;
+  const padX = Math.max(36, w * 0.04);
+  const padY = Math.max(40, h * 0.06);
+  const leftX = padX + charW / 2;
+  const rightX = w - padX - fsW / 2;
+  const minGap = boxH + 14;
 
-  // relatedCharacters 링크 (캐릭터 id / characterId / 이름 모두 허용)
   const links = [];
   const tempIndex = buildCharacterIndex(characters);
   for (const fs of foreshadows) {
@@ -222,35 +244,47 @@ function buildForeshadowGraph(cache, filter) {
     : 0;
 
   orderedChars.forEach((ch, i) => {
+    const style = CHAR_RECT_STYLE;
     nodes.push({
       id: ch.id,
       label: ch.name,
       sub: ch.race || '',
-      color: '#38bdf8',
+      color: style.border,
+      bg: style.bg,
+      fg: style.fg,
+      border: style.border,
       x: leftX,
       y: orderedChars.length === 1 ? h / 2 : padY + charStep * i,
-      r: 18,
+      w: charW,
+      h: boxH,
+      r: Math.max(charW, boxH) / 2,
+      shape: 'rect',
       data: ch,
       type: 'character',
     });
   });
 
   orderedFs.forEach((fs, i) => {
+    const style = GRADE_RECT_STYLE[fs.grade] || GRADE_RECT_STYLE.F;
     nodes.push({
       id: fs.id,
       label: fs.title,
-      sub: fs.grade,
-      color: GRADE_COLORS[fs.grade] || '#888',
+      sub: fs.grade || '',
+      color: style.border,
+      bg: style.bg,
+      fg: style.fg,
+      border: style.border,
       x: rightX,
       y: orderedFs.length === 1 ? h / 2 : padY + fsStep * i,
-      r: fs.grade === 'SSS' || fs.grade === 'SS' ? 28 : 22,
+      w: fsW,
+      h: boxH,
+      r: Math.max(fsW, boxH) / 2,
+      shape: 'rect',
       data: fs,
       type: 'foreshadow',
     });
   });
 
-  // from=인물(좌) → to=복선(우) — 한 인물이 여러 복선에, 한 복선이 여러 인물에 연결 가능
-  let edgeIdx = 0;
   for (const link of links) {
     const charNode = nodes.find((n) => n.id === link.charId && n.type === 'character');
     const fsNode = nodes.find((n) => n.id === link.fsId && n.type === 'foreshadow');
@@ -258,8 +292,8 @@ function buildForeshadowGraph(cache, filter) {
       edges.push({
         from: charNode,
         to: fsNode,
-        color: 'rgba(108,140,255,0.45)',
-        lane: edgeIdx++,
+        color: FORESHADOW_LADDER.lineColor,
+        lineWidth: FORESHADOW_LADDER.lineWidth,
       });
     }
   }
@@ -633,7 +667,7 @@ function draw() {
 
   for (const e of edges) {
     ctx.strokeStyle = e.color;
-    ctx.lineWidth = e.lineWidth || 1.5;
+    ctx.lineWidth = e.lineWidth || (mode === 'foreshadow' ? FORESHADOW_LADDER.lineWidth : 1.5);
     ctx.lineCap = 'round';
     ctx.lineJoin = 'round';
     const path = mode === 'character'
@@ -693,6 +727,9 @@ function rectsOverlap(a, b, pad = 4) {
 }
 
 function nodeBodyRect(n) {
+  if (n.shape === 'rect' && n.w && n.h) {
+    return { x: n.x - n.w / 2, y: n.y - n.h / 2, w: n.w, h: n.h };
+  }
   const r = n.r || 20;
   if (n.shape === 'square') {
     return { x: n.x - r, y: n.y - r, w: r * 2, h: r * 2 };
@@ -914,35 +951,16 @@ function separateOverlappingCharacterCards(maxIter = 12) {
 }
 
 /**
- * 복선 사다리 연결선 — 인물(좌) 오른쪽 가장자리 → 복선(우) 왼쪽 가장자리.
- * 중간 세로 레인으로 직교 경로를 잡아 노드 원과 겹치지 않게 한다.
+ * 복선 사다리 연결선 — 직사각형 가장자리끼리 잇는 직선만 사용.
  */
 function getForeshadowEdgePath(e) {
   const left = e.from.x <= e.to.x ? e.from : e.to;
   const right = e.from.x <= e.to.x ? e.to : e.from;
-  const lr = left.r || 18;
-  const rr = right.r || 22;
-  const x0 = left.x + lr + 2;
-  const x1 = right.x - rr - 2;
-  const y0 = left.y;
-  const y1 = right.y;
-  const span = Math.max(40, x1 - x0);
-  // 여러 선이 같은 세로축에 겹치지 않도록 레인 오프셋
-  const lane = Number(e.lane) || 0;
-  const midX = x0 + span * (0.28 + ((lane % 7) / 7) * 0.44);
-
-  if (Math.abs(y0 - y1) <= 6) {
-    return [
-      { x: x0, y: y0 },
-      { x: x1, y: y1 },
-    ];
-  }
-
+  const lw = (left.w || (left.r || 18) * 2) / 2;
+  const rw = (right.w || (right.r || 22) * 2) / 2;
   return [
-    { x: x0, y: y0 },
-    { x: midX, y: y0 },
-    { x: midX, y: y1 },
-    { x: x1, y: y1 },
+    { x: left.x + lw, y: left.y },
+    { x: right.x - rw, y: right.y },
   ];
 }
 
@@ -1045,12 +1063,18 @@ function drawEdgeLabel(e, path) {
 function drawNode(n, labelLayout = null) {
   const isCharacter = n.type === 'character';
   const isSquare = n.shape === 'square';
+  const isRect = n.shape === 'rect';
   const hasAvatar = isCharacter && n.data?.avatarDataUrl;
   const img = hasAvatar ? avatarImages.get(n.id) : null;
   const avatarReady = img && img.complete && img.naturalWidth > 0;
   const cx = Math.round(n.x);
   const cy = Math.round(n.y);
   const r = n.r;
+
+  if (isRect) {
+    drawForeshadowRectNode(n, cx, cy);
+    return;
+  }
 
   if (isSquare) {
     const size = r * 2;
@@ -1123,6 +1147,83 @@ function drawNode(n, labelLayout = null) {
   }
 }
 
+/** 복선 그래프용 직사각형 노드 — 텍스트가 박스 밖으로 나가지 않음 */
+function drawForeshadowRectNode(n, cx, cy) {
+  const w = n.w || 150;
+  const h = n.h || 52;
+  const x = cx - w / 2;
+  const y = cy - h / 2;
+  const corner = FORESHADOW_LADDER.corner;
+  const pad = 8;
+  const fitted = fitRectLabel(n.label, n.sub, w - pad * 2, h - pad * 2);
+
+  ctx.save();
+  roundRectPath(x, y, w, h, corner);
+  ctx.fillStyle = n.bg || '#111827';
+  ctx.fill();
+  ctx.strokeStyle = n.border || '#e5e7eb';
+  ctx.lineWidth = 2;
+  ctx.stroke();
+
+  // 텍스트 클리핑 — 사각형 밖으로 절대 나가지 않음
+  roundRectPath(x + 1, y + 1, w - 2, h - 2, Math.max(2, corner - 1));
+  ctx.clip();
+
+  ctx.fillStyle = n.fg || '#f9fafb';
+  ctx.textAlign = 'center';
+  ctx.font = fitted.nameFont;
+  if (fitted.sub) {
+    ctx.textBaseline = 'bottom';
+    ctx.fillText(fitted.name, cx, cy - 1);
+    ctx.font = fitted.subFont;
+    ctx.fillStyle = n.fg || '#f9fafb';
+    ctx.globalAlpha = 0.9;
+    ctx.textBaseline = 'top';
+    ctx.fillText(fitted.sub, cx, cy + 2);
+    ctx.globalAlpha = 1;
+  } else {
+    ctx.textBaseline = 'middle';
+    ctx.fillText(fitted.name, cx, cy);
+  }
+  ctx.restore();
+}
+
+/** 박스 안에 들어가도록 글자 크기·말줄임 조정 */
+function fitRectLabel(label, sub, maxW, maxH) {
+  const rawName = String(label || '').trim() || '—';
+  const rawSub = String(sub || '').trim();
+  let nameSize = 13;
+  let subSize = 11;
+
+  while (nameSize >= 9) {
+    const nameFont = `700 ${nameSize}px sans-serif`;
+    const subFont = `600 ${subSize}px sans-serif`;
+    let name = rawName;
+    while (name.length > 1 && measureTextSize(name, nameFont).w > maxW) {
+      name = `${name.slice(0, Math.max(1, name.length - 2))}…`;
+    }
+    let subText = rawSub;
+    if (subText) {
+      while (subText.length > 1 && measureTextSize(subText, subFont).w > maxW) {
+        subText = `${subText.slice(0, Math.max(1, subText.length - 2))}…`;
+      }
+    }
+    const needH = nameSize + (subText ? subSize + 4 : 0);
+    if (needH <= maxH && measureTextSize(name, nameFont).w <= maxW) {
+      return { name, sub: subText, nameFont, subFont };
+    }
+    nameSize -= 1;
+    subSize = Math.max(8, subSize - 1);
+  }
+
+  const nameFont = '700 9px sans-serif';
+  let name = rawName;
+  while (name.length > 1 && measureTextSize(name, nameFont).w > maxW) {
+    name = `${name.slice(0, Math.max(1, name.length - 2))}…`;
+  }
+  return { name, sub: '', nameFont, subFont: '600 8px sans-serif' };
+}
+
 function drawCharacterNameSub(n, layout, isSquare) {
   const fallback = buildLabelCandidate(n, isSquare ? 'below' : 'below');
   const L = layout || fallback;
@@ -1144,8 +1245,8 @@ function renderLegend(text) {
   const el = document.getElementById('graph-legend');
   if (!el) return;
   if (mode === 'foreshadow') {
-    el.innerHTML = `<div>${text}</div>` + Object.entries(GRADE_COLORS).map(([g, c]) =>
-      `<span style="color:${c}">● ${g}</span>`
+    el.innerHTML = `<div>${text}</div>` + Object.entries(GRADE_RECT_STYLE).map(([g, s]) =>
+      `<span style="color:${s.fg};background:${s.bg};padding:1px 6px;border-radius:3px;border:1px solid ${s.border}">${g}</span>`
     ).join(' ');
   } else {
     el.innerHTML = `<div>${text}</div>`;
@@ -1328,7 +1429,9 @@ function hitTest(wx, wy) {
   for (let i = nodes.length - 1; i >= 0; i--) {
     const n = nodes[i];
     const dx = wx - n.x, dy = wy - n.y;
-    if (n.shape === 'square') {
+    if (n.shape === 'rect' && n.w && n.h) {
+      if (Math.abs(dx) <= n.w / 2 && Math.abs(dy) <= n.h / 2) return n;
+    } else if (n.shape === 'square') {
       if (Math.abs(dx) <= n.r && Math.abs(dy) <= n.r) return n;
     } else if (dx * dx + dy * dy <= n.r * n.r) {
       return n;
