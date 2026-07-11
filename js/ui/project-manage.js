@@ -12,7 +12,8 @@ import {
   fetchGithubDefaultMeta,
   isGithubRateLimitError,
 } from '../core/default-project.js';
-import { hasGithubToken } from '../core/github-config.js';
+import { hasGithubToken, getGithubConfig, snapshotsDir } from '../core/github-config.js';
+import { getRepoFileJson, commitRepoFiles } from '../core/github-api.js';
 import {
   initSyncFolder,
   hasSyncDir,
@@ -76,9 +77,8 @@ export async function showProjectManageDialog() {
           <button type="button" class="btn-sm" id="proj-refresh">새로고침</button>
         </div>
         <p class="proj-manage-hint">
-          <strong>로컬</strong>: 이 브라우저 DB에 쓰기 권한 반영 ·
-          <strong>폴더</strong>: 연결 폴더 JSON에 writers 기록 ·
-          <strong>GitHub</strong>: 삭제용(쓰기는 로컬/폴더).
+          체크 = 위 관리자에게 쓰기 권한.
+          <strong>로컬</strong> DB · <strong>폴더</strong> JSON · <strong>GitHub</strong> 스냅샷(PAT)에 바로 반영합니다.
           다운로드만 한 JSON은 목록에 없습니다.
         </p>
         <p id="proj-status" class="proj-manage-gh-status">불러오는 중…</p>
@@ -275,17 +275,23 @@ export async function showProjectManageDialog() {
       const grantLocal = [];
       /** @type {string[]} 폴더 JSON 파일명 */
       const grantFolderFiles = [];
-      const ghOnlyChecked = [];
+      /** @type {{ snapshotId: string, name: string }[]} */
+      const grantGithub = [];
 
       for (const el of checked) {
         const item = catalog.find((c) => c.key === el.value);
         const localId = item?.localId || el.getAttribute('data-local-id') || el.dataset.localId || '';
-        const folderFile = item?.folderName || item?.fileHint || '';
+        const ghId = item?.ghSnapshotId || el.dataset.ghId || '';
+        const folderFile = item?.folderName || '';
         if (localId) {
           grantLocal.push(localId);
-        } else if (item?.ghSnapshotId || el.dataset.ghId) {
-          ghOnlyChecked.push(el);
-        } else if (folderFile && !item?.ghSnapshotId) {
+        }
+        if (ghId) {
+          grantGithub.push({
+            snapshotId: ghId,
+            name: item?.fileHint || `${ghId}.json`,
+          });
+        } else if (folderFile) {
           grantFolderFiles.push(folderFile);
         }
       }
@@ -295,31 +301,15 @@ export async function showProjectManageDialog() {
       const grantSet = new Set(grantLocal);
       const revokeLocal = allLocalIds.filter((id) => !grantSet.has(id));
 
-      if (!grantLocal.length && !grantFolderFiles.length && !revokeLocal.length) {
-        if (ghOnlyChecked.length && !checked.filter((el) => {
-          const it = catalog.find((c) => c.key === el.value);
-          return it?.localId || (it?.folderName && !it?.ghSnapshotId);
-        }).length) {
-          alert(
-            'GitHub만 있는 항목에는 쓰기 권한을 넣을 수 없습니다.\n'
-            + '「로컬」또는 「폴더」항목을 체크하세요. GitHub 행은 삭제용입니다.'
-          );
-          return;
-        }
-        alert('적용할 로컬·폴더 프로젝트가 없습니다.');
+      if (!grantLocal.length && !grantFolderFiles.length && !grantGithub.length && !revokeLocal.length) {
+        alert('적용할 항목이 없습니다. 로컬·폴더·GitHub 항목을 체크하세요.');
         return;
       }
 
-      if (ghOnlyChecked.length && (grantLocal.length || grantFolderFiles.length)) {
-        const okOpen = confirm(
-          `체크한 항목 중 GitHub 전용 ${ghOnlyChecked.length}개는 권한 적용에서 제외됩니다.\n`
-          + `로컬 ${grantLocal.length} · 폴더 ${grantFolderFiles.length}개만 적용할까요?`
-        );
-        if (!okOpen) return;
-      } else if (ghOnlyChecked.length && !grantLocal.length && !grantFolderFiles.length) {
+      if (grantGithub.length && !hasGithubToken()) {
         alert(
-          'GitHub만 있는 항목에는 쓰기 권한을 넣을 수 없습니다.\n'
-          + '「로컬」또는 「폴더」항목을 체크하세요.'
+          'GitHub 스냅샷에 권한을 쓰려면 우측 패널에 PAT가 필요합니다.\n'
+          + '토큰을 저장한 뒤 다시 「권한 적용」하세요.'
         );
         return;
       }
@@ -346,9 +336,18 @@ export async function showProjectManageDialog() {
 
         let folderPatched = 0;
         if (grantFolderFiles.length) {
+          statusEl.textContent = '폴더 JSON 권한 저장 중…';
           const folderResult = await patchFolderWriters(grantFolderFiles, admin, true);
           folderPatched = folderResult.patched;
           errors.push(...folderResult.errors);
+        }
+
+        let githubPatched = 0;
+        if (grantGithub.length) {
+          statusEl.textContent = 'GitHub 스냅샷 권한 저장 중…';
+          const ghResult = await patchGithubWriters(grantGithub, admin, true);
+          githubPatched = ghResult.patched;
+          errors.push(...ghResult.errors);
         }
 
         const cur = getCurrentProject();
@@ -370,14 +369,14 @@ export async function showProjectManageDialog() {
         alert(
           `${admin.username || '관리자'} 쓰기 권한 반영\n`
           + `로컬 부여 ${granted} · 로컬 해제 ${revoked} · 로컬 변경 ${changed}\n`
-          + `폴더 JSON 패치 ${folderPatched}건\n`
-          + `체크(로컬 ${grantLocal.length} · 폴더 ${grantFolderFiles.length})`
+          + `폴더 ${folderPatched} · GitHub ${githubPatched}\n`
+          + `체크(로컬 ${grantLocal.length} · 폴더 ${grantFolderFiles.length} · GitHub ${grantGithub.length})`
           + errLine
-          + `\n\n로컬: 같은 브라우저에서 해당 계정으로 다시 로그인하세요.\n`
-          + `폴더: 그 JSON을 「로컬 폴더」로 열면 writers가 적용됩니다.`
+          + `\n\n같은 브라우저에서 해당 계정으로 다시 로그인하세요.`
         );
 
-        if (!granted && !folderPatched && (grantLocal.length || grantFolderFiles.length) && errors.length) {
+        const anyTarget = grantLocal.length || grantFolderFiles.length || grantGithub.length;
+        if (!granted && !folderPatched && !githubPatched && anyTarget && errors.length) {
           statusEl.textContent = `권한 저장 실패: ${errors[0]}`;
           confirmBtn.disabled = false;
           return;
@@ -626,6 +625,83 @@ async function patchFolderWriters(filenames, admin, grant) {
       errors.push(`${name}: ${err.message || err}`);
     }
   }
+  return { patched, errors };
+}
+
+/**
+ * GitHub 스냅샷 JSON에 writers 패치 후 PAT로 커밋
+ * @param {{ snapshotId: string, name: string }[]} snaps
+ * @param {{ id: string, username: string }} admin
+ * @param {boolean} grant
+ */
+async function patchGithubWriters(snaps, admin, grant) {
+  const errors = [];
+  let patched = 0;
+  if (!snaps?.length) return { patched, errors };
+  if (!hasGithubToken()) {
+    errors.push('GitHub PAT가 필요합니다.');
+    return { patched, errors };
+  }
+
+  const snapDir = snapshotsDir(getGithubConfig());
+  const adminName = String(admin.username || '').trim().toLowerCase();
+  /** @type {{ repoPath: string, content: string }[]} */
+  const toCommit = [];
+  const seen = new Set();
+
+  for (const snap of snaps) {
+    const name = String(snap.name || `${snap.snapshotId}.json`).replace(/^.*[\\/]/, '');
+    if (!name || seen.has(name)) continue;
+    seen.add(name);
+    const repoPath = `${snapDir}/${name}`;
+    try {
+      const data = await getRepoFileJson(repoPath);
+      if (!data?.project || typeof data.project !== 'object') {
+        errors.push(`project 없음: ${name}`);
+        continue;
+      }
+
+      const writerSet = new Set(normalizeWriters(data.project.writers));
+      const nameSet = new Set(normalizeWriterNames(data.project.writerUsernames));
+      const before = `${[...writerSet].sort().join('|')}::${[...nameSet].sort().join('|')}`;
+
+      if (grant) {
+        writerSet.add(admin.id);
+        if (adminName) nameSet.add(adminName);
+      } else {
+        writerSet.delete(admin.id);
+        if (adminName) nameSet.delete(adminName);
+      }
+
+      data.project.writers = normalizeWriters([...writerSet]);
+      data.project.writerUsernames = normalizeWriterNames([...nameSet]);
+      const after = `${data.project.writers.slice().sort().join('|')}::${data.project.writerUsernames.slice().sort().join('|')}`;
+      if (after === before) {
+        patched += 1;
+        continue;
+      }
+
+      toCommit.push({
+        repoPath,
+        content: JSON.stringify(data, null, 2),
+      });
+    } catch (err) {
+      errors.push(`${name}: ${err.message || err}`);
+    }
+  }
+
+  if (toCommit.length) {
+    try {
+      await commitRepoFiles(
+        toCommit,
+        `NovelExplor: grant write to ${admin.username || admin.id} (${toCommit.length} snapshots)`
+      );
+      patched += toCommit.length;
+    } catch (err) {
+      errors.push(`GitHub 커밋 실패: ${err.message || err}`);
+    }
+  }
+
   return { patched, errors };
 }
 
