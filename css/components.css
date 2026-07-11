@@ -419,6 +419,22 @@
   margin-top: 8px;
 }
 
+.open-proj-source-grid--3 {
+  grid-template-columns: 1fr;
+}
+
+@media (min-width: 520px) {
+  .open-proj-source-grid--3 {
+    grid-template-columns: 1fr 1fr 1fr;
+  }
+}
+
+.open-proj-gh-count {
+  margin: 0 0 8px;
+  font-size: 11px;
+  color: var(--text-muted);
+}
+
 .open-proj-source-btn {
   display: flex;
   flex-direction: column;

@@ -1,4 +1,4 @@
-/** 프로젝트 열기 — 로컬 / GitHub 소스 선택 후 목록 */
+/** 프로젝트 열기 — 로컬 폴더 / 이 브라우저 / GitHub */
 
 import {
   initSyncFolder,
@@ -8,11 +8,11 @@ import {
   getSyncFolderLabel,
   hasSyncDir,
 } from '../core/sync-folder.js';
-import { countCharactersWithPhotos } from '../core/project.js';
+import { countCharactersWithPhotos, listProjects } from '../core/project.js';
 import {
   fetchGithubDefaultMeta,
   getLocalDefaultMeta,
-  listGithubProjectSnapshots,
+  listGithubProjectsDetailed,
 } from '../core/default-project.js';
 
 /**
@@ -20,6 +20,7 @@ import {
  *   | { type: 'file', file: File, name?: string }
  *   | { type: 'github', snapshotId: string, name?: string }
  *   | { type: 'default' }
+ *   | { type: 'local-db', projectId: string, name?: string }
  *   | null
  * >}
  */
@@ -27,10 +28,11 @@ export async function showOpenProjectDialog() {
   const source = await showOpenSourcePicker();
   if (!source) return null;
   if (source === 'local') return showLocalOpenProjectDialog();
+  if (source === 'browser') return showBrowserOpenProjectDialog();
   return showGithubOpenProjectDialog();
 }
 
-/** 1단계: 로컬 vs GitHub */
+/** 1단계: 로컬 폴더 / 이 브라우저 / GitHub */
 function showOpenSourcePicker() {
   const dialog = document.getElementById('dialog');
   const titleEl = document.getElementById('dialog-title');
@@ -48,21 +50,26 @@ function showOpenSourcePicker() {
   bodyEl.innerHTML = `
     <div class="open-proj">
       <p class="open-proj-hint">불러올 위치를 선택하세요.</p>
-      <div class="open-proj-source-grid" role="listbox" aria-label="열기 위치">
+      <div class="open-proj-source-grid open-proj-source-grid--3" role="listbox" aria-label="열기 위치">
+        <button type="button" class="open-proj-source-btn" data-source="browser" role="option">
+          <span class="open-proj-source-icon">🗄</span>
+          <strong>이 브라우저</strong>
+          <span class="open-proj-source-desc">IndexedDB에 있는 프로젝트</span>
+        </button>
         <button type="button" class="open-proj-source-btn" data-source="local" role="option">
           <span class="open-proj-source-icon">📂</span>
-          <strong>로컬</strong>
+          <strong>로컬 폴더</strong>
           <span class="open-proj-source-desc">동기화 폴더 · JSON 파일</span>
         </button>
         <button type="button" class="open-proj-source-btn" data-source="github" role="option">
           <span class="open-proj-source-icon">☁</span>
           <strong>GitHub</strong>
-          <span class="open-proj-source-desc">기본 프로젝트 · 원격 스냅샷</span>
+          <span class="open-proj-source-desc">원격에 업로드된 스냅샷만</span>
         </button>
       </div>
     </div>`;
 
-  /** @type {'local' | 'github' | null} */
+  /** @type {'local' | 'github' | 'browser' | null} */
   let selection = null;
 
   return new Promise((resolve) => {
@@ -109,6 +116,97 @@ function showOpenSourcePicker() {
   });
 }
 
+/** 이 브라우저 IndexedDB 프로젝트 */
+async function showBrowserOpenProjectDialog() {
+  const dialog = document.getElementById('dialog');
+  const titleEl = document.getElementById('dialog-title');
+  const bodyEl = document.getElementById('dialog-body');
+  const form = dialog.querySelector('.dialog-form');
+  const cancelBtn = document.getElementById('dialog-cancel');
+  const confirmBtn = document.getElementById('dialog-confirm');
+  const loadBtn = document.getElementById('open-proj-load-btn');
+  if (loadBtn) loadBtn.hidden = true;
+
+  titleEl.textContent = '이 브라우저에서 열기';
+  confirmBtn.textContent = '열기';
+  confirmBtn.disabled = true;
+
+  const projects = await listProjects();
+
+  bodyEl.innerHTML = `
+    <div class="open-proj">
+      <p class="open-proj-hint">이 PC 브라우저 DB에 저장된 프로젝트입니다. (GitHub와 별개)</p>
+      <div id="open-proj-db-list" class="open-proj-file-list" role="listbox" aria-label="로컬 DB 프로젝트"></div>
+      <section id="open-proj-preview" class="open-proj-preview" hidden>
+        <strong>선택</strong>
+        <div id="open-proj-preview-body" class="open-proj-preview-card"></div>
+      </section>
+    </div>`;
+
+  const listEl = bodyEl.querySelector('#open-proj-db-list');
+  const previewEl = bodyEl.querySelector('#open-proj-preview');
+  const previewBodyEl = bodyEl.querySelector('#open-proj-preview-body');
+
+  /** @type {{ type: 'local-db', projectId: string, name: string } | null} */
+  let selection = null;
+
+  if (!projects.length) {
+    listEl.innerHTML = '<p class="open-proj-empty">저장된 프로젝트가 없습니다.</p>';
+  } else {
+    listEl.innerHTML = projects.map((p) => {
+      const id = p.id || p.projectId;
+      const when = p.updatedAt
+        ? String(p.updatedAt).slice(0, 19).replace('T', ' ')
+        : '';
+      return `
+        <button type="button" class="open-proj-file" data-id="${esc(id)}" role="option">
+          <span class="open-proj-file-stamp">DB</span>
+          <span class="open-proj-file-name">${esc(p.title || '(제목 없음)')}</span>
+          <code class="open-proj-file-name">${esc([p.author, when].filter(Boolean).join(' · '))}</code>
+        </button>`;
+    }).join('');
+
+    listEl.querySelectorAll('.open-proj-file').forEach((btn) => {
+      btn.addEventListener('click', () => {
+        const p = projects.find((x) => (x.id || x.projectId) === btn.dataset.id);
+        if (!p) return;
+        const id = p.id || p.projectId;
+        selection = { type: 'local-db', projectId: id, name: p.title || id };
+        previewEl.hidden = false;
+        previewBodyEl.innerHTML = `
+          <p class="open-proj-preview-title"><strong>${esc(p.title || '(제목 없음)')}</strong></p>
+          <p class="open-proj-preview-hint">브라우저 DB 프로젝트를 엽니다. 다른 프로젝트 데이터는 그대로 둡니다.</p>`;
+        confirmBtn.disabled = false;
+        listEl.querySelectorAll('.open-proj-file').forEach((el) => {
+          el.classList.toggle('is-selected', el.dataset.id === id);
+        });
+      });
+    });
+  }
+
+  return new Promise((resolve) => {
+    let settled = false;
+    const finish = (value) => {
+      if (settled) return;
+      settled = true;
+      cancelBtn.removeEventListener('click', onCancel);
+      form.removeEventListener('submit', onSubmit);
+      confirmBtn.textContent = '확인';
+      confirmBtn.disabled = false;
+      dialog.close();
+      resolve(value);
+    };
+    const onCancel = () => finish(null);
+    const onSubmit = (e) => {
+      e.preventDefault();
+      if (selection) finish(selection);
+    };
+    cancelBtn.addEventListener('click', onCancel);
+    form.addEventListener('submit', onSubmit);
+    dialog.showModal();
+  });
+}
+
 /** GitHub · 기본 프로젝트 */
 async function showGithubOpenProjectDialog() {
   const dialog = document.getElementById('dialog');
@@ -133,7 +231,11 @@ async function showGithubOpenProjectDialog() {
       </section>
       <section class="open-proj-section">
         <strong>GitHub 스냅샷</strong>
-        <p class="open-proj-hint">저장소에 저장된 프로젝트 목록입니다.</p>
+        <p class="open-proj-hint">
+          저장소 <code>snapshots/</code>에 <strong>업로드된</strong> 타임스탬프 JSON만 표시됩니다.
+          로컬·다운로드만 저장한 프로젝트는 여기에 없습니다. (PAT로 저장 시 업로드)
+        </p>
+        <p id="open-proj-gh-count" class="open-proj-gh-count"></p>
         <div id="open-proj-github-list" class="open-proj-file-list" role="listbox" aria-label="GitHub 스냅샷"></div>
       </section>
       <section id="open-proj-preview" class="open-proj-preview" hidden>
@@ -147,6 +249,7 @@ async function showGithubOpenProjectDialog() {
 
   const defaultEl = bodyEl.querySelector('#open-proj-default');
   const githubListEl = bodyEl.querySelector('#open-proj-github-list');
+  const countEl = bodyEl.querySelector('#open-proj-gh-count');
   const previewEl = bodyEl.querySelector('#open-proj-preview');
   const previewBodyEl = bodyEl.querySelector('#open-proj-preview-body');
 
@@ -180,7 +283,8 @@ async function showGithubOpenProjectDialog() {
     selection = { type: 'github', snapshotId: item.snapshotId, name: item.name, title: item.title };
     previewEl.hidden = false;
     previewBodyEl.innerHTML = `
-      <p class="open-proj-preview-title"><strong>${esc(item.title || item.name)}</strong></p>
+      <p class="open-proj-preview-title"><strong>${esc(item.title || item.name)}</strong>
+        ${item.author ? `<span class="open-proj-preview-author">— ${esc(item.author)}</span>` : ''}</p>
       <p class="open-proj-preview-file"><code>${esc(item.name)}</code></p>
       <p class="open-proj-preview-hint">GitHub 스냅샷을 불러옵니다. writers에 없으면 열람만 가능합니다.</p>`;
     confirmBtn.disabled = false;
@@ -205,24 +309,29 @@ async function showGithubOpenProjectDialog() {
   }
 
   try {
-    const snaps = await listGithubProjectSnapshots();
+    countEl.textContent = 'GitHub 스냅샷 불러오는 중…';
+    const snaps = await listGithubProjectsDetailed();
+    countEl.textContent = snaps.length
+      ? `원격 스냅샷 ${snaps.length}개`
+      : '원격 스냅샷 0개 — 프로젝트 저장 시 PAT가 있으면 여기에 쌓입니다.';
     if (!snaps.length) {
       githubListEl.innerHTML = '<p class="open-proj-empty">GitHub 스냅샷이 없습니다.</p>';
     } else {
-      const shown = snaps.slice(0, 40);
-      githubListEl.innerHTML = shown.map((s) => `
+      githubListEl.innerHTML = snaps.map((s) => `
         <button type="button" class="open-proj-file" data-id="${esc(s.snapshotId)}" role="option">
           <span class="open-proj-file-stamp">${esc(s.label)}</span>
-          <code class="open-proj-file-name">${esc(s.name)}</code>
+          <span class="open-proj-file-name">${esc(s.title || s.name)}</span>
+          <code class="open-proj-file-name">${esc(s.name)}${s.author ? ` · ${esc(s.author)}` : ''}</code>
         </button>`).join('');
       githubListEl.querySelectorAll('.open-proj-file').forEach((btn) => {
         btn.addEventListener('click', () => {
-          const item = shown.find((x) => x.snapshotId === btn.dataset.id);
+          const item = snaps.find((x) => x.snapshotId === btn.dataset.id);
           if (item) selectGithub(item);
         });
       });
     }
   } catch (err) {
+    countEl.textContent = '';
     githubListEl.innerHTML = `<p class="open-proj-empty">GitHub 목록 로드 실패: ${esc(err.message)}</p>`;
   }
 

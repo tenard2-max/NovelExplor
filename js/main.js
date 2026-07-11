@@ -191,6 +191,18 @@ function initActions() {
         return;
       }
 
+      if (picked.type === 'local-db') {
+        await project.loadProject(picked.projectId);
+        switchView('character');
+        const ro = !canManageProjectContent(project.getCurrentProject());
+        await showAlert(
+          '프로젝트 열기',
+          `브라우저 프로젝트를 열었습니다.${ro ? ' <span style="color:#ef4444">(열람만가능)</span>' : ''}<br>`
+          + `<strong>${picked.name || picked.projectId}</strong>`
+        );
+        return;
+      }
+
       if (picked.type === 'default') {
         const id = await loadDefaultProject({ skipConfirm: true });
         if (!id) return;
