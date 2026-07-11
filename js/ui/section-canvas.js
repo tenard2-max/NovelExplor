@@ -235,7 +235,7 @@ function renderTimelineSection(doc) {
 function renderTimelineSectionFromIdb(doc) {
   const idb = dedupeTimelineByEpisode(project.getCache().timeline || []);
   if (idb.length) return renderTimelineEventChain(idb);
-  if (doc) return renderTimelineSection(doc);
+  // 프로젝트 격리: 빈 프로젝트에 공유 XML 타임라인을 넣지 않음
   return '<p class="xml-section-empty">이벤트 없음 · 상단 「타임라인 업데이트」로 생성할 수 있습니다.</p>';
 }
 
@@ -284,16 +284,19 @@ function renderStoryNavSection(doc, xmlUrl) {
   return `<div class="xml-tl-list">${rows}</div>`;
 }
 
-/** 스토리 네비: IndexedDB episodes 우선 · 클릭 시 요약 펼침 */
+/** 스토리 네비: IndexedDB episodes만 · 클릭 시 요약 펼침 */
 function renderStoryNavSectionFromIdb(doc, xmlUrl) {
   const eps = [...(project.getCache().episodes || [])].sort((a, b) => a.number - b.number);
-  if (eps.length) {
-    const rows = eps.map((e) => {
-      const rawSummary = e.summary
-        || (e.content ? String(e.content).replace(/\s+/g, ' ').trim().slice(0, 280) : '')
-        || '요약 없음 · 「네비 업데이트」를 실행하세요.';
-      const summary = formatSummaryLineBreaks(rawSummary);
-      return `
+  if (!eps.length) {
+    // 프로젝트 격리: 빈 프로젝트에 공유 XML 네비를 넣지 않음
+    return '<p class="xml-section-empty">에피소드 없음 · ST 업로드 후 「네비 업데이트」를 실행하세요.</p>';
+  }
+  const rows = eps.map((e) => {
+    const rawSummary = e.summary
+      || (e.content ? String(e.content).replace(/\s+/g, ' ').trim().slice(0, 280) : '')
+      || '요약 없음 · 「네비 업데이트」를 실행하세요.';
+    const summary = formatSummaryLineBreaks(rawSummary);
+    return `
       <article class="xml-nav-ep" data-ep-id="${escapeHtml(e.id)}" tabindex="0" role="button"
                aria-expanded="false" title="클릭하여 요약 보기">
         <div class="xml-tl-row xml-nav-ep-head">
@@ -305,11 +308,8 @@ function renderStoryNavSectionFromIdb(doc, xmlUrl) {
           <p>${escapeHtml(summary)}</p>
         </div>
       </article>`;
-    }).join('');
-    return `<div class="xml-tl-list xml-nav-list">${rows}</div>`;
-  }
-  if (doc) return renderStoryNavSection(doc, xmlUrl);
-  return '<p class="xml-section-empty">에피소드 없음 · ST 업로드 후 「네비 업데이트」를 실행하세요.</p>';
+  }).join('');
+  return `<div class="xml-tl-list xml-nav-list">${rows}</div>`;
 }
 
 function renderMasterSection(doc, xmlUrl) {

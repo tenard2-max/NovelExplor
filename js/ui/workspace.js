@@ -216,7 +216,12 @@ export function renderEpisodeList() {
   const el = document.getElementById('episode-list');
   if (!el) return;
   const cache = project.getCache();
-  el.innerHTML = cache.episodes.map((ep) => `
+  const eps = [...(cache.episodes || [])].sort((a, b) => a.number - b.number);
+  if (!eps.length) {
+    el.innerHTML = '<p class="inspector-empty" style="padding:8px">에피소드 없음</p>';
+    return;
+  }
+  el.innerHTML = eps.map((ep) => `
     <button class="episode-item" data-ep-id="${ep.id}" data-ep-num="${ep.number}">
       <span class="ep-num">EP${String(ep.number).padStart(3, '0')}</span>
       <span class="ep-title">${escapeHtml(ep.title)}</span>

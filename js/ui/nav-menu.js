@@ -11,7 +11,7 @@ const VIEW_META = {
   'story-bible': { title: 'Story Bible', subtitle: 'sections/01_story_bible.xml' },
   world: { title: '세계관', subtitle: 'sections/02_world.xml' },
   reader: { title: '소설 읽기', subtitle: 'sections/10_reader.xml' },
-  'story-nav': { title: '스토리 네비게이터', subtitle: 'IndexedDB · XML 자동생성' },
+  'story-nav': { title: '스토리 네비게이터', subtitle: '현재 프로젝트 IndexedDB' },
   foreshadow: { title: '떡밥 회수', subtitle: 'sections/04_foreshadows.xml' },
   character: { title: '인물', subtitle: 'sections/03_characters.xml' },
   timeline: { title: '타임라인', subtitle: '이벤트 · 년월일' },
