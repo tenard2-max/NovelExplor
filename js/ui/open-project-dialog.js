@@ -1,4 +1,4 @@
-/** 프로젝트 열기 — 동기화 폴더 목록 + JSON 선택 후 미리보기·적용 */
+/** 프로젝트 열기 — 관리자: 로컬 폴더 / 사용자: 기본·GitHub만 */
 
 import {
   initSyncFolder,
@@ -9,11 +9,175 @@ import {
   hasSyncDir,
 } from '../core/sync-folder.js';
 import { countCharactersWithPhotos } from '../core/project.js';
+import { getCurrentUser, ROLES } from '../core/auth.js';
+import {
+  fetchGithubDefaultMeta,
+  getLocalDefaultMeta,
+  listGithubProjectSnapshots,
+} from '../core/default-project.js';
 
 /**
- * @returns {Promise<{ type: 'file', file: File, name?: string } | null>}
+ * @returns {Promise<
+ *   | { type: 'file', file: File, name?: string }
+ *   | { type: 'github', snapshotId: string, name?: string }
+ *   | { type: 'default' }
+ *   | null
+ * >}
  */
 export async function showOpenProjectDialog() {
+  const user = getCurrentUser();
+  if (user?.role === ROLES.USER) {
+    return showUserOpenProjectDialog();
+  }
+  return showAdminOpenProjectDialog();
+}
+
+/** 일반 사용자: 기본 프로젝트 + GitHub 스냅샷만 */
+async function showUserOpenProjectDialog() {
+  const dialog = document.getElementById('dialog');
+  const titleEl = document.getElementById('dialog-title');
+  const bodyEl = document.getElementById('dialog-body');
+  const form = dialog.querySelector('.dialog-form');
+  const cancelBtn = document.getElementById('dialog-cancel');
+  const confirmBtn = document.getElementById('dialog-confirm');
+  const actionsEl = dialog.querySelector('.dialog-actions');
+
+  titleEl.textContent = '프로젝트 열기';
+
+  const loadBtn = document.getElementById('open-proj-load-btn');
+  if (loadBtn) loadBtn.hidden = true;
+
+  confirmBtn.textContent = '열기';
+  confirmBtn.disabled = true;
+
+  bodyEl.innerHTML = `
+    <div class="open-proj">
+      <section class="open-proj-section">
+        <strong>기본 프로젝트</strong>
+        <p class="open-proj-hint">마스터가 지정한 기본 프로젝트입니다.</p>
+        <div id="open-proj-default" class="open-proj-file-list"></div>
+      </section>
+      <section class="open-proj-section">
+        <strong>GitHub 프로젝트</strong>
+        <p class="open-proj-hint">저장소에 저장된 스냅샷 목록입니다. (열람 전용)</p>
+        <div id="open-proj-github-list" class="open-proj-file-list" role="listbox" aria-label="GitHub 스냅샷"></div>
+      </section>
+      <section id="open-proj-preview" class="open-proj-preview" hidden>
+        <strong>선택</strong>
+        <div id="open-proj-preview-body" class="open-proj-preview-card"></div>
+      </section>
+    </div>`;
+
+  /** @type {{ type: 'default' } | { type: 'github', snapshotId: string, name: string, title?: string } | null} */
+  let selection = null;
+
+  const defaultEl = bodyEl.querySelector('#open-proj-default');
+  const githubListEl = bodyEl.querySelector('#open-proj-github-list');
+  const previewEl = bodyEl.querySelector('#open-proj-preview');
+  const previewBodyEl = bodyEl.querySelector('#open-proj-preview-body');
+
+  let settled = false;
+  let resolveOuter = null;
+  let cleanup = () => {};
+
+  const finish = (value) => {
+    if (settled) return;
+    settled = true;
+    cleanup();
+    confirmBtn.textContent = '확인';
+    confirmBtn.disabled = false;
+    dialog.close();
+    resolveOuter?.(value);
+  };
+
+  function selectDefault(meta) {
+    selection = { type: 'default' };
+    previewEl.hidden = false;
+    previewBodyEl.innerHTML = `
+      <p class="open-proj-preview-title"><strong>${esc(meta?.title || '기본 프로젝트')}</strong></p>
+      <p class="open-proj-preview-file"><code>${esc(meta?.filename || meta?.snapshotId || 'default')}</code></p>
+      <p class="open-proj-preview-hint">마스터가 지정한 기본 프로젝트를 불러옵니다. (열람 전용)</p>`;
+    confirmBtn.disabled = false;
+    defaultEl.querySelectorAll('.open-proj-file').forEach((el) => el.classList.add('is-selected'));
+    githubListEl.querySelectorAll('.open-proj-file').forEach((el) => el.classList.remove('is-selected'));
+  }
+
+  function selectGithub(item) {
+    selection = { type: 'github', snapshotId: item.snapshotId, name: item.name, title: item.title };
+    previewEl.hidden = false;
+    previewBodyEl.innerHTML = `
+      <p class="open-proj-preview-title"><strong>${esc(item.title || item.name)}</strong></p>
+      <p class="open-proj-preview-file"><code>${esc(item.name)}</code></p>
+      <p class="open-proj-preview-hint">GitHub 스냅샷을 불러옵니다. (열람 전용 · 저장 불가)</p>`;
+    confirmBtn.disabled = false;
+    defaultEl.querySelectorAll('.open-proj-file').forEach((el) => el.classList.remove('is-selected'));
+    githubListEl.querySelectorAll('.open-proj-file').forEach((el) => {
+      el.classList.toggle('is-selected', el.dataset.id === item.snapshotId);
+    });
+  }
+
+  // 기본 프로젝트
+  let defaultMeta = await fetchGithubDefaultMeta();
+  if (!defaultMeta) defaultMeta = await getLocalDefaultMeta();
+  if (defaultMeta) {
+    defaultEl.innerHTML = `
+      <button type="button" class="open-proj-file" data-kind="default" role="option">
+        <span class="open-proj-file-stamp">기본</span>
+        <span class="open-proj-file-name">${esc(defaultMeta.title)}</span>
+        <code class="open-proj-file-name">${esc(defaultMeta.filename || defaultMeta.snapshotId)}</code>
+      </button>`;
+    defaultEl.querySelector('button')?.addEventListener('click', () => selectDefault(defaultMeta));
+  } else {
+    defaultEl.innerHTML = '<p class="open-proj-empty">아직 지정된 기본 프로젝트가 없습니다.</p>';
+  }
+
+  // GitHub 목록
+  try {
+    const snaps = await listGithubProjectSnapshots();
+    if (!snaps.length) {
+      githubListEl.innerHTML = '<p class="open-proj-empty">GitHub 스냅샷이 없습니다.</p>';
+    } else {
+      const shown = snaps.slice(0, 40);
+      githubListEl.innerHTML = shown.map((s) => `
+        <button type="button" class="open-proj-file" data-id="${esc(s.snapshotId)}" role="option">
+          <span class="open-proj-file-stamp">${esc(s.label)}</span>
+          <code class="open-proj-file-name">${esc(s.name)}</code>
+        </button>`).join('');
+      githubListEl.querySelectorAll('.open-proj-file').forEach((btn) => {
+        btn.addEventListener('click', () => {
+          const item = shown.find((x) => x.snapshotId === btn.dataset.id);
+          if (item) selectGithub(item);
+        });
+      });
+    }
+  } catch (err) {
+    githubListEl.innerHTML = `<p class="open-proj-empty">GitHub 목록 로드 실패: ${esc(err.message)}</p>`;
+  }
+
+  return new Promise((resolve) => {
+    resolveOuter = resolve;
+
+    const onCancel = () => finish(null);
+    const onSubmit = (e) => {
+      e.preventDefault();
+      if (!selection) return;
+      if (selection.type === 'default') finish({ type: 'default' });
+      else finish({ type: 'github', snapshotId: selection.snapshotId, name: selection.name });
+    };
+
+    cleanup = () => {
+      cancelBtn.removeEventListener('click', onCancel);
+      form.removeEventListener('submit', onSubmit);
+    };
+
+    cancelBtn.addEventListener('click', onCancel);
+    form.addEventListener('submit', onSubmit);
+    dialog.showModal();
+  });
+}
+
+/** 관리자: 기존 로컬 폴더·JSON 열기 */
+async function showAdminOpenProjectDialog() {
   await initSyncFolder();
 
   const dialog = document.getElementById('dialog');

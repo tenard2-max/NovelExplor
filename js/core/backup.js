@@ -79,8 +79,13 @@ export function timestampBackupFilename(date = new Date()) {
 
 /**
  * 프로젝트 동기화 스냅샷: 저장 폴더 기록(가능 시) + JSON 다운로드 + 로컬 백업
+ * @param {{ notify?: boolean, asDefault?: boolean, defaultTitle?: string }} [options]
  */
-export async function exportTimestampedBackup({ notify = false } = {}) {
+export async function exportTimestampedBackup({
+  notify = false,
+  asDefault = false,
+  defaultTitle = '',
+} = {}) {
   const json = await buildBackupJson();
   if (!json) throw new Error('열린 프로젝트가 없습니다.');
 
@@ -110,9 +115,15 @@ export async function exportTimestampedBackup({ notify = false } = {}) {
   if (hasGithubToken()) {
     const stamp = filename.replace(/\.json$/i, '');
     try {
-      const gh = await syncProjectToGithub({ snapshotId: stamp, reason: 'save' });
+      const gh = await syncProjectToGithub({
+        snapshotId: stamp,
+        reason: asDefault ? 'default' : 'save',
+        asDefault,
+        defaultTitle,
+      });
       if (gh) {
         githubNote = `<br>GitHub: <code>${gh.snapshotId}.json</code> (+${Math.max(0, gh.fileCount - 2)}개 자산)`;
+        if (asDefault) githubNote += '<br>기본 프로젝트로 지정했습니다.';
       }
     } catch (err) {
       console.warn('[backup] GitHub 동기화 실패:', err);

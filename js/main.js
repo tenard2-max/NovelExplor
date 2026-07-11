@@ -32,7 +32,9 @@ import { initGithubPanel } from './ui/github-panel.js';
 import { initGithubSync } from './core/github-sync.js';
 import { initStorySync } from './ui/story-sync.js';
 import { initTimeline } from './ui/timeline-panel.js';
-import { initAuth, isLoggedIn, getCurrentUser, ROLES, canUpload, canSaveProject } from './core/auth.js';
+import { initAuth, isLoggedIn, getCurrentUser, ROLES, canUpload, canSaveProject, canSetDefaultProject } from './core/auth.js';
+import { loadDefaultProject, saveAsDefaultProject } from './core/default-project.js';
+import { pullProjectFromGithub } from './core/github-pull.js';
 import { initAuthGate, showAuthGate, hideAuthGate, whenAuthenticated } from './ui/auth-gate.js';
 import { initSettings, updateUserBadge } from './ui/settings-panel.js';
 import { initPermissions, applyUploadPermissions } from './ui/permissions.js';
@@ -89,13 +91,17 @@ async function boot() {
   const projects = await project.listProjects();
   if (projects.length) {
     await project.loadProject(projects[0].id);
+  } else if (!canSaveProject(user)) {
+    // 일반 사용자: 기본 프로젝트 자동 로드 시도
+    try {
+      await loadDefaultProject({ skipConfirm: true });
+    } catch (err) {
+      console.info('[NovelExplor] 기본 프로젝트 없음:', err.message);
+    }
   } else {
     const recovered = await offerLocalRecovery();
     if (!recovered) {
-      if (canSaveProject(user)) {
-        await project.createProject('인류 생존 프로젝트', true);
-      }
-      // 일반 사용자: 프로젝트 없음 → 열기로 불러와야 함
+      await project.createProject('인류 생존 프로젝트', true);
     }
   }
   warnIfWrongOrigin();
@@ -165,7 +171,6 @@ function initActions() {
         if (!ok) return;
         await flushPendingSave();
         await autosave.flushSave(true);
-        // 관리자만 열기 직후 동기화 파일 재기록
         let filename = picked.name || '';
         if (canSaveProject()) {
           filename = await exportTimestampedBackup({ notify: false });
@@ -174,8 +179,30 @@ function initActions() {
         await showAlert(
           '프로젝트 열기',
           canSaveProject()
-            ? `동기화 파일을 적용했습니다. (브라우저 DB 1개 프로젝트)<br><code>${picked.name || filename}</code>`
+            ? `동기화 파일을 적용했습니다.<br><code>${picked.name || filename}</code>`
             : `프로젝트를 불러왔습니다.<br><code>${picked.name || filename}</code>`
+        );
+        return;
+      }
+
+      if (picked.type === 'default') {
+        const id = await loadDefaultProject({ skipConfirm: true });
+        if (!id) return;
+        switchView('character');
+        await showAlert('기본 프로젝트', `기본 프로젝트를 불러왔습니다.<br><code>${id}.json</code>`);
+        return;
+      }
+
+      if (picked.type === 'github') {
+        const id = await pullProjectFromGithub({
+          snapshotId: picked.snapshotId,
+          skipConfirm: true,
+        });
+        if (!id) return;
+        switchView('character');
+        await showAlert(
+          'GitHub 프로젝트',
+          `GitHub 스냅샷을 불러왔습니다. (열람 전용)<br><code>${picked.name || `${id}.json`}</code>`
         );
       }
     } catch (err) {
@@ -185,6 +212,23 @@ function initActions() {
 
   bindAction('save', () => saveCurrentProject());
   bindAction('save-project', () => saveCurrentProject());
+  bindAction('save-default-project', async () => {
+    if (!canSetDefaultProject()) {
+      alert('기본 프로젝트는 마스터만 설정할 수 있습니다.');
+      return;
+    }
+    try {
+      const { snapshotId, filename } = await saveAsDefaultProject();
+      await showAlert(
+        '기본 프로젝트 저장',
+        `현재 프로젝트를 기본 프로젝트로 지정했습니다.<br>`
+        + `일반 사용자는 이 프로젝트를 열람할 수 있습니다.<br>`
+        + `<code>${filename || `${snapshotId}.json`}</code>`
+      );
+    } catch (err) {
+      alert(`기본 프로젝트 저장 실패: ${err.message}`);
+    }
+  });
   bindAction('export-json', exportJson);
 
   bindAction('toggle-theme', () => {
@@ -199,8 +243,8 @@ function initActions() {
     'NovelExplor',
     '인류 생존 프로젝트 — 복선·스토리·세계관 워크스페이스<br><br>' +
     '<strong>XML</strong>: Pages 고정 원본<br>' +
-    '<strong>프로젝트 저장</strong>: 관리자만 — 브라우저 DB + 저장 폴더에 YYYYMMDDHHMMSS.json<br>' +
-    '<strong>프로젝트 열기</strong>: 저장 폴더 목록에서 불러오기'
+    '<strong>프로젝트 저장</strong>: 관리자 — DB + 동기화 파일 / 마스터 — 기본 프로젝트 지정<br>' +
+    '<strong>프로젝트 열기</strong>: 사용자 — 기본·GitHub만 / 관리자 — 로컬 폴더'
   ));
 
   const savedTheme = localStorage.getItem('fft-theme');

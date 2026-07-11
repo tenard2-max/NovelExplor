@@ -50,6 +50,11 @@ export function canSaveProject(user = currentUser) {
   return canUpload(user);
 }
 
+/** 마스터만 기본 프로젝트 지정 가능 */
+export function canSetDefaultProject(user = currentUser) {
+  return user?.role === ROLES.MASTER;
+}
+
 /** 로그인한 사용자는 프로젝트 열기 가능 */
 export function canOpenProject(user = currentUser) {
   return !!user;

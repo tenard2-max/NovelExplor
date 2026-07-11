@@ -14,9 +14,14 @@ async function githubRequest(path, {
   allow404 = false,
   timeoutMs = DEFAULT_TIMEOUT_MS,
   retries = MAX_RETRIES,
+  allowPublic = false,
 } = {}) {
   const { token } = getGithubConfig();
-  if (!token?.trim()) {
+  const hasToken = Boolean(token?.trim());
+  if (!hasToken && method !== 'GET') {
+    throw new Error('GitHub Personal Access Token이 설정되지 않았습니다. 우측 패널에서 연결하세요.');
+  }
+  if (!hasToken && !allowPublic && method === 'GET') {
     throw new Error('GitHub Personal Access Token이 설정되지 않았습니다. 우측 패널에서 연결하세요.');
   }
 
@@ -25,14 +30,16 @@ async function githubRequest(path, {
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(), timeoutMs);
     try {
+      const headers = {
+        Accept: 'application/vnd.github+json',
+        'X-GitHub-Api-Version': '2022-11-28',
+        ...(body ? { 'Content-Type': 'application/json' } : {}),
+      };
+      if (hasToken) headers.Authorization = `Bearer ${token.trim()}`;
+
       const res = await fetch(`${API}${path}`, {
         method,
-        headers: {
-          Accept: 'application/vnd.github+json',
-          Authorization: `Bearer ${token.trim()}`,
-          'X-GitHub-Api-Version': '2022-11-28',
-          ...(body ? { 'Content-Type': 'application/json' } : {}),
-        },
+        headers,
         body: body ? JSON.stringify(body) : undefined,
         signal: controller.signal,
       });
@@ -90,7 +97,7 @@ export async function getRepoFileSha(repoPath) {
   const { owner, repo, branch } = getGithubConfig();
   const data = await githubRequest(
     `/repos/${owner}/${repo}/contents/${encodeRepoPath(repoPath)}?ref=${encodeURIComponent(branch)}`,
-    { allow404: true }
+    { allow404: true, allowPublic: true }
   );
   return data?.sha || null;
 }
@@ -100,7 +107,7 @@ export async function getRepoFileContent(repoPath) {
   const { owner, repo, branch } = getGithubConfig();
   const data = await githubRequest(
     `/repos/${owner}/${repo}/contents/${encodeRepoPath(repoPath)}?ref=${encodeURIComponent(branch)}`,
-    { allow404: true }
+    { allow404: true, allowPublic: true }
   );
   if (!data) return null;
 
@@ -114,6 +121,29 @@ export async function getRepoFileContent(repoPath) {
     content: isText ? base64ToUtf8(raw) : raw,
     isText,
   };
+}
+
+/**
+ * 디렉터리 목록 (공개 저장소는 PAT 없이 가능)
+ * @returns {Promise<{ name: string, path: string, type: string, size: number, sha: string }[]>}
+ */
+export async function listRepoDir(repoPath) {
+  const { owner, repo, branch } = getGithubConfig();
+  const data = await githubRequest(
+    `/repos/${owner}/${repo}/contents/${encodeRepoPath(repoPath)}?ref=${encodeURIComponent(branch)}`,
+    { allow404: true, allowPublic: true }
+  );
+  if (!data) return [];
+  if (!Array.isArray(data)) {
+    throw new Error(`디렉터리가 아닙니다: ${repoPath}`);
+  }
+  return data.map((item) => ({
+    name: item.name,
+    path: item.path,
+    type: item.type,
+    size: item.size || 0,
+    sha: item.sha,
+  }));
 }
 
 export async function getRepoFileText(repoPath) {
@@ -276,7 +306,7 @@ export async function putRepoFiles(files, messagePrefix = 'NovelExplor sync') {
 
 export async function testGithubConnection() {
   const { owner, repo } = getGithubConfig();
-  const data = await githubRequest(`/repos/${owner}/${repo}`);
+  const data = await githubRequest(`/repos/${owner}/${repo}`, { allowPublic: true });
   return { fullName: data.full_name, defaultBranch: data.default_branch };
 }
 

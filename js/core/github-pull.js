@@ -7,7 +7,6 @@ import {
 } from './github-api.js';
 import {
   getGithubConfig,
-  hasGithubToken,
   snapshotsDir,
   overlaysDir,
 } from './github-config.js';
@@ -116,10 +115,7 @@ export async function pullProjectFromGithub({
   replaceAll = true,
   skipConfirm = false,
 } = {}) {
-  if (!hasGithubToken()) {
-    throw new Error('GitHub PAT를 먼저 설정하세요.');
-  }
-
+  // 공개 저장소는 PAT 없이 읽기 가능 (list/get allowPublic)
   const cfg = getGithubConfig();
   const snapDir = snapshotsDir(cfg);
 

@@ -59,7 +59,12 @@ function onCommitProgress(p) {
  * IndexedDB → GitHub
  * @returns {Promise<{ snapshotId: string, fileCount: number, uploadId?: string } | null>}
  */
-export async function syncProjectToGithub({ snapshotId, reason = 'save' } = {}) {
+export async function syncProjectToGithub({
+  snapshotId,
+  reason = 'save',
+  asDefault = false,
+  defaultTitle = '',
+} = {}) {
   if (!hasGithubToken()) return null;
   if (syncInFlight) return null;
 
@@ -67,7 +72,7 @@ export async function syncProjectToGithub({ snapshotId, reason = 'save' } = {}) 
   syncInFlight = true;
   clearTimeout(progressClearTimer);
   setNavSyncProgress('동기화 준비…');
-  emit('github:sync-start', { reason, uploadOnly });
+  emit('github:sync-start', { reason, uploadOnly, asDefault });
 
   try {
     const payload = await buildBackupPayload({ lite: false });
@@ -113,6 +118,18 @@ export async function syncProjectToGithub({ snapshotId, reason = 'save' } = {}) 
           reason,
         }, null, 2),
       });
+      if (asDefault || reason === 'default') {
+        files.push({
+          repoPath: `${snapDir}/default.json`,
+          content: JSON.stringify({
+            snapshotId: stamp,
+            filename: `${stamp}.json`,
+            title: defaultTitle || payload.project?.title || '기본 프로젝트',
+            updatedAt: manifest.exportedAt || nowIso(),
+            reason: 'default',
+          }, null, 2),
+        });
+      }
     }
 
     for (const xml of buildSectionXmlFiles(payload, cfg)) {
@@ -121,7 +138,9 @@ export async function syncProjectToGithub({ snapshotId, reason = 'save' } = {}) 
 
     const commitMsg = uploadOnly
       ? `NovelExplor: ${reason} (${files.length} files)`
-      : `NovelExplor: ${reason} snapshot ${stamp} (${files.length} files)`;
+      : asDefault || reason === 'default'
+        ? `NovelExplor: set default project ${stamp} (${files.length} files)`
+        : `NovelExplor: ${reason} snapshot ${stamp} (${files.length} files)`;
     await commitRepoFiles(files, commitMsg, { onProgress: onCommitProgress });
 
     if (uploadOnly) {
@@ -132,7 +151,7 @@ export async function syncProjectToGithub({ snapshotId, reason = 'save' } = {}) 
     refreshNavVersions();
     setNavSyncProgress(`완료 ${files.length}파일 (100%)`);
     progressClearTimer = setTimeout(() => clearNavSyncProgress(), 6000);
-    emit('github:sync-done', { snapshotId: stamp, fileCount: files.length, uploadOnly });
+    emit('github:sync-done', { snapshotId: stamp, fileCount: files.length, uploadOnly, asDefault });
     return { snapshotId: stamp, fileCount: files.length, uploadId: uploadOnly ? stamp : undefined };
   } catch (err) {
     setNavSyncProgress(`실패: ${err.message || err}`, { error: true });

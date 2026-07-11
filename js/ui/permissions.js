@@ -1,7 +1,7 @@
 /** UI 권한 반영 — 일반 사용자는 프로젝트 열기·설정 위주만 표시 */
 
 import { on } from '../core/events.js';
-import { canSaveProject, getCurrentUser, roleLabel, ROLES } from '../core/auth.js';
+import { canSaveProject, canSetDefaultProject, getCurrentUser, ROLES } from '../core/auth.js';
 import { getCurrentView, switchView } from './nav-menu.js';
 
 const USER_BLOCKED_VIEWS = new Set(['master', 'story-bible', 'editor']);
@@ -21,19 +21,20 @@ export function applyRolePermissions() {
   const user = getCurrentUser();
   const isUser = user?.role === ROLES.USER;
   const canSave = canSaveProject(user);
+  const canDefault = canSetDefaultProject(user);
 
   document.body.classList.toggle('role-user', isUser);
   document.body.classList.toggle('role-admin', !isUser && !!user);
+  document.body.classList.toggle('role-master', canDefault);
 
   applyUploadPanel(isUser);
   applyNavMenu(isUser);
-  applyProjectNav(canSave);
+  applyProjectNav(canSave, canDefault);
   applyCharacterToolbar(isUser);
   applyStoryNavToolbar(isUser);
   applyToolNav(isUser);
   applyFooterSave(canSave);
 
-  // 일반 사용자가 숨긴 화면에 있으면 있으면 있으면 있으면 안전한 화면으로 이동
   if (isUser) {
     const view = typeof getCurrentView === 'function'
       ? getCurrentView()
@@ -86,8 +87,8 @@ function applyNavMenu(isUser) {
   setHidden(nav.querySelector('[data-view="story-bible"]'), isUser);
 }
 
-/** 관리자: 새/열기/저장 · 일반 사용자: 열기만 */
-function applyProjectNav(canSave) {
+/** 관리자: 새/열기/저장 · 마스터: +기본 저장 · 사용자: 열기만 */
+function applyProjectNav(canSave, canDefault) {
   const nav = document.getElementById('nav-menu');
   if (!nav) return;
 
@@ -95,6 +96,7 @@ function applyProjectNav(canSave) {
   setHidden(nav.querySelector('[data-action="open-project"]'), false);
   setHidden(nav.querySelector('[data-action="new-project"]'), !canSave);
   setHidden(nav.querySelector('[data-action="save-project"]'), !canSave);
+  setHidden(nav.querySelector('[data-action="save-default-project"]'), !canDefault);
 }
 
 function applyToolNav(isUser) {
