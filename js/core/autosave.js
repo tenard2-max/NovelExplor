@@ -54,7 +54,25 @@ export function flushSave(force = false) {
   return runSave();
 }
 
+let unloadFlushPending = false;
+
+function flushOnPageHide() {
+  if (!dirty || unloadFlushPending) return;
+  unloadFlushPending = true;
+  clearTimeout(timer);
+  runSave()
+    .catch(() => { /* error state already emitted */ })
+    .finally(() => { unloadFlushPending = false; });
+}
+
+document.addEventListener('visibilitychange', () => {
+  if (document.visibilityState === 'hidden') flushOnPageHide();
+});
+
+window.addEventListener('pagehide', flushOnPageHide);
+
 window.addEventListener('beforeunload', (e) => {
+  flushOnPageHide();
   if (dirty) {
     e.preventDefault();
     e.returnValue = '';

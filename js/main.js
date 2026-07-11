@@ -90,8 +90,9 @@ async function boot() {
   applyUploadPermissions();
 
   const projects = await project.listProjects();
-  if (projects.length) {
-    await project.loadProject(projects[0].id);
+  const bootProjectId = project.resolveBootProjectId(projects);
+  if (bootProjectId) {
+    await project.loadProject(bootProjectId);
   } else if (!canSaveProject(user)) {
     // 일반 사용자: 기본 프로젝트 자동 로드 시도
     try {

@@ -39,6 +39,8 @@ import {
 
 
 
+const LAST_OPENED_KEY = 'ne-last-opened-project-id';
+
 let currentProject = null;
 
 let cache = {
@@ -90,6 +92,36 @@ export async function listProjects() {
   return all
     .map(ensureProjectAcl)
     .sort((a, b) => (b.updatedAt || b.createdAt || '').localeCompare(a.updatedAt || a.createdAt || ''));
+}
+
+/** 마지막으로 연 프로젝트 ID (localStorage) */
+export function getLastOpenedProjectId() {
+  try {
+    return localStorage.getItem(LAST_OPENED_KEY) || '';
+  } catch {
+    return '';
+  }
+}
+
+export function rememberLastOpenedProject(projectId) {
+  const id = String(projectId || '').trim();
+  if (!id) return;
+  try {
+    localStorage.setItem(LAST_OPENED_KEY, id);
+  } catch {
+    /* ignore */
+  }
+}
+
+/** 부트 시 열 프로젝트: 마지막 열림 우선, 없으면 최근 수정순 */
+export function resolveBootProjectId(projects = []) {
+  if (!projects.length) return null;
+  const lastId = getLastOpenedProjectId();
+  if (lastId) {
+    const found = projects.find((p) => p.id === lastId || p.projectId === lastId);
+    if (found) return found.id || found.projectId;
+  }
+  return projects[0].id || projects[0].projectId;
 }
 
 /** 소유자 없는 기존 프로젝트를 현재 사용자(보통 마스터)에게 귀속 */
@@ -672,6 +704,7 @@ export async function loadProject(projectId) {
 
   await ensureEpisodesFromStories(cache, projectId);
 
+  rememberLastOpenedProject(currentProject.id || currentProject.projectId || projectId);
   emit('project:loaded', currentProject);
 
   return currentProject;
