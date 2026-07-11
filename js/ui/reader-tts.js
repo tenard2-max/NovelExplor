@@ -7,11 +7,15 @@ import { setTtsWallpaper } from './canvas-wallpaper.js';
 
 const synth = typeof window !== 'undefined' ? window.speechSynthesis : null;
 const TTS_MAX_CHUNK = 200;
+const CHAR_MS = 80;
+const WINDOWS_VOICE_TIP =
+  '소리 없음 — 화면만 진행 (Windows 설정 > 시간 및 언어 > 음성에서 한국어 음성 추가)';
 
 let voicesReady = false;
 let koreanVoice = null;
 let playing = false;
 let paused = false;
+let visualOnlyMode = false;
 let chunkIndex = 0;
 /** @type {Array<{ text: string, paraIndex: number }>} */
 let chunks = [];
@@ -20,6 +24,7 @@ let statusTimer = null;
 let statusRestore = '';
 let keepAliveTimer = null;
 let startGuardTimer = null;
+let visualTimer = null;
 let heardAnySpeech = false;
 
 /** @type {SpeechSynthesisUtterance | null} */
@@ -31,6 +36,9 @@ export function initReaderTts() {
   const pauseBtn = document.querySelector('[data-action="tts-pause"]');
 
   initVoices();
+  if (typeof speechSynthesis !== 'undefined') {
+    speechSynthesis.addEventListener('voiceschanged', initVoices);
+  }
 
   playBtn?.addEventListener('click', () => {
     if (playing && paused) {
@@ -53,45 +61,79 @@ export function initReaderTts() {
   });
 }
 
+function ensureSynthesisReady() {
+  if (!synth) return;
+  if (synth.paused) synth.resume();
+}
+
 function initVoices() {
   if (!synth) return;
 
-  const refresh = () => {
-    const voices = synth.getVoices();
-    koreanVoice = voices.find((v) => v.lang.startsWith('ko')) || null;
-    voicesReady = voices.length > 0;
-  };
-
-  refresh();
-  if (typeof speechSynthesis !== 'undefined') {
-    speechSynthesis.addEventListener('voiceschanged', refresh);
-  }
+  const voices = synth.getVoices();
+  koreanVoice = pickBestKoreanVoice(voices);
+  voicesReady = voices.length > 0;
 }
 
-/** 클릭 제스처 컨텍스트 안에서 synthesis 큐를 깨우고, warm utterance 종료까지 대기 */
-function primeSpeechOnGesture() {
-  if (!synth) return Promise.resolve();
+function pickBestKoreanVoice(voices) {
+  const koVoices = voices.filter((v) => /^ko/i.test(v.lang));
+  if (!koVoices.length) return null;
 
+  const score = (v) => {
+    let s = 0;
+    if (v.lang === 'ko-KR') s += 10;
+    if (/한국어|Korean/i.test(v.name)) s += 20;
+    if (/Google/i.test(v.name) && /한국|Korean/i.test(v.name)) s += 15;
+    if (v.localService) s += 5;
+    return s;
+  };
+
+  return [...koVoices].sort((a, b) => score(b) - score(a))[0];
+}
+
+function waitForVoices(maxMs = 500) {
   initVoices();
-  if (synth.paused) synth.resume();
+  if (voicesReady) return Promise.resolve();
 
   return new Promise((resolve) => {
     let settled = false;
     const done = () => {
       if (settled) return;
       settled = true;
+      initVoices();
       resolve();
     };
 
-    const warm = new SpeechSynthesisUtterance('\u200b');
-    warm.volume = 0.01;
-    warm.lang = 'ko-KR';
-    if (koreanVoice) warm.voice = koreanVoice;
-    warm.onend = done;
-    warm.onerror = done;
-    window.setTimeout(done, 180);
-    synth.speak(warm);
+    const timer = window.setTimeout(done, maxMs);
+    const onVoicesChanged = () => {
+      initVoices();
+      if (voicesReady) {
+        window.clearTimeout(timer);
+        speechSynthesis.removeEventListener('voiceschanged', onVoicesChanged);
+        done();
+      }
+    };
+
+    speechSynthesis.addEventListener('voiceschanged', onVoicesChanged);
   });
+}
+
+/** 클릭 제스처 안에서 동기 warm-up — await 없이 즉시 speak */
+function syncWarmUpOnGesture() {
+  if (!synth) return;
+
+  ensureSynthesisReady();
+  synth.cancel();
+
+  const warm = new SpeechSynthesisUtterance(' ');
+  warm.volume = 0.01;
+  warm.lang = 'ko-KR';
+  warm.rate = 1;
+  if (koreanVoice) warm.voice = koreanVoice;
+  synth.speak(warm);
+}
+
+function voiceStatusLabel() {
+  return koreanVoice?.name || '시스템 기본 (한국어 음성 미설치)';
 }
 
 function start() {
@@ -123,36 +165,151 @@ function start() {
 
   nameEntries = buildCharacterNameEntries(project.getCache().characters || []);
 
-  const needsCancel = playing || synth.speaking || synth.pending;
   resetPlaybackState({ silent: true });
 
   playing = true;
   paused = false;
+  visualOnlyMode = false;
   chunkIndex = 0;
   heardAnySpeech = false;
   updateButtons();
-  showStatus('준비 중…', { persist: true });
 
-  const begin = async () => {
+  ensureSynthesisReady();
+  syncWarmUpOnGesture();
+  showStatus(`음성: ${voiceStatusLabel()}`, { persist: true });
+
+  const kickoff = () => {
     if (!playing) return;
-    await primeSpeechOnGesture();
-    if (!playing) return;
-    showStatus(`음성 준비 ${chunks.length}구간`, { persist: true });
-    window.setTimeout(() => {
-      if (playing) speakNextChunk();
-    }, 50);
+    showStatus(`음성: ${voiceStatusLabel()} · ${chunks.length}구간`, { persist: true });
+    window.requestAnimationFrame(() => {
+      window.setTimeout(() => {
+        if (playing) speakNextChunk();
+      }, 40);
+    });
   };
 
-  if (needsCancel) {
-    synth.cancel();
-    window.setTimeout(begin, 80);
+  if (!voicesReady) {
+    waitForVoices(500).then(kickoff);
   } else {
-    begin();
+    kickoff();
   }
 }
 
 function speakNextChunk() {
   if (!playing || !synth) return;
+
+  if (visualOnlyMode) {
+    speakNextChunkVisual();
+    return;
+  }
+
+  while (chunkIndex < chunks.length && !chunks[chunkIndex]?.text?.trim()) {
+    chunkIndex += 1;
+  }
+
+  if (chunkIndex >= chunks.length) {
+    finish();
+    return;
+  }
+
+  const chunk = chunks[chunkIndex];
+  onChunkStart(chunk);
+  speakChunkWithRetry(chunk, 0);
+}
+
+function speakChunkWithRetry(chunk, retryCount) {
+  if (!playing || !synth || visualOnlyMode) return;
+
+  const utterance = new SpeechSynthesisUtterance(chunk.text);
+  utterance.lang = 'ko-KR';
+  utterance.volume = 1;
+  utterance.rate = 1;
+  utterance.pitch = 1;
+  if (koreanVoice) utterance.voice = koreanVoice;
+
+  let chunkStarted = false;
+
+  const armStartGuard = () => {
+    clearTimeout(startGuardTimer);
+    startGuardTimer = window.setTimeout(() => {
+      if (!playing || paused || visualOnlyMode || currentUtterance !== utterance || chunkStarted) return;
+      handleChunkNoStart(chunk, retryCount);
+    }, 4500);
+  };
+
+  const doSpeak = () => {
+    ensureSynthesisReady();
+    currentUtterance = utterance;
+    const label = retryCount > 0 ? `음성 재시도… · ${voiceStatusLabel()}` : `음성: ${voiceStatusLabel()}`;
+    showStatus(label, { persist: true });
+    synth.speak(utterance);
+    armStartGuard();
+  };
+
+  utterance.onstart = () => {
+    if (!playing || visualOnlyMode) return;
+    chunkStarted = true;
+    heardAnySpeech = true;
+    clearTimeout(startGuardTimer);
+    startKeepAlive();
+    updateButtons();
+    showStatus(`읽는 중… · ${voiceStatusLabel()}`);
+  };
+
+  utterance.onend = () => {
+    if (!playing || visualOnlyMode) return;
+    clearTimeout(startGuardTimer);
+
+    if (!chunkStarted) {
+      handleChunkNoStart(chunk, retryCount);
+      return;
+    }
+
+    chunkIndex += 1;
+    speakNextChunk();
+  };
+
+  utterance.onerror = (e) => {
+    if (e.error === 'interrupted' || e.error === 'canceled') return;
+    clearTimeout(startGuardTimer);
+    handleChunkNoStart(chunk, retryCount);
+  };
+
+  doSpeak();
+}
+
+function handleChunkNoStart(chunk, retryCount) {
+  if (!playing || visualOnlyMode) return;
+
+  if (retryCount < 1) {
+    synth.cancel();
+    ensureSynthesisReady();
+    window.setTimeout(() => {
+      if (!playing || visualOnlyMode) return;
+      speakChunkWithRetry(chunk, retryCount + 1);
+    }, 120);
+    return;
+  }
+
+  enableVisualOnlyMode();
+}
+
+function enableVisualOnlyMode() {
+  if (!playing || visualOnlyMode) return;
+
+  visualOnlyMode = true;
+  synth?.cancel();
+  stopKeepAlive();
+  currentUtterance = null;
+  clearTimeout(startGuardTimer);
+  showStatus(WINDOWS_VOICE_TIP, { persist: true });
+  speakNextChunkVisual();
+}
+
+function speakNextChunkVisual() {
+  if (!playing) return;
+
+  clearTimeout(visualTimer);
 
   while (chunkIndex < chunks.length && !chunks[chunkIndex]?.text?.trim()) {
     chunkIndex += 1;
@@ -166,49 +323,12 @@ function speakNextChunk() {
   const chunk = chunks[chunkIndex];
   onChunkStart(chunk);
 
-  const utterance = new SpeechSynthesisUtterance(chunk.text);
-  utterance.lang = 'ko-KR';
-  if (koreanVoice) utterance.voice = koreanVoice;
-  utterance.rate = 1;
-  utterance.pitch = 1;
-
-  let chunkStarted = false;
-
-  clearTimeout(startGuardTimer);
-  startGuardTimer = window.setTimeout(() => {
-    if (!playing || paused || currentUtterance !== utterance || chunkStarted) return;
-    handleSpeakFailure('음성 재생이 시작되지 않았습니다. 다시 시도해 주세요.');
-  }, 4500);
-
-  utterance.onstart = () => {
+  const duration = Math.max(1200, chunk.text.length * CHAR_MS);
+  visualTimer = window.setTimeout(() => {
     if (!playing) return;
-    chunkStarted = true;
-    heardAnySpeech = true;
-    clearTimeout(startGuardTimer);
-    startKeepAlive();
-    updateButtons();
-    showStatus('읽는 중…');
-  };
-
-  utterance.onend = () => {
-    if (!playing) return;
-    clearTimeout(startGuardTimer);
-    if (!chunkStarted) {
-      handleSpeakFailure('음성 재생이 시작되지 않았습니다. 다시 시도해 주세요.');
-      return;
-    }
     chunkIndex += 1;
-    speakNextChunk();
-  };
-
-  utterance.onerror = (e) => {
-    if (e.error === 'interrupted' || e.error === 'canceled') return;
-    clearTimeout(startGuardTimer);
-    handleSpeakFailure(ttsErrorMessage(e.error));
-  };
-
-  currentUtterance = utterance;
-  synth.speak(utterance);
+    speakNextChunkVisual();
+  }, duration);
 }
 
 function onChunkStart(chunk) {
@@ -239,12 +359,12 @@ function clearHighlight() {
 function startKeepAlive() {
   stopKeepAlive();
   keepAliveTimer = window.setInterval(() => {
-    if (!playing || paused || !synth) {
+    if (!playing || paused || visualOnlyMode || !synth) {
       stopKeepAlive();
       return;
     }
-    if (synth.speaking) synth.resume();
-  }, 8000);
+    ensureSynthesisReady();
+  }, 4000);
 }
 
 function stopKeepAlive() {
@@ -257,9 +377,11 @@ function stopKeepAlive() {
 function handleSpeakFailure(message) {
   playing = false;
   paused = false;
+  visualOnlyMode = false;
   currentUtterance = null;
   heardAnySpeech = false;
   stopKeepAlive();
+  clearTimeout(visualTimer);
   clearHighlight();
   synth?.cancel();
   updateButtons();
@@ -270,11 +392,13 @@ function resetPlaybackState(opts = {}) {
   const wasPlaying = playing;
   playing = false;
   paused = false;
+  visualOnlyMode = false;
   chunkIndex = 0;
   chunks = [];
   currentUtterance = null;
   heardAnySpeech = false;
   clearTimeout(startGuardTimer);
+  clearTimeout(visualTimer);
   stopKeepAlive();
   clearHighlight();
   updateButtons();
@@ -293,7 +417,7 @@ function stop(opts = {}) {
 }
 
 function togglePause() {
-  if (!playing || !synth) return;
+  if (!playing || !synth || visualOnlyMode) return;
   if (paused) {
     resume();
   } else {
@@ -302,7 +426,7 @@ function togglePause() {
 }
 
 function pause() {
-  if (!playing || !synth || paused) return;
+  if (!playing || !synth || paused || visualOnlyMode) return;
   synth.pause();
   paused = true;
   stopKeepAlive();
@@ -311,29 +435,35 @@ function pause() {
 }
 
 function resume() {
-  if (!playing || !synth || !paused) return;
-  synth.resume();
+  if (!playing || !synth || !paused || visualOnlyMode) return;
+  ensureSynthesisReady();
   paused = false;
   startKeepAlive();
   updateButtons();
-  showStatus('읽는 중…');
+  showStatus(`읽는 중… · ${voiceStatusLabel()}`);
 }
 
 function finish() {
-  if (playing && chunks.length > 0 && !heardAnySpeech) {
-    handleSpeakFailure('음성 재생이 시작되지 않았습니다. 다시 시도해 주세요.');
+  if (playing && chunks.length > 0 && !heardAnySpeech && !visualOnlyMode) {
+    handleSpeakFailure(
+      '음성 재생이 시작되지 않았습니다. Windows 설정 > 시간 및 언어 > 음성에서 한국어 음성을 추가해 주세요.'
+    );
     return;
   }
 
+  const wasVisualOnly = visualOnlyMode;
+
   playing = false;
   paused = false;
+  visualOnlyMode = false;
   currentUtterance = null;
   heardAnySpeech = false;
   clearTimeout(startGuardTimer);
+  clearTimeout(visualTimer);
   stopKeepAlive();
   clearHighlight();
   updateButtons();
-  showStatus('읽기 완료');
+  showStatus(wasVisualOnly ? '읽기 완료 (화면 하이라이트만)' : '읽기 완료');
 }
 
 function ttsErrorMessage(error) {
@@ -347,7 +477,7 @@ function ttsErrorMessage(error) {
     case 'audio-busy':
       return '다른 앱이 오디오를 사용 중입니다.';
     case 'language-unavailable':
-      return '한국어 음성을 사용할 수 없습니다.';
+      return '한국어 음성을 사용할 수 없습니다. Windows 설정 > 시간 및 언어 > 음성에서 한국어 음성을 추가해 주세요.';
     default:
       return '음성 읽기 오류가 발생했습니다.';
   }
@@ -370,8 +500,8 @@ function updateButtons() {
     stopBtn.disabled = !isActive;
   }
   if (pauseBtn) {
-    pauseBtn.disabled = !isActive || paused;
-    pauseBtn.hidden = !isActive;
+    pauseBtn.disabled = !isActive || paused || visualOnlyMode;
+    pauseBtn.hidden = !isActive || visualOnlyMode;
   }
 }
 
