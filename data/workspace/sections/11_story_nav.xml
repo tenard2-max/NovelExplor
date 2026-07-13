@@ -1,8 +1,8 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <Section id="story-nav" viewId="story-nav" title="스토리 네비" version="1">
   <Episodes>
-    <Episode id="EP001" number="1" title="혼자 떠난 산속 모험" src="../overlays/stories/ST001.md"/>
-    <Episode id="EP002" number="2" title="숲속의 대결과 뜻밖의 만남" src="../overlays/stories/ST002.md"/>
-    <Episode id="EP003" number="3" title="새로운 친구와 행복한 하루" src="../overlays/stories/ST003.md"/>
+    <Episode id="EP001" number="1" title="놀이터에서만난새로운친구" src="../overlays/stories/ST001.md"/>
+    <Episode id="EP002" number="2" title="오로라핑의 따뜻한 빛" src="../overlays/stories/ST002.md"/>
+    <Episode id="EP003" number="3" title="모두 함께 만든 행복 피자" src="../overlays/stories/ST003.md"/>
   </Episodes>
 </Section>

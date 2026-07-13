@@ -2,7 +2,7 @@
 <Workspace
   version="1"
   projectTitle="유진이의 모험2"
-  updatedAt="2026-07-13T02:04:33.875Z"
+  updatedAt="2026-07-13T04:30:01.782Z"
   schema="novelexplor-workspace/v1">
 
   <Sections>
@@ -32,8 +32,8 @@
     <File id="story-EP001-md" path="overlays/stories/EP001.md" mime="text/markdown"/>
     <File id="story-EP002-md" path="overlays/stories/EP002.md" mime="text/markdown"/>
     <File id="story-EP003-md" path="overlays/stories/EP003.md" mime="text/markdown"/>
-    <File id="story-ST001-md" path="overlays/stories/ST001.md" mime="text/markdown"/>
     <File id="story-ST002-md" path="overlays/stories/ST002.md" mime="text/markdown"/>
     <File id="story-ST003-md" path="overlays/stories/ST003.md" mime="text/markdown"/>
+    <File id="story-ST001-md" path="overlays/stories/ST001.md" mime="text/markdown"/>
   </Assets>
 </Workspace>
