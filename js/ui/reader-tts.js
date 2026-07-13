@@ -17,12 +17,14 @@ import {
   isSpeechSupported,
   isPreferredTtsBrowser,
   describeVoiceForStatus,
-  resolveFreshVoice,
+  probeAllVoices,
+  abortVoiceProbe,
+  isVoiceProbeRunning,
+  getCandidateVoiceList,
 } from './tts-voices.js';
 
 const synth = typeof window !== 'undefined' ? window.speechSynthesis : null;
 const TTS_MAX_CHUNK = 200;
-const TEST_VOICE_TEXT = '안녕하세요. TN Motion Engine 테스트입니다.';
 
 let playing = false;
 let paused = false;
@@ -64,8 +66,11 @@ export function initReaderTts() {
     start();
   });
 
-  testBtn?.addEventListener('click', () => speakTestVoice());
-  stopBtn?.addEventListener('click', () => stop());
+  testBtn?.addEventListener('click', () => runFullVoiceProbe());
+  stopBtn?.addEventListener('click', () => {
+    if (isVoiceProbeRunning()) abortVoiceProbe();
+    stop();
+  });
   pauseBtn?.addEventListener('click', () => togglePause());
 
   on('reader:story-changed', () => stop({ silent: true }));
@@ -94,10 +99,14 @@ function bindVoiceUi() {
   });
 
   refreshBtn?.addEventListener('click', () => {
+    if (isVoiceProbeRunning()) {
+      showStatus('Voice 테스트 중에는 새로고침할 수 없습니다.');
+      return;
+    }
     refreshVoices();
     renderVoiceSelect();
     renderTtsDebug();
-    showStatus(`Voice ${getVoiceList().length}개 새로고침`);
+    showStatus(`Voice 후보 ${getCandidateVoiceList().length}개 다시 표시 (검증 초기화)`);
   });
 
   debugToggle?.addEventListener('click', () => {
@@ -168,7 +177,9 @@ function renderTtsDebug() {
     <div class="tts-debug-meta"><strong>Browser :</strong> ${esc(info.browser)}</div>
     <div class="tts-debug-meta"><strong>Preferred (Chrome/Edge) :</strong> ${info.preferredBrowser}</div>
     <div class="tts-debug-meta"><strong>Filter :</strong> ${esc(info.filter || 'ko/en/zh')}</div>
-    <div class="tts-debug-meta"><strong>Voice Count :</strong> raw ${info.voiceCount} / catalog ${info.catalogCount}</div>
+    <div class="tts-debug-meta"><strong>Voice Count :</strong> raw ${info.voiceCount} / 후보 ${info.candidateCount ?? '—'} / 표시 ${info.catalogCount}${
+      info.verified != null ? ` / 검증통과 ${info.verified}` : ''
+    }</div>
     <div class="tts-debug-meta"><strong>Selected :</strong> ${
       info.selected
         ? esc(`${info.selected.name} (${info.selected.lang}) localService=${info.selected.localService}`)
@@ -203,37 +214,66 @@ function createUtterance(text) {
 }
 
 function speakTestVoice() {
+  // 하위 호환 — 전체 프로브로 위임
+  return runFullVoiceProbe();
+}
+
+/** 테스트 음성: 전체 Voice 1초씩 검증 → 정상만 드롭다운에 남김 */
+async function runFullVoiceProbe() {
   if (!synth) {
     showStatus('이 브라우저는 음성 읽기를 지원하지 않습니다.', { persist: true });
     return;
   }
-
-  // cancel 직후 speak는 Chromium에서 실패할 수 있어 짧게 양보
-  if (synth.speaking || synth.pending) {
-    synth.cancel();
+  if (isVoiceProbeRunning()) {
+    showStatus('이미 Voice 테스트 중입니다.');
+    return;
   }
 
-  const run = () => {
-    const utterance = createUtterance(TEST_VOICE_TEXT);
-    const v = resolveFreshVoice(getSelectedVoice());
+  // 소설 읽기 중이면 정지
+  stop({ silent: true });
 
-    utterance.onerror = (e) => {
-      if (e.error === 'interrupted' || e.error === 'canceled') return;
-      const hint = v && !v.localService
-        ? ' (online 음성 — 네트워크/엔진 문제일 수 있음. local 한국어를 권장)'
-        : '';
-      showStatus(`테스트 실패: ${e.error || 'unknown'}${hint}`, { persist: true });
-    };
-    utterance.onend = () => {
-      showStatus(v ? `테스트 완료: ${describeVoiceForStatus(v)}` : '테스트 완료');
-    };
+  const testBtn = document.querySelector('[data-action="tts-test"]');
+  const select = document.getElementById('tts-voice-select');
+  if (testBtn) testBtn.disabled = true;
+  if (select) select.disabled = true;
 
-    speechSynthesis.speak(utterance);
-    showStatus(v ? `테스트: ${describeVoiceForStatus(v)}` : '테스트 음성 재생 중…');
-  };
+  try {
+    showStatus('Voice 전체 테스트 시작…', { persist: true });
+    const result = await probeAllVoices({
+      onProgress: ({ index, total, label }) => {
+        showStatus(`테스트 ${index}/${total}: ${label}`, { persist: true });
+        updateButtons();
+      },
+    });
 
-  // cancel 직후 동일 틱 speak 방지
-  setTimeout(run, 40);
+    renderVoiceSelect();
+    renderTtsDebug();
+    updateButtons();
+
+    if (result.aborted) {
+      showStatus(`테스트 중단 — 정상 ${result.ok}/${result.total}`, { persist: true });
+      return;
+    }
+
+    if (!result.ok) {
+      showStatus(`정상 Voice 없음 (${result.total}개 실패). 후보 목록을 유지합니다.`, { persist: true });
+      return;
+    }
+
+    const selected = getSelectedVoice();
+    showStatus(
+      `테스트 완료 — 정상 ${result.ok}/${result.total}`
+      + (selected ? ` · 선택: ${describeVoiceForStatus(selected)}` : ''),
+      { persist: true }
+    );
+  } catch (err) {
+    showStatus(`Voice 테스트 실패: ${err.message || err}`, { persist: true });
+  } finally {
+    if (testBtn) testBtn.disabled = false;
+    if (select) select.disabled = false;
+    renderVoiceSelect();
+    updateButtons();
+  }
 }
 
 function start() {
@@ -433,8 +473,10 @@ function updateButtons() {
   const playBtn = document.querySelector('[data-action="tts-play"]');
   const stopBtn = document.querySelector('[data-action="tts-stop"]');
   const pauseBtn = document.querySelector('[data-action="tts-pause"]');
+  const testBtn = document.querySelector('[data-action="tts-test"]');
 
-  const canPlay = !!synth;
+  const probing = isVoiceProbeRunning();
+  const canPlay = !!synth && !probing;
   const isActive = playing;
 
   if (playBtn) {
@@ -442,11 +484,12 @@ function updateButtons() {
     playBtn.textContent = playing && paused ? '▶ 재개' : '🔊 재생';
     playBtn.classList.toggle('is-active', isActive && !paused);
   }
-  if (stopBtn) stopBtn.disabled = !isActive;
+  if (stopBtn) stopBtn.disabled = !isActive && !probing;
   if (pauseBtn) {
-    pauseBtn.disabled = !isActive || paused;
+    pauseBtn.disabled = !isActive || paused || probing;
     pauseBtn.hidden = !isActive;
   }
+  if (testBtn) testBtn.disabled = probing;
 }
 
 function showStatus(message, opts = {}) {
