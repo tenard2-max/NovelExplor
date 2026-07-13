@@ -57,6 +57,7 @@ export function initReaderTts() {
   const testBtn = document.querySelector('[data-action="tts-test"]');
   const stopBtn = document.querySelector('[data-action="tts-stop"]');
   const pauseBtn = document.querySelector('[data-action="tts-pause"]');
+  const nextBtn = document.querySelector('[data-action="tts-next"]');
 
   playBtn?.addEventListener('click', () => {
     if (playing && paused) {
@@ -72,6 +73,7 @@ export function initReaderTts() {
     stop();
   });
   pauseBtn?.addEventListener('click', () => togglePause());
+  nextBtn?.addEventListener('click', () => skipToNextChunk());
 
   on('reader:story-changed', () => stop({ silent: true }));
   on('view:changed', (viewId) => {
@@ -460,6 +462,36 @@ function resume() {
   showStatus('읽는 중…');
 }
 
+function findNextChunkIndex(fromIndex) {
+  let i = fromIndex + 1;
+  while (i < chunks.length && !chunks[i]?.text?.trim()) {
+    i += 1;
+  }
+  return i;
+}
+
+function skipToNextChunk() {
+  if (!playing || !synth) return;
+
+  const nextIdx = findNextChunkIndex(chunkIndex);
+  if (nextIdx >= chunks.length) {
+    synth.cancel();
+    currentUtterance = null;
+    playing = false;
+    paused = false;
+    clearHighlight();
+    updateButtons();
+    showStatus('마지막 구간입니다');
+    return;
+  }
+
+  synth.cancel();
+  currentUtterance = null;
+  paused = false;
+  chunkIndex = nextIdx;
+  speakNextChunk();
+}
+
 function finish() {
   playing = false;
   paused = false;
@@ -473,6 +505,7 @@ function updateButtons() {
   const playBtn = document.querySelector('[data-action="tts-play"]');
   const stopBtn = document.querySelector('[data-action="tts-stop"]');
   const pauseBtn = document.querySelector('[data-action="tts-pause"]');
+  const nextBtn = document.querySelector('[data-action="tts-next"]');
   const testBtn = document.querySelector('[data-action="tts-test"]');
 
   const probing = isVoiceProbeRunning();
@@ -488,6 +521,10 @@ function updateButtons() {
   if (pauseBtn) {
     pauseBtn.disabled = !isActive || paused || probing;
     pauseBtn.hidden = !isActive;
+  }
+  if (nextBtn) {
+    nextBtn.disabled = !isActive || probing;
+    nextBtn.hidden = !isActive;
   }
   if (testBtn) testBtn.disabled = probing;
 }
