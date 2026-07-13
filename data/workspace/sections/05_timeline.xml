@@ -1,46 +1,8 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <Section id="timeline" viewId="timeline" title="타임라인" version="1">
   <Events>
-    <Event id="TL0001" episode="1" date="2080-12-31" title="마지막 1초 / 회귀" source=""/>
-    <Event id="TL0007" episode="1" date="" title="마지막 1초" source="story-sync"/>
-    <Event id="TL0008" episode="1" date="" title="&quot;야!!&quot;" source="story-sync"/>
-    <Event id="TL0002" episode="2" date="2005-03-15" title="대학 친구 재회" source=""/>
-    <Event id="TL0009" episode="2" date="" title="다시 만난 사람들" source="story-sync"/>
-    <Event id="TL0003" episode="3" date="2005-03-20" title="지은과 재회" source=""/>
-    <Event id="TL0010" episode="3" date="" title="&quot;...야?&quot;" source="story-sync"/>
-    <Event id="TL0011" episode="3" date="" title="다시 스무 살" source="story-sync"/>
-    <Event id="TL0004" episode="4" date="2005-04-01" title="AI 일상 개입" source=""/>
-    <Event id="TL0012" episode="4" date="" title="돈까스집을 나왔을 때, 하늘은 여전히 맑았다." source="story-sync"/>
-    <Event id="TL0013" episode="4" date="" title="이상한 스마트폰" source="story-sync"/>
-    <Event id="TL0014" episode="5" date="" title="주머니 속 스마트폰이 진동했다." source="story-sync"/>
-    <Event id="TL0015" episode="5" date="" title="식당을 나왔을 때, 민수는 여전히 투덜거리고 있었다." source="story-sync"/>
-    <Event id="TL0016" episode="5" date="" title="맵부심" source="story-sync"/>
-    <Event id="TL0005" episode="6" date="2005-05-01" title="투자 계획 제시" source=""/>
-    <Event id="TL0017" episode="6" date="" title="첫 번째 투자" source="story-sync"/>
-    <Event id="TL0018" episode="6" date="" title="빗소리가 잦아들었다." source="story-sync"/>
-    <Event id="TL0019" episode="6" date="" title="창밖에서 빗소리가 들렸다." source="story-sync"/>
-    <Event id="TL0006" episode="7" date="2005-06-01" title="투자금 확보" source=""/>
-    <Event id="TL0020" episode="7" date="" title="아버지의 시험" source="story-sync"/>
-    <Event id="TL0021" episode="8" date="" title="비 오는 날" source="story-sync"/>
-    <Event id="TL0022" episode="9" date="" title="오전 10시 17분." source="story-sync"/>
-    <Event id="TL0023" episode="9" date="" title="첫 번째 상한가" source="story-sync"/>
-    <Event id="TL0024" episode="10" date="" title="셋이 걷는 길" source="story-sync"/>
-    <Event id="TL0025" episode="11" date="" title="오후 2시 43분." source="story-sync"/>
-    <Event id="TL0026" episode="11" date="" title="두 번째 투자" source="story-sync"/>
-    <Event id="TL0027" episode="12" date="" title="하늘의 균열" source="story-sync"/>
-    <Event id="TL0028" episode="12" date="" title="오후 5시 43분." source="story-sync"/>
-    <Event id="TL0029" episode="12" date="" title="지안은 다시 하늘을 올려다봤다." source="story-sync"/>
-    <Event id="TL0030" episode="13" date="" title="돈의 쓰임" source="story-sync"/>
-    <Event id="TL0031" episode="13" date="" title="인류 생존 프로젝트" source="story-sync"/>
-    <Event id="TL0032" episode="13" date="" title="집으로 돌아온 밤." source="story-sync"/>
-    <Event id="TL0033" episode="14" date="" title="이상한 진동" source="story-sync"/>
-    <Event id="TL0034" episode="14" date="" title="공학관." source="story-sync"/>
-    <Event id="TL0035" episode="14" date="" title="그 순간." source="story-sync"/>
-    <Event id="TL0036" episode="15" date="" title="금이 간 벽" source="story-sync"/>
-    <Event id="TL0037" episode="15" date="" title="회의는 예상보다 평범했다." source="story-sync"/>
-    <Event id="TL0038" episode="15" date="" title="회의가 끝난 뒤." source="story-sync"/>
-    <Event id="TL0039" episode="16" date="" title="무너지는 공학관" source="story-sync"/>
-    <Event id="TL0040" episode="16" date="" title="지안은 이를 악물었다." source="story-sync"/>
-    <Event id="TL0041" episode="16" date="" title="마지막으로 AI는 아주 짧은 문장을 기록했다." source="story-sync"/>
+    <Event id="TL0001" episode="1" date="2024-01-01" title="놀이터에서만난새로운친구" source="story-sync"/>
+    <Event id="TL0002" episode="2" date="2024-01-08" title="오로라핑의 따뜻한 빛" source="story-sync"/>
+    <Event id="TL0003" episode="3" date="2024-01-15" title="모두 함께 만든 행복 피자" source="story-sync"/>
   </Events>
 </Section>
