@@ -1,13 +1,13 @@
 /** 배포 빌드 버전 — 커밋·푸시 시 scripts/bump-version.js 로 갱신 */
 
-export const APP_BUILD = '20260713104636';
+export const APP_BUILD = '20260713112008';
 
 /**
  * 로컬/오프라인에서도 네비에 표시할 기본 스탬프.
  * scripts/bump-version.js 가 data/workspace 의 latest.json 기준으로 갱신한다.
  */
 export const FALLBACK_JSON_STAMP = '20260711181754_유진이의_모험2(완결)';
-export const FALLBACK_UPLOAD_STAMP = '20260711215542';
+export const FALLBACK_UPLOAD_STAMP = '20260713103758';
 
 const JSON_VERSION_KEY = 'fft-json-version';
 const UPLOAD_VERSION_KEY = 'fft-upload-version';

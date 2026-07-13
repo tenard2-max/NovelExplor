@@ -16,6 +16,8 @@ import {
   getTtsDebugInfo,
   isSpeechSupported,
   isPreferredTtsBrowser,
+  describeVoiceForStatus,
+  resolveFreshVoice,
 } from './tts-voices.js';
 
 const synth = typeof window !== 'undefined' ? window.speechSynthesis : null;
@@ -165,10 +167,11 @@ function renderTtsDebug() {
   panel.innerHTML = `
     <div class="tts-debug-meta"><strong>Browser :</strong> ${esc(info.browser)}</div>
     <div class="tts-debug-meta"><strong>Preferred (Chrome/Edge) :</strong> ${info.preferredBrowser}</div>
-    <div class="tts-debug-meta"><strong>Voice Count :</strong> ${info.voiceCount}</div>
+    <div class="tts-debug-meta"><strong>Filter :</strong> ${esc(info.filter || 'ko/en/zh')}</div>
+    <div class="tts-debug-meta"><strong>Voice Count :</strong> raw ${info.voiceCount} / catalog ${info.catalogCount}</div>
     <div class="tts-debug-meta"><strong>Selected :</strong> ${
       info.selected
-        ? esc(`${info.selected.name} (${info.selected.lang})`)
+        ? esc(`${info.selected.name} (${info.selected.lang}) localService=${info.selected.localService}`)
         : '—'
     }</div>
     <pre class="tts-debug-list" aria-label="Voice List">${esc(
@@ -205,14 +208,32 @@ function speakTestVoice() {
     return;
   }
 
+  // cancel 직후 speak는 Chromium에서 실패할 수 있어 짧게 양보
   if (synth.speaking || synth.pending) {
     synth.cancel();
   }
 
-  const utterance = createUtterance(TEST_VOICE_TEXT);
-  speechSynthesis.speak(utterance);
-  const v = getSelectedVoice();
-  showStatus(v ? `테스트: ${formatVoiceLabel(v)}` : '테스트 음성 재생 중…');
+  const run = () => {
+    const utterance = createUtterance(TEST_VOICE_TEXT);
+    const v = resolveFreshVoice(getSelectedVoice());
+
+    utterance.onerror = (e) => {
+      if (e.error === 'interrupted' || e.error === 'canceled') return;
+      const hint = v && !v.localService
+        ? ' (online 음성 — 네트워크/엔진 문제일 수 있음. local 한국어를 권장)'
+        : '';
+      showStatus(`테스트 실패: ${e.error || 'unknown'}${hint}`, { persist: true });
+    };
+    utterance.onend = () => {
+      showStatus(v ? `테스트 완료: ${describeVoiceForStatus(v)}` : '테스트 완료');
+    };
+
+    speechSynthesis.speak(utterance);
+    showStatus(v ? `테스트: ${describeVoiceForStatus(v)}` : '테스트 음성 재생 중…');
+  };
+
+  // cancel 직후 동일 틱 speak 방지
+  setTimeout(run, 40);
 }
 
 function start() {
@@ -309,7 +330,11 @@ function speakChunk(chunk) {
 
   utterance.onerror = (e) => {
     if (e.error === 'interrupted' || e.error === 'canceled') return;
-    handleSpeakFailure(`음성 재생 실패 (${e.error || 'unknown'})`);
+    const v = getSelectedVoice();
+    const hint = v && !v.localService
+      ? ' — online 음성 실패. Voice에서 · local 항목을 선택해 보세요.'
+      : '';
+    handleSpeakFailure(`음성 재생 실패 (${e.error || 'unknown'})${hint}`);
   };
 
   speechSynthesis.speak(utterance);

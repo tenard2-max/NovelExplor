@@ -1,5 +1,5 @@
 /** TTS Voice 카탈로그 — Web Speech API getVoices / voiceschanged
- * Chrome · Edge 권장. Firefox/Safari는 가능하면 동일 API, 없으면 graceful fallback.
+ * Chrome · Edge 권장. 목록은 한국어·영어·중국어만 표시.
  */
 
 const VOICE_STORAGE_KEY = 'ne-tts-voice-uri';
@@ -7,8 +7,8 @@ const synth = typeof window !== 'undefined' ? window.speechSynthesis : null;
 
 /** @type {SpeechSynthesisVoice[]} */
 let voices = [];
-/** @type {SpeechSynthesisVoice | null} */
-let selectedVoice = null;
+/** @type {string} voiceURI 또는 name||lang 키 */
+let selectedVoiceKey = '';
 let voicesListenerBound = false;
 /** @type {Set<() => void>} */
 const listeners = new Set();
@@ -17,7 +17,6 @@ export function isSpeechSupported() {
   return Boolean(synth && typeof window.SpeechSynthesisUtterance === 'function');
 }
 
-/** Chrome / Edge (Chromium) — 권장 브라우저 */
 export function isPreferredTtsBrowser() {
   const ua = navigator.userAgent || '';
   const isChromium = /\bChrome\//.test(ua) || /\bEdg\//.test(ua) || /\bEdgA\//.test(ua);
@@ -27,7 +26,7 @@ export function isPreferredTtsBrowser() {
 }
 
 export function getSelectedVoice() {
-  return selectedVoice;
+  return resolveVoiceByKey(selectedVoiceKey) || findDefaultVoice(voices);
 }
 
 export function getVoiceList() {
@@ -42,12 +41,42 @@ export function onVoicesChanged(fn) {
 
 function notify() {
   listeners.forEach((fn) => {
-    try { fn(voices, selectedVoice); } catch (err) { console.warn('[tts-voices]', err); }
+    try { fn(voices, getSelectedVoice()); } catch (err) { console.warn('[tts-voices]', err); }
   });
 }
 
 function voiceKey(v) {
-  return `${v.name}||${v.lang}||${v.voiceURI || ''}`;
+  return v?.voiceURI || `${v?.name || ''}||${v?.lang || ''}`;
+}
+
+function resolveVoiceByKey(key) {
+  if (!key || !voices.length) return null;
+  return voices.find((v) => voiceKey(v) === key || v.voiceURI === key) || null;
+}
+
+/** 최신 getVoices()에서 URI로 다시 찾기 — stale Voice 참조 방지 */
+export function resolveFreshVoice(voiceOrKey) {
+  if (!synth) return null;
+  const freshList = sortVoices(dedupeVoices(filterAllowedLangs(synth.getVoices() || [])));
+  const key = typeof voiceOrKey === 'string'
+    ? voiceOrKey
+    : (voiceOrKey ? voiceKey(voiceOrKey) : selectedVoiceKey);
+  if (!key) return findDefaultVoice(freshList);
+  return freshList.find((v) => voiceKey(v) === key || v.voiceURI === key)
+    || findDefaultVoice(freshList);
+}
+
+function isAllowedLang(lang) {
+  const l = String(lang || '').toLowerCase();
+  return l.startsWith('ko')
+    || l.startsWith('en')
+    || l.startsWith('zh')
+    || l.startsWith('cmn')
+    || l.startsWith('yue');
+}
+
+function filterAllowedLangs(list) {
+  return list.filter((v) => isAllowedLang(v.lang));
 }
 
 function dedupeVoices(list) {
@@ -56,8 +85,8 @@ function dedupeVoices(list) {
   for (const v of list) {
     const name = String(v.name || '').trim();
     if (!name) continue;
-    // 동일 이름 중복 제거 (요구사항 5)
-    const dupKey = name.toLowerCase();
+    // 이름+lang+localService 로 구분 (동명 로컬/온라인 둘 다 유지)
+    const dupKey = `${name.toLowerCase()}|${String(v.lang || '').toLowerCase()}|${v.localService ? 'L' : 'O'}`;
     if (seen.has(dupKey)) continue;
     seen.add(dupKey);
     out.push(v);
@@ -70,7 +99,8 @@ function langRank(lang) {
   if (l === 'ko-kr' || l.startsWith('ko-kr')) return 0;
   if (l === 'ko' || l.startsWith('ko')) return 1;
   if (l.startsWith('en')) return 2;
-  return 3;
+  if (l.startsWith('zh') || l.startsWith('cmn') || l.startsWith('yue')) return 3;
+  return 9;
 }
 
 function sortVoices(list) {
@@ -78,6 +108,9 @@ function sortVoices(list) {
     const ra = langRank(a.lang);
     const rb = langRank(b.lang);
     if (ra !== rb) return ra - rb;
+    // 같은 언어: 로컬 음성 우선 (온라인 실패 잦음)
+    if (a.localService && !b.localService) return -1;
+    if (!a.localService && b.localService) return 1;
     if (a.default && !b.default) return -1;
     if (!a.default && b.default) return 1;
     return String(a.name).localeCompare(String(b.name), 'ko');
@@ -85,8 +118,11 @@ function sortVoices(list) {
 }
 
 function findDefaultVoice(list) {
-  return list.find((v) => v.default)
+  if (!list?.length) return null;
+  return list.find((v) => v.localService && String(v.lang || '').toLowerCase().startsWith('ko'))
+    || list.find((v) => String(v.lang || '').toLowerCase().startsWith('ko') && v.default)
     || list.find((v) => String(v.lang || '').toLowerCase().startsWith('ko'))
+    || list.find((v) => v.default)
     || list[0]
     || null;
 }
@@ -99,25 +135,21 @@ function restoreSelectedVoice() {
     saved = '';
   }
 
-  if (saved && voices.length) {
-    const match = voices.find((v) => v.voiceURI === saved || voiceKey(v) === saved);
-    if (match) {
-      selectedVoice = match;
-      return;
-    }
+  const match = saved ? resolveVoiceByKey(saved) : null;
+  if (match) {
+    selectedVoiceKey = voiceKey(match);
+    return;
   }
 
-  // 없거나 삭제된 경우 default
-  selectedVoice = findDefaultVoice(voices);
-  if (selectedVoice) {
-    persistSelectedVoice(selectedVoice);
-  }
+  const fallback = findDefaultVoice(voices);
+  selectedVoiceKey = fallback ? voiceKey(fallback) : '';
+  if (fallback) persistSelectedKey(selectedVoiceKey);
 }
 
-function persistSelectedVoice(voice) {
-  if (!voice) return;
+function persistSelectedKey(key) {
+  if (!key) return;
   try {
-    localStorage.setItem(VOICE_STORAGE_KEY, voice.voiceURI || voiceKey(voice));
+    localStorage.setItem(VOICE_STORAGE_KEY, key);
   } catch {
     /* ignore */
   }
@@ -126,13 +158,13 @@ function persistSelectedVoice(voice) {
 export function loadVoices() {
   if (!synth) {
     voices = [];
-    selectedVoice = null;
+    selectedVoiceKey = '';
     notify();
     return voices;
   }
 
   const raw = synth.getVoices() || [];
-  voices = sortVoices(dedupeVoices(raw));
+  voices = sortVoices(dedupeVoices(filterAllowedLangs(raw)));
   restoreSelectedVoice();
   notify();
   return voices;
@@ -142,75 +174,80 @@ export function refreshVoices() {
   return loadVoices();
 }
 
-/**
- * @param {string} voiceURI
- * @returns {SpeechSynthesisVoice | null}
- */
 export function selectVoiceByUri(voiceURI) {
   if (!voiceURI || !voices.length) {
-    selectedVoice = findDefaultVoice(voices);
-    if (selectedVoice) persistSelectedVoice(selectedVoice);
+    const fallback = findDefaultVoice(voices);
+    selectedVoiceKey = fallback ? voiceKey(fallback) : '';
+    if (selectedVoiceKey) persistSelectedKey(selectedVoiceKey);
     notify();
-    return selectedVoice;
+    return getSelectedVoice();
   }
 
-  const match = voices.find((v) => v.voiceURI === voiceURI || voiceKey(v) === voiceURI);
+  const match = resolveVoiceByKey(voiceURI);
   if (match) {
-    selectedVoice = match;
-    persistSelectedVoice(match);
+    selectedVoiceKey = voiceKey(match);
+    persistSelectedKey(selectedVoiceKey);
     notify();
     return match;
   }
 
-  // 삭제·미존재 → default
-  selectedVoice = findDefaultVoice(voices);
-  if (selectedVoice) persistSelectedVoice(selectedVoice);
+  const fallback = findDefaultVoice(voices);
+  selectedVoiceKey = fallback ? voiceKey(fallback) : '';
+  if (selectedVoiceKey) persistSelectedKey(selectedVoiceKey);
   notify();
-  return selectedVoice;
+  return getSelectedVoice();
 }
 
-/** Dropdown용 라벨: Name (lang) ★ */
+/** Dropdown 라벨: Name (lang) ★ · local|online */
 export function formatVoiceLabel(voice) {
   if (!voice) return '';
   const star = voice.default ? ' ★' : '';
-  return `${voice.name} (${voice.lang})${star}`;
+  const svc = voice.localService ? 'local' : 'online';
+  return `${voice.name} (${voice.lang})${star} · ${svc}`;
 }
 
 /**
- * Utterance에 선택 음성 적용
+ * Utterance에 선택 음성 적용 — 매 speak마다 fresh Voice 객체 사용
  * @param {SpeechSynthesisUtterance} utterance
  */
 export function applySelectedVoice(utterance) {
   if (!utterance) return;
-  if (!selectedVoice || !voices.includes(selectedVoice)) {
-    restoreSelectedVoice();
-  }
-  if (selectedVoice) {
-    utterance.voice = selectedVoice;
-    utterance.lang = selectedVoice.lang || utterance.lang || 'ko-KR';
+  const fresh = resolveFreshVoice(selectedVoiceKey);
+  if (fresh) {
+    selectedVoiceKey = voiceKey(fresh);
+    utterance.voice = fresh;
+    utterance.lang = fresh.lang || 'ko-KR';
   } else {
     utterance.lang = utterance.lang || 'ko-KR';
   }
 }
 
+export function describeVoiceForStatus(voice) {
+  if (!voice) return 'default';
+  const svc = voice.localService ? 'local' : 'online';
+  return `${voice.name} (${voice.lang}, ${svc})`;
+}
+
 export function getTtsDebugInfo() {
-  const list = synth ? (synth.getVoices() || []) : [];
+  const raw = synth ? (synth.getVoices() || []) : [];
+  const selected = getSelectedVoice();
   return {
     browser: navigator.userAgent || '',
     preferredBrowser: isPreferredTtsBrowser(),
     supported: isSpeechSupported(),
-    voiceCount: list.length,
+    voiceCount: raw.length,
     catalogCount: voices.length,
-    selected: selectedVoice
+    filter: 'ko / en / zh only',
+    selected: selected
       ? {
-        name: selectedVoice.name,
-        lang: selectedVoice.lang,
-        default: !!selectedVoice.default,
-        localService: !!selectedVoice.localService,
-        voiceURI: selectedVoice.voiceURI,
+        name: selected.name,
+        lang: selected.lang,
+        default: !!selected.default,
+        localService: !!selected.localService,
+        voiceURI: selected.voiceURI,
       }
       : null,
-    voices: list.map((v, i) => ({
+    voices: voices.map((v, i) => ({
       index: i,
       name: v.name,
       lang: v.lang,
@@ -221,7 +258,6 @@ export function getTtsDebugInfo() {
   };
 }
 
-/** 앱 시작 시 1회 — voiceschanged 중복 등록 금지 */
 export function initTtsVoices() {
   if (!synth) return;
 
@@ -234,7 +270,6 @@ export function initTtsVoices() {
     });
   }
 
-  // Chrome: 첫 getVoices가 비어 있을 수 있어 짧은 지연 재시도
   if (!voices.length) {
     setTimeout(() => loadVoices(), 250);
     setTimeout(() => loadVoices(), 1000);
