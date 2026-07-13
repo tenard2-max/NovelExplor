@@ -1,7 +1,19 @@
 {
   "format": "novel-explor-users/v1",
-  "updatedAt": "2026-07-13T02:03:07.761Z",
+  "updatedAt": "2026-07-13T12:15:34.852Z",
   "users": [
+    {
+      "id": "user-39a9183b-b0b8-43ca-870f-dd057b67ec84",
+      "usernameHash": "pYNtjBjubqrHLjhteERBho+Rzi7v1/XHUR1FZBGjpEQ=",
+      "usernameEnc": "j+CWXqHOjWs6YkV4.vLKRr0LxcE7CEqNiJkUDOFvCEcXLcVM=",
+      "passwordHash": "7wh3z2bVKmF3fdl5a2X6Xoq5ozHMxryEOoQmzM8ibCU=",
+      "salt": "9a4e5f36b93242b1",
+      "role": "user",
+      "mustChangePassword": false,
+      "disabled": false,
+      "createdAt": "2026-07-11T05:20:15.992Z",
+      "updatedAt": "2026-07-11T05:20:15.992Z"
+    },
     {
       "id": "user-b41f6892-fe10-431f-84f3-2912f7eed331",
       "usernameHash": "pVblGwBB8VkMbJo9Y2I9b/mJ/A5n29EcmTBA/W+At0s=",
@@ -49,6 +61,30 @@
       "disabled": false,
       "createdAt": "2026-07-13T01:18:29.942Z",
       "updatedAt": "2026-07-13T01:18:29.942Z"
+    },
+    {
+      "id": "user-e3b2a70c-873b-4d2b-89b7-6958d58d68c2",
+      "usernameHash": "jyNeKaucbTw74fi5jU6xY3e4XSKyMHvVnDwfPTU8DVg=",
+      "usernameEnc": "ealoyjxK6lQ9cQH/.BCEUut0aMJDjAptrwU1iV7B14klq4+A=",
+      "passwordHash": "tOlVy8sJj/JyE+Mq/LvGHAILfXfRbxcDDG2zEiXLYCs=",
+      "salt": "6ffc06beb32842fc",
+      "role": "admin_novelist",
+      "mustChangePassword": false,
+      "disabled": false,
+      "createdAt": "2026-07-11T08:27:28.010Z",
+      "updatedAt": "2026-07-11T08:27:46.517Z"
+    },
+    {
+      "id": "user-fec4f31e-5693-4c83-8233-bacfe77de580",
+      "usernameHash": "pVblGwBB8VkMbJo9Y2I9b/mJ/A5n29EcmTBA/W+At0s=",
+      "usernameEnc": "gSjSiYYEUmB3N6p+.weevJAIKsiII1u8M8SVPFJ69KR6byw==",
+      "passwordHash": "nkPuadNYzDYedZxaVzFCCzsfpa0fFqsT1Nb9mjKtpIk=",
+      "salt": "f21b7774365e4857",
+      "role": "admin_developer",
+      "mustChangePassword": false,
+      "disabled": false,
+      "createdAt": "2026-07-11T04:56:27.576Z",
+      "updatedAt": "2026-07-11T05:44:22.716Z"
     },
     {
       "id": "user-master",
