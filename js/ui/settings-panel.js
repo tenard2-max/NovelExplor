@@ -108,11 +108,7 @@ async function refreshGithubAuthStatus() {
   try {
     const status = await getAuthCatalogStatus();
     const pat = hasGithubToken() ? 'PAT 있음' : 'PAT 없음(우측 GitHub에서 저장 필요)';
-    if (status.remoteAvailable) {
-      el.textContent = `GitHub 등록됨: ${status.remoteUserCount}명 · ${pat}`;
-    } else {
-      el.textContent = `GitHub 미등록 · 로컬 ${status.localUserCount}명 · ${pat}`;
-    }
+    el.textContent = `로컬 ${status.localUserCount}명 · GitHub ${status.remoteUserCount}명 · ${pat}`;
   } catch {
     el.textContent = 'GitHub 상태를 확인할 수 없습니다.';
   }
@@ -124,8 +120,12 @@ async function onPublishAuth() {
       throw new Error('우측 패널 GitHub에서 PAT(repo)를 먼저 저장하세요.');
     }
     const result = await pushUsersToGithub();
-    await showAlert('계정 게시', `GitHub에 ${result.userCount}명 계정을 등록했습니다.`);
+    await showAlert(
+      '계정 게시',
+      `로컬 계정을 GitHub에 등록했습니다.<br>GitHub: <strong>${result.userCount}명</strong>`
+    );
     refreshGithubAuthStatus();
+    renderSettings();
   } catch (err) {
     await showAlert('계정 게시 실패', err.message || String(err));
   }
@@ -183,8 +183,9 @@ async function renderAdminUserList(mount) {
     select?.addEventListener('change', async () => {
       try {
         await setUserRole(row.dataset.userId, select.value);
-        await showAlert('권한', '역할이 변경되었습니다.');
+        await showAlert('권한', '역할이 변경되었고 GitHub에 반영되었습니다.');
         renderAdminUserList(mount);
+        refreshGithubAuthStatus();
         updateUserBadge();
       } catch (err) {
         await showAlert('권한', err.message || '변경 실패');

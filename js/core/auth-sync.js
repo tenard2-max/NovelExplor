@@ -1,12 +1,13 @@
-/** 사용자·관리자 인증 — GitHub SoT, IndexedDB는 브라우저 캐시
+/** 사용자·관리자 인증 — GitHub + IndexedDB 병합
  *
  * 저장: data/workspace/auth/users.json
- * 흐름: 로그인 시 로컬 조회 → 없으면 GitHub pull → 다시 조회
- * 변경(가입·비번·역할): 로컬 저장 후 GitHub push (PAT 필요)
+ * 목록: 로컬 조회 → GitHub pull → 병합(합집합) 표시
+ * 변경(가입·비번·역할): 로컬 저장 후 GitHub push (전체 계정)
+ * ※ GitHub에 없는 로컬 계정을 삭제하지 않음 (이전 SoT 교체 버그 수정)
  */
 
 import * as storage from './storage.js';
-import { commitRepoFiles } from './github-api.js';
+import { commitRepoFiles, getRepoFileJson } from './github-api.js';
 import { getGithubConfig, hasGithubToken, rawGithubUrl } from './github-config.js';
 import { nowIso } from './utils.js';
 
@@ -18,7 +19,6 @@ export function usersAuthPath(cfg = getGithubConfig()) {
   return `${cfg.workspaceRoot}/auth/users.json`;
 }
 
-/** 하위 호환: 예전 master-auth.json */
 export function masterAuthPath(cfg = getGithubConfig()) {
   return `${cfg.workspaceRoot}/auth/master-auth.json`;
 }
@@ -38,7 +38,26 @@ function toAuthRecord(u) {
   };
 }
 
-/** GitHub users.json (공개 raw, 토큰 불필요) */
+function ts(u) {
+  return Date.parse(u?.updatedAt || 0) || 0;
+}
+
+/** 로컬 ∪ 원격 — 동일 id면 최신 updatedAt 우선 */
+export function mergeUserRecords(localUsers = [], remoteUsers = []) {
+  const map = new Map();
+  for (const u of localUsers) {
+    if (!u?.id) continue;
+    map.set(u.id, toAuthRecord(u));
+  }
+  for (const u of remoteUsers) {
+    if (!u?.id || !u.passwordHash || !u.salt) continue;
+    const next = toAuthRecord(u);
+    const prev = map.get(u.id);
+    if (!prev || ts(next) >= ts(prev)) map.set(u.id, next);
+  }
+  return [...map.values()];
+}
+
 export async function fetchRemoteUsers() {
   try {
     const url = rawGithubUrl(usersAuthPath());
@@ -52,7 +71,6 @@ export async function fetchRemoteUsers() {
   }
 }
 
-/** 예전 master-auth.json → users 형태로 변환 */
 async function fetchLegacyMasterAsUsers() {
   try {
     const url = rawGithubUrl(masterAuthPath());
@@ -85,42 +103,46 @@ export async function fetchRemoteAuthCatalog() {
   return (await fetchRemoteUsers()) || (await fetchLegacyMasterAsUsers());
 }
 
-/** 원격 사용자 목록 → IndexedDB 전체 교체(캐시) */
+/**
+ * 원격 → 로컬 병합(upsert). 로컬 전용 계정은 삭제하지 않음.
+ * @returns {Promise<number>} 병합 후 로컬 계정 수
+ */
 export async function applyRemoteUsers(remote) {
-  if (!remote?.users?.length) return false;
+  const remoteList = remote?.users || [];
+  const local = await storage.getAll('users');
+  const merged = mergeUserRecords(local, remoteList);
 
-  const existing = await storage.getAll('users');
-  const keepIds = new Set(remote.users.map((u) => u.id));
-
-  for (const u of remote.users) {
-    if (!u?.id || !u.passwordHash || !u.salt) continue;
-    const record = toAuthRecord(u);
+  for (const record of merged) {
     delete record.username;
     await storage.put('users', record);
   }
-
-  // GitHub에 없는 로컬 계정 제거 (SoT = GitHub)
-  for (const local of existing) {
-    if (!keepIds.has(local.id)) {
-      await storage.remove('users', local.id);
-    }
-  }
-  return true;
+  return merged.length;
 }
 
 /**
- * GitHub → 로컬 (GitHub가 SoT — 원격이 있으면 항상 캐시에 반영)
+ * GitHub pull 후 로컬과 병합
+ * @returns {Promise<{ merged: number, remoteCount: number, localOnly: number } | false>}
  */
-export async function syncUsersFromGithub({ force = true } = {}) {
+export async function syncUsersFromGithub() {
   const remote = await fetchRemoteAuthCatalog();
-  if (!remote?.users?.length) return false;
+  const remoteCount = remote?.users?.length || 0;
+  if (!remoteCount) return false;
 
-  // force=false 는 하위 호환용. SoT 정책상 원격이 있으면 적용.
-  void force;
-  return applyRemoteUsers(remote);
+  const before = await storage.getAll('users');
+  const merged = await applyRemoteUsers(remote);
+  const after = await storage.getAll('users');
+  const remoteIds = new Set((remote.users || []).map((u) => u.id));
+  const localOnly = after.filter((u) => !remoteIds.has(u.id)).length;
+
+  return {
+    merged,
+    remoteCount,
+    localBefore: before.length,
+    localOnly,
+  };
 }
 
-/** 로컬 전체 사용자 → GitHub (Trees API 1커밋) + raw 확인 */
+/** 로컬 전체 → GitHub (1커밋) + Contents API로 즉시 검증 */
 export async function pushUsersToGithub() {
   if (!hasGithubToken()) {
     throw new Error('GitHub PAT가 필요합니다. 우측 패널 GitHub에서 토큰(repo 권한)을 저장하세요.');
@@ -159,27 +181,26 @@ export async function pushUsersToGithub() {
 
   await commitRepoFiles(files, `NovelExplor: auth users sync (${users.length})`);
 
-  // Pages/CDN 지연 대비 — API로 존재 확인은 생략하고 raw 재시도
-  let verified = null;
-  for (let i = 0; i < 5; i++) {
-    await sleep(400 * (i + 1));
-    verified = await fetchRemoteUsers();
-    if (verified?.users?.length) break;
+  // raw CDN 대신 API로 즉시 확인
+  let verified;
+  try {
+    verified = await getRepoFileJson(usersAuthPath());
+  } catch (err) {
+    throw new Error(`GitHub 업로드 후 확인 실패: ${err.message || err}`);
   }
-  if (!verified?.users?.length) {
+  const remoteCount = verified?.users?.length || 0;
+  if (remoteCount < users.length) {
     throw new Error(
-      'GitHub 커밋은 요청했으나 users.json 확인에 실패했습니다. '
-      + '잠시 후 새로고침하거나 PAT(repo) 권한을 확인하세요.'
+      `GitHub 계정 수가 부족합니다. 로컬 ${users.length}명 / GitHub ${remoteCount}명`
     );
   }
-  return { userCount: verified.users.length, updatedAt };
+  return { userCount: remoteCount, updatedAt };
 }
 
-function sleep(ms) {
-  return new Promise((r) => setTimeout(r, ms));
-}
-
-/** 원격 없고 로컬만 있으면(등록 완료 마스터 포함) GitHub에 게시 */
+/**
+ * 로컬에만 있는 계정이 있으면 GitHub에 전체 게시
+ * (마스터 포함 N명 등록 후 원격이 1명만인 경우 복구)
+ */
 export async function ensureUsersPublished() {
   if (!hasGithubToken()) return false;
 
@@ -187,16 +208,16 @@ export async function ensureUsersPublished() {
   if (!local.length) return false;
 
   const remote = await fetchRemoteAuthCatalog();
-  if (remote?.users?.length) {
-    // 이미 원격 있음 — 해시/개수가 같으면 skip
-    if (remote.users.length === local.length) {
-      const same = remote.users.every((ru) => {
-        const lu = local.find((u) => u.id === ru.id);
-        return lu && lu.passwordHash === ru.passwordHash && lu.role === ru.role;
-      });
-      if (same) return false;
-    }
-  }
+  const remoteUsers = remote?.users || [];
+
+  const needsPush = local.length !== remoteUsers.length
+    || local.some((lu) => {
+      const ru = remoteUsers.find((u) => u.id === lu.id);
+      if (!ru) return true;
+      return ru.passwordHash !== lu.passwordHash || ru.role !== lu.role;
+    });
+
+  if (!needsPush) return false;
 
   try {
     return await pushUsersToGithub();
@@ -206,7 +227,38 @@ export async function ensureUsersPublished() {
   }
 }
 
-/** 로그인 화면 상태 */
+/**
+ * 목록용: 로컬 → GitHub 병합 → (로컬이 더 많으면) 게시
+ */
+export async function refreshMergedUserCatalog() {
+  const localFirst = await storage.getAll('users');
+  try {
+    await syncUsersFromGithub();
+  } catch (err) {
+    console.warn('[auth-sync] GitHub 병합 실패:', err);
+  }
+
+  const merged = await storage.getAll('users');
+  let published = null;
+  if (hasGithubToken()) {
+    const remote = await fetchRemoteAuthCatalog();
+    const remoteCount = remote?.users?.length || 0;
+    if (merged.length > remoteCount) {
+      try {
+        published = await pushUsersToGithub();
+      } catch (err) {
+        console.warn('[auth-sync] 로컬 초과분 게시 실패:', err);
+      }
+    }
+  }
+
+  return {
+    localFirst: localFirst.length,
+    merged: merged.length,
+    published,
+  };
+}
+
 export async function getAuthCatalogStatus() {
   const remote = await fetchRemoteAuthCatalog();
   const local = await storage.getAll('users');
@@ -228,10 +280,8 @@ export async function getAuthCatalogStatus() {
   };
 }
 
-/* —— 하위 호환 export (기존 호출부) —— */
-
 export async function syncMasterAuthFromGithub() {
-  return syncUsersFromGithub({ force: true });
+  return syncUsersFromGithub();
 }
 
 export async function pushMasterAuthToGithub() {

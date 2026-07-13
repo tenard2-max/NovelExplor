@@ -113,12 +113,10 @@ async function refreshAuthHint(root) {
   const hint = root.querySelector('#auth-catalog-hint');
   if (!hint) return;
   try {
-    await syncUsersFromGithub({ force: true });
+    await syncUsersFromGithub();
     const status = await getAuthCatalogStatus();
-    if (status.remoteAvailable) {
-      hint.textContent = `GitHub 사용자 ${status.remoteUserCount}명 동기화됨. 등록된 비밀번호로 로그인하세요.`;
-    } else if (status.localUserCount) {
-      hint.textContent = `이 브라우저 캐시만 있음. 최초 마스터: ${MASTER_USERNAME} / ${MASTER_USERNAME} (설정에서 변경 후 GitHub 반영)`;
+    if (status.remoteAvailable || status.localUserCount) {
+      hint.textContent = `로컬 ${status.localUserCount}명 · GitHub ${status.remoteUserCount}명. 등록된 비밀번호로 로그인하세요.`;
     } else {
       hint.textContent = `최초 설정: ${MASTER_USERNAME} / ${MASTER_USERNAME} (로그인 후 설정·PAT로 GitHub에 게시)`;
     }
