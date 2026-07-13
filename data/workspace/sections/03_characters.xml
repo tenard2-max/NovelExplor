@@ -56,5 +56,10 @@
       <Avatar src="../overlays/characters/CHR0011.png" mime="image/png"/>
       <Gallery/>
     </Character>
+    <Character id="CHR0012" name="다이아나" race="" gender="" age="0" occupation="" firstEpisode="0" lastEpisode="0" status="Alive">
+      <Description></Description>
+      <Avatar src="../overlays/characters/CHR0012.png" mime="image/png"/>
+      <Gallery/>
+    </Character>
   </Characters>
 </Section>
