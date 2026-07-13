@@ -9,9 +9,7 @@
     <Character id="CHR0002" name="뽀로로" race="AI" gender="F" age="0" occupation="전략 AI" firstEpisode="1" lastEpisode="3" status="Alive">
       <Description>EP 자동 감지 (40회 언급)</Description>
       <Avatar src="../overlays/characters/CHR0002.png" mime="image/png"/>
-      <Gallery>
-      <Image src="../overlays/characters/CHR0002_1.png" mime="image/png"/>
-      </Gallery>
+      <Gallery/>
     </Character>
     <Character id="CHR0003" name="패티" race="인간" gender="M" age="0" occupation="대학생" firstEpisode="1" lastEpisode="3" status="Alive">
       <Description>EP 자동 감지 (22회 언급)</Description>
