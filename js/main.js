@@ -16,6 +16,8 @@ import { initCanvasWallpaper } from './ui/canvas-wallpaper.js';
 import { initCharacterPanel } from './ui/character-panel.js';
 import { initCharacterActions } from './ui/character-actions.js';
 import { initBackup, offerLocalRecovery, exportTimestampedBackup, openBackupJsonFile, sanitizeThemeTag } from './core/backup.js';
+import { confirmGithubSyncIfLowQuota } from './core/github-sync.js';
+import { hasGithubToken } from './core/github-config.js';
 import { initSyncFolder } from './core/sync-folder.js';
 import { showOpenProjectDialog } from './ui/open-project-dialog.js';
 import { showProjectManageDialog } from './ui/project-manage.js';
@@ -310,11 +312,17 @@ async function saveCurrentProject() {
     const themeChoice = await promptSaveTheme();
     if (themeChoice === null) return; // 취소
 
+    if (hasGithubToken()) {
+      const proceed = await confirmGithubSyncIfLowQuota();
+      if (!proceed) return;
+    }
+
     await flushPendingSave();
     await autosave.flushSave(true);
     const filename = await exportTimestampedBackup({
       notify: true,
       theme: themeChoice,
+      skipRateLimitCheck: true,
     });
     console.info('[NovelExplor] 동기화 파일:', filename);
   } catch (err) {

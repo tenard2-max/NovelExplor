@@ -92,13 +92,14 @@ export function sanitizeThemeTag(theme) {
 
 /**
  * 프로젝트 동기화 스냅샷: 저장 폴더 기록(가능 시) + JSON 다운로드 + 로컬 백업
- * @param {{ notify?: boolean, asDefault?: boolean, defaultTitle?: string, skipGithub?: boolean, theme?: string }} [options]
+ * @param {{ notify?: boolean, asDefault?: boolean, defaultTitle?: string, skipGithub?: boolean, skipRateLimitCheck?: boolean, theme?: string }} [options]
  */
 export async function exportTimestampedBackup({
   notify = false,
   asDefault = false,
   defaultTitle = '',
   skipGithub = false,
+  skipRateLimitCheck = false,
   theme = '',
 } = {}) {
   const json = await buildBackupJson();
@@ -135,6 +136,7 @@ export async function exportTimestampedBackup({
         reason: asDefault ? 'default' : 'save',
         asDefault,
         defaultTitle,
+        skipRateLimitCheck,
       });
       if (gh) {
         githubNote = `<br>GitHub: <code>${gh.snapshotId}.json</code> (+${Math.max(0, gh.fileCount - 2)}개 자산)`;

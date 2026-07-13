@@ -1,7 +1,12 @@
 /** GitHub 동기화 — JSON 스냅샷 분리 + PNG/MD/TXT 개별 커밋 */
 
 import { buildBackupPayload, timestampBackupFilename } from './backup.js';
-import { commitRepoFiles } from './github-api.js';
+import {
+  commitRepoFiles,
+  fetchGithubRateLimit,
+  GITHUB_RATE_LIMIT_WARN_THRESHOLD,
+} from './github-api.js';
+import { showDialog } from '../ui/dialog.js';
 import { buildSectionXmlFiles } from './xml-section-writer.js';
 import {
   getGithubConfig,
@@ -48,6 +53,35 @@ const UPLOAD_REASONS = new Set([
   'wallpaper-upload',
 ]);
 
+/** 사용자가 시작한 동기화 — API 잔량 경고 대상 */
+const RATE_LIMIT_CHECK_REASONS = new Set(['save', 'default', 'manual', 'apply-json']);
+
+/**
+ * PAT가 있고 API 잔량이 GITHUB_RATE_LIMIT_WARN_THRESHOLD 미만이면 확인 대화상자.
+ * @returns {Promise<boolean>} true = 진행, false = 취소
+ */
+export async function confirmGithubSyncIfLowQuota() {
+  if (!hasGithubToken()) return true;
+
+  let rl;
+  try {
+    rl = await fetchGithubRateLimit();
+  } catch {
+    return true;
+  }
+
+  if (typeof rl?.remaining !== 'number') return true;
+  if (rl.remaining >= GITHUB_RATE_LIMIT_WARN_THRESHOLD) return true;
+
+  const limit = typeof rl.limit === 'number' ? rl.limit : 5000;
+  return showDialog({
+    title: 'GitHub API 잔량',
+    bodyHtml: `<p>지금 등록이 일부 실패할 수 있습니다. 토큰량(API 잔량)을 확인해 주세요.</p>
+      <p>현재 잔량: <strong>${rl.remaining}/${limit}</strong></p>
+      <p>그래도 GitHub 동기화를 진행할까요?</p>`,
+  });
+}
+
 /** 저장·적용·업로드 후 디바운스 동기화 */
 export function scheduleGithubSync(reason = 'change') {
   if (!hasGithubToken()) return;
@@ -79,8 +113,14 @@ export async function syncProjectToGithub({
   reason = 'save',
   asDefault = false,
   defaultTitle = '',
+  skipRateLimitCheck = false,
 } = {}) {
   if (!hasGithubToken()) return null;
+
+  if (!skipRateLimitCheck && RATE_LIMIT_CHECK_REASONS.has(reason)) {
+    const proceed = await confirmGithubSyncIfLowQuota();
+    if (!proceed) return null;
+  }
 
   // 진행 중이면 대기 후 이어서 업로드 (예전엔 일반 저장이 조용히 스킵되어 원격 목록이 안 늘었음)
   if (syncInFlight) {

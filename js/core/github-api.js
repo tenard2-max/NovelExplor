@@ -4,6 +4,8 @@ import { getGithubConfig, rawGithubUrl } from './github-config.js';
 import { emit } from './events.js';
 
 const API = 'https://api.github.com';
+/** GitHub REST API 잔량이 이 값 미만이면 저장·동기화 전 경고 */
+export const GITHUB_RATE_LIMIT_WARN_THRESHOLD = 500;
 const DEFAULT_TIMEOUT_MS = 45000;
 const BLOB_TIMEOUT_MS = 90000;
 const MAX_RETRIES = 2;
