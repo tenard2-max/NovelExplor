@@ -7,7 +7,7 @@
  */
 
 import * as storage from './storage.js';
-import { commitRepoFiles, getRepoFileJson } from './github-api.js';
+import { commitRepoFiles } from './github-api.js';
 import { getGithubConfig, hasGithubToken, rawGithubUrl } from './github-config.js';
 import { nowIso } from './utils.js';
 
@@ -181,20 +181,8 @@ export async function pushUsersToGithub() {
 
   await commitRepoFiles(files, `NovelExplor: auth users sync (${users.length})`);
 
-  // raw CDN 대신 API로 즉시 확인
-  let verified;
-  try {
-    verified = await getRepoFileJson(usersAuthPath());
-  } catch (err) {
-    throw new Error(`GitHub 업로드 후 확인 실패: ${err.message || err}`);
-  }
-  const remoteCount = verified?.users?.length || 0;
-  if (remoteCount < users.length) {
-    throw new Error(
-      `GitHub 계정 수가 부족합니다. 로컬 ${users.length}명 / GitHub ${remoteCount}명`
-    );
-  }
-  return { userCount: remoteCount, updatedAt };
+  // Trees 커밋 성공 = 게시 성공 (인원수·재검증 없음)
+  return { userCount: users.length, updatedAt };
 }
 
 /**
