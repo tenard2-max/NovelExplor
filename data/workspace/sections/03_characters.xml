@@ -49,7 +49,9 @@
     <Character id="CHR0010" name="가은이" race="" gender="" age="0" occupation="" firstEpisode="0" lastEpisode="0" status="Alive">
       <Description></Description>
       <Avatar src="../overlays/characters/CHR0010.png" mime="image/png"/>
-      <Gallery/>
+      <Gallery>
+      <Image src="../overlays/characters/CHR0010_1.png" mime="image/png"/>
+      </Gallery>
     </Character>
     <Character id="CHR0011" name="이클립스" race="" gender="" age="0" occupation="" firstEpisode="0" lastEpisode="0" status="Alive">
       <Description></Description>
