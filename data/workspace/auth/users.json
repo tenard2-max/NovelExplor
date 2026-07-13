@@ -1,6 +1,6 @@
 {
   "format": "novel-explor-users/v1",
-  "updatedAt": "2026-07-13T01:19:18.407Z",
+  "updatedAt": "2026-07-13T02:03:07.761Z",
   "users": [
     {
       "id": "user-b41f6892-fe10-431f-84f3-2912f7eed331",
@@ -20,11 +20,11 @@
       "usernameEnc": "4P91KmFRyc5oxNms.BNVsSPq5SVVCR11ELz9Jjw+uf9cotpM=",
       "passwordHash": "zvtnGEjR9v2vtamsswOJd4Q1YqS46uTTznq7R4ObvUQ=",
       "salt": "685d3920dbd64045",
-      "role": "user",
+      "role": "admin_novelist",
       "mustChangePassword": false,
       "disabled": false,
       "createdAt": "2026-07-13T01:18:08.119Z",
-      "updatedAt": "2026-07-13T01:18:08.119Z"
+      "updatedAt": "2026-07-13T01:19:20.536Z"
     },
     {
       "id": "user-c7f2a335-c25d-40c5-b031-a49b38b946d2",
