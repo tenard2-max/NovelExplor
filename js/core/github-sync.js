@@ -29,7 +29,24 @@ import { basename, nowIso } from './utils.js';
 let syncTimer = null;
 let syncInFlight = false;
 let pendingReason = 'change';
+/** @type {object | null} */
+let pendingSyncContext = null;
 let progressClearTimer = null;
+let githubSyncSuppressDepth = 0;
+
+export function isGithubSyncSuppressed() {
+  return githubSyncSuppressDepth > 0;
+}
+
+/** 프로젝트 복원·일괄 import 중 GitHub 자동 동기화 차단 */
+export async function suppressGithubSyncDuring(fn) {
+  githubSyncSuppressDepth += 1;
+  try {
+    return await fn();
+  } finally {
+    githubSyncSuppressDepth = Math.max(0, githubSyncSuppressDepth - 1);
+  }
+}
 
 export function isGithubSyncInFlight() {
   return syncInFlight;
@@ -55,7 +72,7 @@ const UPLOAD_REASONS = new Set([
 ]);
 
 /** 사용자가 시작한 동기화 — API 잔량 경고 대상 */
-const RATE_LIMIT_CHECK_REASONS = new Set(['save', 'default', 'manual', 'apply-json']);
+const RATE_LIMIT_CHECK_REASONS = new Set(['save', 'default', 'manual']);
 
 /**
  * PAT가 있고 API 잔량이 GITHUB_RATE_LIMIT_WARN_THRESHOLD 미만이면 확인 대화상자.
@@ -84,14 +101,18 @@ export async function confirmGithubSyncIfLowQuota() {
 }
 
 /** 저장·적용·업로드 후 디바운스 동기화 */
-export function scheduleGithubSync(reason = 'change') {
+export function scheduleGithubSync(reason = 'change', context = {}) {
   if (!hasGithubToken()) return;
+  if (isGithubSyncSuppressed()) return;
   pendingReason = reason;
+  pendingSyncContext = { ...(pendingSyncContext || {}), ...context };
   clearTimeout(syncTimer);
   syncTimer = setTimeout(() => {
     const r = pendingReason;
+    const ctx = pendingSyncContext || {};
     pendingReason = 'change';
-    syncProjectToGithub({ reason: r }).catch((err) => {
+    pendingSyncContext = null;
+    syncProjectToGithub({ reason: r, ...ctx }).catch((err) => {
       console.warn('[github-sync]', err);
       setNavSyncProgress(`실패: ${err.message || err}`, { error: true });
       emit('github:sync-error', err);
@@ -115,8 +136,10 @@ export async function syncProjectToGithub({
   asDefault = false,
   defaultTitle = '',
   skipRateLimitCheck = false,
+  characterId = '',
 } = {}) {
   if (!hasGithubToken()) return null;
+  if (isGithubSyncSuppressed() && reason !== 'manual') return null;
 
   if (!skipRateLimitCheck && RATE_LIMIT_CHECK_REASONS.has(reason)) {
     const proceed = await confirmGithubSyncIfLowQuota();
@@ -142,7 +165,10 @@ export async function syncProjectToGithub({
     const stamp = snapshotId
       || (uploadOnly ? stampFromDate(new Date()) : timestampBackupFilename().replace(/\.json$/i, ''));
 
-    const { manifest, assetFiles } = splitPayloadForGithub(payload, stamp);
+    let { manifest, assetFiles } = splitPayloadForGithub(payload, stamp);
+    if (uploadOnly) {
+      assetFiles = filterUploadOnlyAssets(assetFiles, { reason, characterId, manifest });
+    }
     const cfg = getGithubConfig();
     const snapDir = snapshotsDir(cfg);
     const overlayRoot = overlaysDir(cfg);
@@ -342,10 +368,40 @@ function dataUrlToBase64(dataUrl) {
   return idx >= 0 ? s.slice(idx + 1) : s;
 }
 
+/** uploadOnly 동기화 — 변경된 자산만 (전체 프로젝트 재업로드 방지) */
+function filterUploadOnlyAssets(assetFiles, { reason, characterId, manifest }) {
+  if (!assetFiles?.length) return assetFiles;
+
+  if (reason === 'character-image' && characterId) {
+    const ch = (manifest?.characters || []).find(
+      (c) => c.id === characterId || `${c.projectId || ''}-${c.characterId || ''}` === characterId
+    );
+    const cid = ch?.characterId
+      || String(characterId).split('-').filter(Boolean).pop()
+      || '';
+    if (!cid) return assetFiles;
+    const prefix = `/characters/${cid}`;
+    return assetFiles.filter((a) => String(a.repoPath).includes(prefix));
+  }
+
+  if (reason === 'character-delete' && characterId) {
+    const cid = String(characterId).split('-').filter(Boolean).pop() || '';
+    if (!cid) return [];
+    const prefix = `/characters/${cid}`;
+    return assetFiles.filter((a) => String(a.repoPath).includes(prefix));
+  }
+
+  if (reason === 'wallpaper-upload') {
+    return assetFiles.filter((a) => /\/wallpaper\.png$/i.test(String(a.repoPath)));
+  }
+
+  return assetFiles;
+}
+
 export function initGithubSync() {
   const schedule = (reason) => () => scheduleGithubSync(reason);
-  on('character:updated', schedule('character-image'));
-  on('character:deleted', schedule('character-delete'));
+  on('character:updated', (ch) => scheduleGithubSync('character-image', { characterId: ch?.id || '' }));
+  on('character:deleted', (payload) => scheduleGithubSync('character-delete', { characterId: payload?.id || '' }));
   on('upload:committed', schedule('file-upload'));
   on('wallpaper:updated', schedule('wallpaper-upload'));
   on('timeline:updated', schedule('change'));

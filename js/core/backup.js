@@ -12,7 +12,7 @@ import {
   stampFromExportedAt,
 } from '../app-version.js';
 import { writeBackupToSyncFolder, hasSyncDir, initSyncFolder } from './sync-folder.js';
-import { syncProjectToGithub } from './github-sync.js';
+import { syncProjectToGithub, suppressGithubSyncDuring } from './github-sync.js';
 import { hasGithubToken } from './github-config.js';
 import { hydrateSplitBackupJson } from './github-hydrate.js';
 
@@ -194,18 +194,9 @@ export async function restoreFromBackupFile(file, { skipConfirm = false } = {}) 
   }
 
   await restoreFromBackup(text, { sourceFilename: file.name, exportedAt: data.exportedAt });
-  const stamp = stampFromBackupFilename(file.name) || stampFromExportedAt(data.exportedAt);
   setJsonVersionFromSource(file.name, data.exportedAt);
   refreshBackupStatus(file.name);
   refreshNavVersions();
-
-  if (hasGithubToken() && stamp) {
-    try {
-      await syncProjectToGithub({ snapshotId: stamp, reason: 'apply-json' });
-    } catch (err) {
-      console.warn('[backup] GitHub 적용 후 동기화 실패:', err);
-    }
-  }
 
   emit('project:loaded', project.getCurrentProject());
   return true;
@@ -216,16 +207,18 @@ export async function restoreFromBackup(jsonText, {
   sourceFilename = '',
   exportedAt = '',
 } = {}) {
-  if (replaceAll) {
-    await project.clearAllProjects();
-    clearLocalBackupCache();
-  }
-  const hydrated = await hydrateSplitBackupJson(jsonText);
-  await project.importProjectJson(hydrated);
-  if (sourceFilename || exportedAt) {
-    setJsonVersionFromSource(sourceFilename, exportedAt);
-  }
-  return project.getCurrentProject();
+  return suppressGithubSyncDuring(async () => {
+    if (replaceAll) {
+      await project.clearAllProjects();
+      clearLocalBackupCache();
+    }
+    const hydrated = await hydrateSplitBackupJson(jsonText);
+    await project.importProjectJson(hydrated);
+    if (sourceFilename || exportedAt) {
+      setJsonVersionFromSource(sourceFilename, exportedAt);
+    }
+    return project.getCurrentProject();
+  });
 }
 
 function setJsonVersionFromSource(filename = '', exportedAt = '') {

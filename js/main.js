@@ -188,7 +188,7 @@ function initActions() {
         let filename = picked.name || '';
         const canWrite = canManageProjectContent(project.getCurrentProject());
         if (canWrite) {
-          filename = await exportTimestampedBackup({ notify: false });
+          filename = await exportTimestampedBackup({ notify: false, skipGithub: true });
         }
         switchView('character');
         await showAlert(
