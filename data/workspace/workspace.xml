@@ -2,7 +2,7 @@
 <Workspace
   version="1"
   projectTitle="유진이의 모험2"
-  updatedAt="2026-07-13T12:57:33.275Z"
+  updatedAt="2026-07-13T12:59:31.808Z"
   schema="novelexplor-workspace/v1">
 
   <Sections>
@@ -30,6 +30,7 @@
     <File id="chr0010-avatar" path="overlays/characters/CHR0010.png" mime="image/png"/>
     <File id="chr0011-avatar" path="overlays/characters/CHR0011.png" mime="image/png"/>
     <File id="chr0012-avatar" path="overlays/characters/CHR0012.png" mime="image/png"/>
+    <File id="chr0013-avatar" path="overlays/characters/CHR0013.png" mime="image/png"/>
     <File id="story-05_TIMELINE-md" path="overlays/stories/05_TIMELINE.md" mime="text/markdown"/>
     <File id="story-11_STORY_NAV-md" path="overlays/stories/11_STORY_NAV.md" mime="text/markdown"/>
     <File id="story-EP001-md" path="overlays/stories/EP001.md" mime="text/markdown"/>
