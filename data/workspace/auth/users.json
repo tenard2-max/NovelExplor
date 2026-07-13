@@ -1,6 +1,6 @@
 {
   "format": "novel-explor-users/v1",
-  "updatedAt": "2026-07-13T01:18:08.120Z",
+  "updatedAt": "2026-07-13T01:19:18.407Z",
   "users": [
     {
       "id": "user-b41f6892-fe10-431f-84f3-2912f7eed331",
@@ -8,11 +8,11 @@
       "usernameEnc": "E9aQU+rk4P4T2IxI.4aGkuChvYiV/AJcKRYz0iWcEqUrRmw==",
       "passwordHash": "J0LiVsd183Ib5EuirkgP7yP64SqJaNPSXfswMC2qGaA=",
       "salt": "0f44efe4693947dc",
-      "role": "user",
+      "role": "admin_developer",
       "mustChangePassword": false,
       "disabled": false,
       "createdAt": "2026-07-13T01:04:13.014Z",
-      "updatedAt": "2026-07-13T01:04:13.014Z"
+      "updatedAt": "2026-07-13T01:19:18.406Z"
     },
     {
       "id": "user-b5e111dc-8b2d-4a16-ae07-5075843c5ac2",
@@ -37,6 +37,18 @@
       "disabled": false,
       "createdAt": "2026-07-13T00:56:10.427Z",
       "updatedAt": "2026-07-13T00:56:10.427Z"
+    },
+    {
+      "id": "user-ded7dcff-5dc3-41b3-82dc-2f8c49f114b5",
+      "usernameHash": "pYNtjBjubqrHLjhteERBho+Rzi7v1/XHUR1FZBGjpEQ=",
+      "usernameEnc": "6t/6mI+ppu/iw09y.+VgIRCXLmi83QXNjeY5AXpBvQ9cyOz8=",
+      "passwordHash": "y3Qd1LL5lrnIv+UpwumcPRA+oyPvjb5jhbZUpgBOAtc=",
+      "salt": "6a031c319c8f48ee",
+      "role": "user",
+      "mustChangePassword": false,
+      "disabled": false,
+      "createdAt": "2026-07-13T01:18:29.942Z",
+      "updatedAt": "2026-07-13T01:18:29.942Z"
     },
     {
       "id": "user-master",
