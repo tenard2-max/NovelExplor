@@ -1,0 +1,18 @@
+{
+  "format": "novel-explor-users/v1",
+  "updatedAt": "2026-07-13T00:47:37.074Z",
+  "users": [
+    {
+      "id": "user-master",
+      "usernameHash": "vPHjvJBh5g81iBV6i5Tdt6QD8oOxUB6Ng3CNCM8cEhM=",
+      "usernameEnc": "5dpFRIxLP8R7qy21.WAJorM5aO9Pr3Zt5P14PDV2yvxz6yQ==",
+      "passwordHash": "lX0WzNdPK/qli9aLgyQKkbtc58FZeV/iNDG2cdcR7pM=",
+      "salt": "c28ef13eda2d415d",
+      "role": "admin_master",
+      "mustChangePassword": true,
+      "disabled": false,
+      "createdAt": "2026-07-12T23:55:44.467Z",
+      "updatedAt": "2026-07-12T23:55:44.467Z"
+    }
+  ]
+}
