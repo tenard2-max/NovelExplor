@@ -2,7 +2,7 @@
   "format": "novel-explor-github-snapshot",
   "version": 1,
   "snapshotId": "20260711160607_인류생존프로젝트16화까지",
-  "exportedAt": "2026-07-13T13:05:14.738Z",
+  "exportedAt": "2026-07-13T13:07:17.263Z",
   "backupType": "split",
   "project": {
     "id": "4f8264c0-db5d-41b0-bc15-9d873608c1a1",
@@ -10,14 +10,14 @@
     "title": "인류 생존 프로젝트",
     "author": "tenard",
     "createdAt": "2026-07-11T05:45:03.889Z",
-    "updatedAt": "2026-07-13T13:05:13.793Z",
+    "updatedAt": "2026-07-13T13:05:43.138Z",
     "version": "1.0.0",
     "workspace": "NovelMD",
     "language": "ko",
     "versionMeta": {
       "major": 1,
       "minor": 0,
-      "patch": 47,
+      "patch": 48,
       "build": 1
     },
     "ownerId": "user-fec4f31e-5693-4c83-8233-bacfe77de580",
@@ -2263,9 +2263,9 @@
       "projectId": "4f8264c0-db5d-41b0-bc15-9d873608c1a1",
       "dataUrl": "",
       "saturation": 66,
-      "alpha": 22,
-      "size": 50,
-      "updatedAt": "2026-07-07T13:39:47.666Z",
+      "alpha": 100,
+      "size": 117,
+      "updatedAt": "2026-07-13T13:05:42.881Z",
       "dataPath": "data/workspace/overlays/wallpaper.png"
     }
   }
