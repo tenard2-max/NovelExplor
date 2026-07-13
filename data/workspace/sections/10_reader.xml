@@ -1,8 +1,8 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <Section id="reader" viewId="reader" title="소설 읽기" version="1">
   <Stories>
-    <Story id="ST001" number="1" title="혼자 간 산길" src="../overlays/stories/ST001.md" mime="text/markdown"/>
-    <Story id="ST002" number="2" title="늑대의 비밀" src="../overlays/stories/ST002.md" mime="text/markdown"/>
-    <Story id="ST003" number="3" title="모두 함께 친구" src="../overlays/stories/ST003.md" mime="text/markdown"/>
+    <Story id="ST001" number="1" title="혼자 떠난 산속 모험" src="../overlays/stories/ST001.md" mime="text/markdown"/>
+    <Story id="ST002" number="2" title="숲속의 대결과 뜻밖의 만남" src="../overlays/stories/ST002.md" mime="text/markdown"/>
+    <Story id="ST003" number="3" title="새로운 친구와 행복한 하루" src="../overlays/stories/ST003.md" mime="text/markdown"/>
   </Stories>
 </Section>

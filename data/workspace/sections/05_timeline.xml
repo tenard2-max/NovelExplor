@@ -1,8 +1,8 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <Section id="timeline" viewId="timeline" title="타임라인" version="1">
   <Events>
-    <Event id="TL0001" episode="1" date="2024-01-01" title="혼자 간 산길" source="story-sync"/>
-    <Event id="TL0002" episode="2" date="2024-01-08" title="늑대의 비밀" source="story-sync"/>
-    <Event id="TL0003" episode="3" date="2024-01-15" title="모두 함께 친구" source="story-sync"/>
+    <Event id="TL0001" episode="1" date="2024-01-01" title="혼자 떠난 산속 모험" source="story-sync"/>
+    <Event id="TL0002" episode="2" date="2024-01-08" title="숲속의 대결과 뜻밖의 만남" source="story-sync"/>
+    <Event id="TL0003" episode="3" date="2024-01-15" title="새로운 친구와 행복한 하루" source="story-sync"/>
   </Events>
 </Section>
