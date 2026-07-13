@@ -1,8 +1,21 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <Section id="story-nav" viewId="story-nav" title="스토리 네비" version="1">
   <Episodes>
-    <Episode id="EP001" number="1" title="놀이터에서만난새로운친구" src="../overlays/stories/ST001.md"/>
-    <Episode id="EP002" number="2" title="오로라핑의 따뜻한 빛" src="../overlays/stories/ST002.md"/>
-    <Episode id="EP003" number="3" title="모두 함께 만든 행복 피자" src="../overlays/stories/ST003.md"/>
+    <Episode id="EP001" number="1" title="지막 1초" src="../overlays/stories/ST001.md"/>
+    <Episode id="EP002" number="2" title="시 만난 사람들" src="../overlays/stories/ST002.md"/>
+    <Episode id="EP003" number="3" title="시 스무 살" src="../overlays/stories/ST003.md"/>
+    <Episode id="EP004" number="4" title="상한 스마트폰" src="../overlays/stories/ST004.md"/>
+    <Episode id="EP005" number="5" title="부심" src="../overlays/stories/ST005.md"/>
+    <Episode id="EP006" number="6" title="번째 투자" src="../overlays/stories/ST006.md"/>
+    <Episode id="EP007" number="7" title="버지의 시험" src="../overlays/stories/ST007.md"/>
+    <Episode id="EP008" number="8" title="오는 날" src="../overlays/stories/ST008.md"/>
+    <Episode id="EP009" number="9" title="번째 상한가" src="../overlays/stories/ST009.md"/>
+    <Episode id="EP010" number="10" title="셋이 걷는 길" src="../overlays/stories/ST010.md"/>
+    <Episode id="EP011" number="11" title="두 번째 투자" src="../overlays/stories/ST011.md"/>
+    <Episode id="EP012" number="12" title="하늘의 균열" src="../overlays/stories/ST012.md"/>
+    <Episode id="EP013" number="13" title="돈의 쓰임" src="../overlays/stories/ST013.md"/>
+    <Episode id="EP014" number="14" title="이상한 진동" src="../overlays/stories/ST014.md"/>
+    <Episode id="EP015" number="15" title="금이 간 벽" src="../overlays/stories/ST015.md"/>
+    <Episode id="EP016" number="16" title="무너지는 공학관" src="../overlays/stories/ST016.md"/>
   </Episodes>
 </Section>
