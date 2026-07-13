@@ -1,9 +1,9 @@
 {
   "format": "master-auth/v1",
   "usernameHash": "vPHjvJBh5g81iBV6i5Tdt6QD8oOxUB6Ng3CNCM8cEhM=",
-  "usernameEnc": "5dpFRIxLP8R7qy21.WAJorM5aO9Pr3Zt5P14PDV2yvxz6yQ==",
-  "passwordHash": "lX0WzNdPK/qli9aLgyQKkbtc58FZeV/iNDG2cdcR7pM=",
-  "salt": "c28ef13eda2d415d",
-  "mustChangePassword": true,
-  "updatedAt": "2026-07-12T23:55:44.467Z"
+  "usernameEnc": "+wCrtQYfnRkVw//o.mhyMST+Z0SnMI7xm061k60dqKHBMxA==",
+  "passwordHash": "RMYTAWRWry3wr7RAEFY1xT6wLxaamPTVnnRkX3aofCk=",
+  "salt": "42d94743ed2848ed",
+  "mustChangePassword": false,
+  "updatedAt": "2026-07-13T00:48:55.969Z"
 }
