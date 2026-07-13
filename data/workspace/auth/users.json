@@ -1,18 +1,18 @@
 {
   "format": "novel-explor-users/v1",
-  "updatedAt": "2026-07-13T00:55:12.779Z",
+  "updatedAt": "2026-07-13T00:56:10.428Z",
   "users": [
     {
-      "id": "user-696949f7-e198-4fa8-80b1-92e1cc97ad4e",
-      "usernameHash": "pVblGwBB8VkMbJo9Y2I9b/mJ/A5n29EcmTBA/W+At0s=",
-      "usernameEnc": "JQ/kvVXRVsJo2tIj.3wWK+ssEOUi8x4msxWxGGXBVuDPo+Q==",
-      "passwordHash": "X8orOn3B4J5SRy6Lx0w23p3R6lt2JCLebvn5h9Q/jTY=",
-      "salt": "96650eca031844b7",
+      "id": "user-c7f2a335-c25d-40c5-b031-a49b38b946d2",
+      "usernameHash": "GLDY9YbHDA9qz3mIx0s2RSjSwbGeHekWCezW/ORIGvc=",
+      "usernameEnc": "T8d5dAJ/qrohFthi.FIHKp8L6aoL8AyODjQjFsOZraAFIpLY=",
+      "passwordHash": "NVRh1K9pQdndmzklI8Nf+VMr7obTot29HoDOroTXZC4=",
+      "salt": "19022c036e8d4593",
       "role": "user",
       "mustChangePassword": false,
       "disabled": false,
-      "createdAt": "2026-07-13T00:55:12.778Z",
-      "updatedAt": "2026-07-13T00:55:12.778Z"
+      "createdAt": "2026-07-13T00:56:10.427Z",
+      "updatedAt": "2026-07-13T00:56:10.427Z"
     },
     {
       "id": "user-master",
