@@ -14,6 +14,7 @@ import {
   fetchRemoteAuthCatalog,
   applyRemoteUsers,
 } from './auth-sync.js';
+import { hasGithubToken } from './github-config.js';
 import { nowIso, uuid } from './utils.js';
 import { emit } from './events.js';
 
@@ -365,6 +366,13 @@ export async function changePassword(currentPassword, newPassword) {
   if (String(newPassword || '').length < 4) {
     throw new Error('새 비밀번호는 4자 이상이어야 합니다.');
   }
+  if (!hasGithubToken()) {
+    throw new Error(
+      'GitHub PAT가 없습니다. 우측 패널 GitHub에서 토큰(repo)을 먼저 저장한 뒤 '
+      + '비밀번호를 변경해야 계정 정보가 GitHub에 등록됩니다.'
+    );
+  }
+
   const user = await storage.get('users', currentUser.id);
   if (!user) throw new Error('사용자를 찾을 수 없습니다.');
 
@@ -383,16 +391,8 @@ export async function changePassword(currentPassword, newPassword) {
   writeSession(currentUser);
   emit('auth:changed', currentUser);
 
-  try {
-    await pushUsersToGithub();
-  } catch (err) {
-    console.warn('[auth] 비밀번호 변경 GitHub 반영 실패:', err);
-    throw new Error(
-      `비밀번호는 이 브라우저에 저장되었습니다. GitHub 반영 실패: ${err.message || err}`
-    );
-  }
-
-  return currentUser;
+  const result = await pushUsersToGithub();
+  return { user: currentUser, github: result };
 }
 
 export async function listUsers() {

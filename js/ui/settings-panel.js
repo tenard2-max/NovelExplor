@@ -11,6 +11,8 @@ import {
   ROLES,
   logout,
 } from '../core/auth.js';
+import { pushUsersToGithub, getAuthCatalogStatus } from '../core/auth-sync.js';
+import { hasGithubToken } from '../core/github-config.js';
 import { showAlert } from './dialog.js';
 
 export function initSettings() {
@@ -61,6 +63,7 @@ export function renderSettings() {
         <h2>계정</h2>
         <p class="settings-meta"><strong>${esc(user.username)}</strong> · ${esc(roleLabel(user.role))}</p>
         ${user.mustChangePassword ? '<p class="settings-warn">초기 비밀번호를 변경해 주세요.</p>' : ''}
+        <p class="settings-meta" id="settings-github-auth-status">GitHub 계정 상태 확인 중…</p>
         <form id="settings-password-form" class="settings-form">
           <label class="auth-field"><span>현재 비밀번호</span>
             <input type="password" name="current" required autocomplete="current-password">
@@ -72,8 +75,11 @@ export function renderSettings() {
             <input type="password" name="next2" required minlength="4" autocomplete="new-password">
           </label>
           <p class="auth-error" id="settings-pw-error" hidden></p>
-          <button type="submit" class="btn-sm">비밀번호 변경</button>
+          <button type="submit" class="btn-sm">비밀번호 변경 + GitHub 등록</button>
         </form>
+        <button type="button" class="btn-sm" id="settings-publish-auth" style="margin-top:8px">
+          지금 GitHub에 계정 게시
+        </button>
       </section>
       <section class="settings-section" id="settings-admin-section" hidden>
         <h2>권한 관리 <small>(마스터관리자)</small></h2>
@@ -86,11 +92,42 @@ export function renderSettings() {
     </div>`;
 
   el.querySelector('#settings-password-form')?.addEventListener('submit', onPasswordSubmit);
+  el.querySelector('#settings-publish-auth')?.addEventListener('click', onPublishAuth);
+  refreshGithubAuthStatus();
 
   if (canManageRoles(user)) {
     const sec = el.querySelector('#settings-admin-section');
     if (sec) sec.hidden = false;
     renderAdminUserList(el.querySelector('#settings-user-list'));
+  }
+}
+
+async function refreshGithubAuthStatus() {
+  const el = document.getElementById('settings-github-auth-status');
+  if (!el) return;
+  try {
+    const status = await getAuthCatalogStatus();
+    const pat = hasGithubToken() ? 'PAT 있음' : 'PAT 없음(우측 GitHub에서 저장 필요)';
+    if (status.remoteAvailable) {
+      el.textContent = `GitHub 등록됨: ${status.remoteUserCount}명 · ${pat}`;
+    } else {
+      el.textContent = `GitHub 미등록 · 로컬 ${status.localUserCount}명 · ${pat}`;
+    }
+  } catch {
+    el.textContent = 'GitHub 상태를 확인할 수 없습니다.';
+  }
+}
+
+async function onPublishAuth() {
+  try {
+    if (!hasGithubToken()) {
+      throw new Error('우측 패널 GitHub에서 PAT(repo)를 먼저 저장하세요.');
+    }
+    const result = await pushUsersToGithub();
+    await showAlert('계정 게시', `GitHub에 ${result.userCount}명 계정을 등록했습니다.`);
+    refreshGithubAuthStatus();
+  } catch (err) {
+    await showAlert('계정 게시 실패', err.message || String(err));
   }
 }
 
@@ -102,11 +139,13 @@ async function onPasswordSubmit(e) {
   const next2 = String(fd.get('next2') || '');
   try {
     if (next !== next2) throw new Error('새 비밀번호 확인이 일치하지 않습니다.');
-    await changePassword(fd.get('current'), next);
+    const result = await changePassword(fd.get('current'), next);
     errEl.hidden = true;
+    const n = result?.github?.userCount ?? '?';
     await showAlert(
       '설정',
-      '비밀번호가 변경되었고 GitHub에 반영되었습니다. 다른 PC·브라우저도 동일 비밀번호로 로그인하세요.'
+      `비밀번호가 변경되었고 GitHub에 계정 ${n}명이 등록되었습니다.<br>`
+      + `<code>data/workspace/auth/users.json</code>`
     );
     e.target.reset();
     renderSettings();

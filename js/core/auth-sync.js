@@ -6,7 +6,7 @@
  */
 
 import * as storage from './storage.js';
-import { putRepoFile } from './github-api.js';
+import { commitRepoFiles } from './github-api.js';
 import { getGithubConfig, hasGithubToken, rawGithubUrl } from './github-config.js';
 import { nowIso } from './utils.js';
 
@@ -120,45 +120,63 @@ export async function syncUsersFromGithub({ force = true } = {}) {
   return applyRemoteUsers(remote);
 }
 
-/** 로컬 전체 사용자 → GitHub */
+/** 로컬 전체 사용자 → GitHub (Trees API 1커밋) + raw 확인 */
 export async function pushUsersToGithub() {
   if (!hasGithubToken()) {
-    throw new Error('GitHub PAT가 필요합니다. 우측 패널에서 토큰을 저장하세요.');
+    throw new Error('GitHub PAT가 필요합니다. 우측 패널 GitHub에서 토큰(repo 권한)을 저장하세요.');
   }
 
   const users = await storage.getAll('users');
-  if (!users.length) return false;
+  if (!users.length) throw new Error('게시할 사용자 계정이 없습니다.');
 
+  const updatedAt = nowIso();
   const payload = {
     format: USERS_FORMAT,
-    updatedAt: nowIso(),
+    updatedAt,
     users: users.map(toAuthRecord),
   };
 
-  await putRepoFile(
-    usersAuthPath(),
-    JSON.stringify(payload, null, 2),
-    'NovelExplor: users auth sync'
-  );
+  const files = [{
+    repoPath: usersAuthPath(),
+    content: JSON.stringify(payload, null, 2),
+  }];
 
-  // 하위 호환: 마스터만 master-auth.json에도 기록
   const master = users.find((u) => u.role === MASTER_ROLE);
   if (master) {
-    await putRepoFile(
-      masterAuthPath(),
-      JSON.stringify({
+    files.push({
+      repoPath: masterAuthPath(),
+      content: JSON.stringify({
         format: 'master-auth/v1',
         usernameHash: master.usernameHash,
         usernameEnc: master.usernameEnc,
         passwordHash: master.passwordHash,
         salt: master.salt,
         mustChangePassword: !!master.mustChangePassword,
-        updatedAt: master.updatedAt || nowIso(),
+        updatedAt: master.updatedAt || updatedAt,
       }, null, 2),
-      'NovelExplor: master auth sync'
+    });
+  }
+
+  await commitRepoFiles(files, `NovelExplor: auth users sync (${users.length})`);
+
+  // Pages/CDN 지연 대비 — API로 존재 확인은 생략하고 raw 재시도
+  let verified = null;
+  for (let i = 0; i < 5; i++) {
+    await sleep(400 * (i + 1));
+    verified = await fetchRemoteUsers();
+    if (verified?.users?.length) break;
+  }
+  if (!verified?.users?.length) {
+    throw new Error(
+      'GitHub 커밋은 요청했으나 users.json 확인에 실패했습니다. '
+      + '잠시 후 새로고침하거나 PAT(repo) 권한을 확인하세요.'
     );
   }
-  return true;
+  return { userCount: verified.users.length, updatedAt };
+}
+
+function sleep(ms) {
+  return new Promise((r) => setTimeout(r, ms));
 }
 
 /** 원격 없고 로컬만 있으면(등록 완료 마스터 포함) GitHub에 게시 */
