@@ -1,12 +1,12 @@
-/** 로그인 · 회원가입 게이트 */
+/** 로그인 · 마스터 전용 게이트 (기기·브라우저 공통) */
 
 import {
-  login,
-  signup,
+  loginMaster,
   isLoggedIn,
   getCurrentUser,
   MASTER_USERNAME,
 } from '../core/auth.js';
+import { getMasterAuthStatus, syncMasterAuthFromGithub } from '../core/auth-sync.js';
 
 let resolveReady = null;
 const readyPromise = new Promise((r) => { resolveReady = r; });
@@ -23,81 +23,68 @@ export function initAuthGate() {
   root.innerHTML = `
     <div class="auth-card">
       <h1 class="auth-brand">NovelExplor</h1>
-      <p class="auth-lead">로그인 후 프로젝트를 이용할 수 있습니다.</p>
-      <div class="auth-tabs">
-        <button type="button" class="auth-tab is-active" data-auth-tab="login">로그인</button>
-        <button type="button" class="auth-tab" data-auth-tab="signup">회원가입</button>
-      </div>
-      <form id="auth-form-login" class="auth-form">
-        <label class="auth-field"><span>아이디</span>
-          <input type="text" name="username" autocomplete="username" required maxlength="32">
+      <p class="auth-lead">마스터 관리자 로그인</p>
+      <form id="auth-form-master" class="auth-form">
+        <label class="auth-field"><span>관리자</span>
+          <input type="text" name="username" value="${MASTER_USERNAME}" readonly class="auth-readonly">
         </label>
         <label class="auth-field"><span>비밀번호</span>
-          <input type="password" name="password" autocomplete="current-password" required>
+          <input type="password" name="password" autocomplete="current-password" required autofocus>
         </label>
-        <p class="auth-hint">마스터 초기 계정: <code>${MASTER_USERNAME}</code> / <code>master</code> (설정에서 변경)</p>
+        <p class="auth-hint" id="auth-master-hint">GitHub에서 마스터 인증 정보를 확인하는 중…</p>
         <p class="auth-error" id="auth-login-error" hidden></p>
         <button type="submit" class="auth-submit">로그인</button>
       </form>
-      <form id="auth-form-signup" class="auth-form" hidden>
-        <label class="auth-field"><span>아이디</span>
-          <input type="text" name="username" autocomplete="username" required maxlength="32"
-            pattern="[a-z0-9_]{3,32}" title="영문 소문자·숫자·밑줄 3~32자">
-        </label>
-        <label class="auth-field"><span>비밀번호</span>
-          <input type="password" name="password" autocomplete="new-password" required minlength="4">
-        </label>
-        <p class="auth-hint">일반 회원은 프로젝트 최대 3개 · 파일 업로드 불가</p>
-        <p class="auth-error" id="auth-signup-error" hidden></p>
-        <button type="submit" class="auth-submit">회원가입</button>
-      </form>
     </div>`;
 
-  root.querySelectorAll('[data-auth-tab]').forEach((btn) => {
-    btn.addEventListener('click', () => {
-      const tab = btn.dataset.authTab;
-      root.querySelectorAll('.auth-tab').forEach((b) => b.classList.toggle('is-active', b === btn));
-      root.querySelector('#auth-form-login').hidden = tab !== 'login';
-      root.querySelector('#auth-form-signup').hidden = tab !== 'signup';
-    });
-  });
+  refreshMasterHint(root);
 
-  root.querySelector('#auth-form-login')?.addEventListener('submit', async (e) => {
+  root.querySelector('#auth-form-master')?.addEventListener('submit', async (e) => {
     e.preventDefault();
     const fd = new FormData(e.target);
     const errEl = root.querySelector('#auth-login-error');
+    const btn = e.target.querySelector('[type="submit"]');
     try {
       errEl.hidden = true;
-      await login(fd.get('username'), fd.get('password'));
+      if (btn) btn.disabled = true;
+      await syncMasterAuthFromGithub();
+      await loginMaster(fd.get('password'));
       hideAuthGate();
       resolveReady?.(getCurrentUser());
     } catch (err) {
       errEl.textContent = err.message || '로그인 실패';
       errEl.hidden = false;
+    } finally {
+      if (btn) btn.disabled = false;
     }
   });
+}
 
-  root.querySelector('#auth-form-signup')?.addEventListener('submit', async (e) => {
-    e.preventDefault();
-    const fd = new FormData(e.target);
-    const errEl = root.querySelector('#auth-signup-error');
-    try {
-      errEl.hidden = true;
-      await signup(fd.get('username'), fd.get('password'));
-      await login(fd.get('username'), fd.get('password'));
-      hideAuthGate();
-      resolveReady?.(getCurrentUser());
-    } catch (err) {
-      errEl.textContent = err.message || '회원가입 실패';
-      errEl.hidden = false;
+async function refreshMasterHint(root) {
+  const hint = root.querySelector('#auth-master-hint');
+  if (!hint) return;
+  try {
+    await syncMasterAuthFromGithub();
+    const status = await getMasterAuthStatus();
+    if (status.registered && !status.mustChangePassword) {
+      hint.textContent = '다른 기기에서 변경한 마스터 비밀번호를 입력하세요.';
+    } else if (status.remoteAvailable) {
+      hint.textContent = '초기 접속입니다. GitHub에 등록된 마스터 비밀번호를 입력하세요.';
+    } else {
+      hint.textContent = `최초 설정: 비밀번호 ${MASTER_USERNAME} (로그인 후 설정에서 변경)`;
     }
-  });
+  } catch {
+    hint.textContent = '마스터 비밀번호를 입력하세요.';
+  }
 }
 
 export function showAuthGate() {
   const root = document.getElementById('auth-gate');
   const app = document.getElementById('app');
-  if (root) root.hidden = false;
+  if (root) {
+    root.hidden = false;
+    refreshMasterHint(root);
+  }
   if (app) app.setAttribute('aria-hidden', 'true');
   document.body.classList.add('auth-locked');
 }

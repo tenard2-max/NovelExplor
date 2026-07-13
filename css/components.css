@@ -2054,6 +2054,21 @@ body.auth-locked #app {
 }
 
 .auth-field input,
+.auth-field select {
+  width: 100%;
+  padding: 8px 10px;
+  border: 1px solid var(--border, #374151);
+  border-radius: 6px;
+  background: var(--surface-2, #1f2937);
+  color: var(--text, #f3f4f6);
+  font-size: 14px;
+}
+
+.auth-field input.auth-readonly {
+  opacity: 0.75;
+  cursor: default;
+  background: var(--surface, #111827);
+}
 .settings-role-select {
   padding: 10px 12px;
   border-radius: 8px;

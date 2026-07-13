@@ -5,7 +5,7 @@
  * - 비밀번호: PBKDF2(SHA-256, 120000회) + salt 해시
  */
 
-import * as storage from './storage.js';
+import { syncMasterAuthFromGithub, pushMasterAuthToGithub, ensureMasterAuthPublished } from './auth-sync.js';
 import { nowIso, uuid } from './utils.js';
 import { emit } from './events.js';
 
@@ -120,10 +120,13 @@ export function roleLabel(role) {
   return ROLE_LABELS[role] || role;
 }
 
-/** 앱 시작 시 마스터 계정 보장 + 세션 복원 */
+/** 앱 시작 시 마스터 계정 보장 + GitHub 인증 동기화 + 세션 복원 */
 export async function initAuth() {
+  // 다른 기기에서 변경한 마스터 비밀번호를 먼저 반영
+  await syncMasterAuthFromGithub();
   await ensureMasterAccount();
   await migrateAllUsers();
+  await ensureMasterAuthPublished();
 
   const session = readSession();
   if (session?.userId) {
@@ -245,6 +248,11 @@ export async function signup(username, password) {
 
 export async function login(username, password) {
   const id = String(username || '').trim().toLowerCase();
+  // 마스터 로그인 직전 GitHub 인증 최신화
+  if (id === MASTER_USERNAME) {
+    await syncMasterAuthFromGithub();
+  }
+
   const user = await findUserByUsername(id);
   if (!user || user.disabled) throw new Error('아이디 또는 비밀번호가 올바르지 않습니다.');
 
@@ -255,6 +263,11 @@ export async function login(username, password) {
   writeSession(currentUser);
   emit('auth:changed', currentUser);
   return currentUser;
+}
+
+/** 마스터 전용 로그인 (게이트용) */
+export async function loginMaster(password) {
+  return login(MASTER_USERNAME, password);
 }
 
 export function logout() {
@@ -286,6 +299,15 @@ export async function changePassword(currentPassword, newPassword) {
   currentUser = await toPublicUser(user);
   writeSession(currentUser);
   emit('auth:changed', currentUser);
+
+  if (user.role === ROLES.MASTER) {
+    try {
+      await pushMasterAuthToGithub();
+    } catch (err) {
+      console.warn('[auth] 마스터 인증 GitHub 반영 실패:', err);
+    }
+  }
+
   return currentUser;
 }
 

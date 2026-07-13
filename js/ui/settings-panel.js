@@ -104,7 +104,7 @@ async function onPasswordSubmit(e) {
     if (next !== next2) throw new Error('새 비밀번호 확인이 일치하지 않습니다.');
     await changePassword(fd.get('current'), next);
     errEl.hidden = true;
-    await showAlert('설정', '비밀번호가 변경되었습니다.');
+    await showAlert('설정', '비밀번호가 변경되었습니다. 다른 PC·브라우저에서도 동일한 비밀번호로 로그인하세요.');
     e.target.reset();
     renderSettings();
   } catch (err) {
