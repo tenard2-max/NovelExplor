@@ -1,7 +1,19 @@
 {
   "format": "novel-explor-users/v1",
-  "updatedAt": "2026-07-13T00:56:10.428Z",
+  "updatedAt": "2026-07-13T01:04:13.015Z",
   "users": [
+    {
+      "id": "user-b41f6892-fe10-431f-84f3-2912f7eed331",
+      "usernameHash": "pVblGwBB8VkMbJo9Y2I9b/mJ/A5n29EcmTBA/W+At0s=",
+      "usernameEnc": "E9aQU+rk4P4T2IxI.4aGkuChvYiV/AJcKRYz0iWcEqUrRmw==",
+      "passwordHash": "J0LiVsd183Ib5EuirkgP7yP64SqJaNPSXfswMC2qGaA=",
+      "salt": "0f44efe4693947dc",
+      "role": "user",
+      "mustChangePassword": false,
+      "disabled": false,
+      "createdAt": "2026-07-13T01:04:13.014Z",
+      "updatedAt": "2026-07-13T01:04:13.014Z"
+    },
     {
       "id": "user-c7f2a335-c25d-40c5-b031-a49b38b946d2",
       "usernameHash": "GLDY9YbHDA9qz3mIx0s2RSjSwbGeHekWCezW/ORIGvc=",
