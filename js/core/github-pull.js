@@ -3,13 +3,13 @@
 import {
   getRepoFileJson,
   getRepoFileText,
-  getRepoFileBase64,
 } from './github-api.js';
 import {
   getGithubConfig,
   snapshotsDir,
   overlaysDir,
 } from './github-config.js';
+import { hydrateManifestFromGithub } from './github-hydrate.js';
 import { restoreFromBackup } from './backup.js';
 import {
   setJsonVersionStamp,
@@ -29,72 +29,7 @@ function esc(str) {
     .replace(/>/g, '&gt;');
 }
 
-/** split manifest → foreshadow-backup 전체 payload */
-export async function hydrateManifestFromGithub(manifest) {
-  const payload = {
-    format: 'foreshadow-backup',
-    version: 1,
-    backupType: 'full',
-    exportedAt: manifest.exportedAt,
-    project: manifest.project,
-    stories: manifest.stories || [],
-    episodes: manifest.episodes || [],
-    worlds: manifest.worlds || [],
-    foreshadows: manifest.foreshadows || [],
-    timeline: manifest.timeline || [],
-    characterRelations: manifest.characterRelations || [],
-    characters: [],
-    files: [],
-    settings: {},
-  };
-
-  for (const ch of manifest.characters || []) {
-    const entry = { ...ch };
-    delete entry.avatarPath;
-    delete entry.imagePaths;
-
-    if (ch.avatarPath) {
-      const b64 = await getRepoFileBase64(ch.avatarPath);
-      entry.avatarDataUrl = `data:image/png;base64,${b64}`;
-    }
-
-    if (Array.isArray(ch.imagePaths) && ch.imagePaths.length) {
-      entry.images = [];
-      for (const p of ch.imagePaths) {
-        const b64 = await getRepoFileBase64(p);
-        entry.images.push(`data:image/png;base64,${b64}`);
-      }
-    }
-
-    payload.characters.push(entry);
-  }
-
-  for (const f of manifest.files || []) {
-    let content = f.content || '';
-    if (f.contentPath) {
-      content = await getRepoFileText(f.contentPath);
-    }
-    const next = { ...f, content };
-    delete next.contentPath;
-    payload.files.push(next);
-  }
-
-  const wp = manifest.settings?.canvasWallpaper;
-  if (wp?.dataPath) {
-    const b64 = await getRepoFileBase64(wp.dataPath);
-    payload.settings = {
-      canvasWallpaper: {
-        ...wp,
-        dataUrl: `data:image/png;base64,${b64}`,
-        dataPath: undefined,
-      },
-    };
-  } else if (manifest.settings) {
-    payload.settings = manifest.settings;
-  }
-
-  return payload;
-}
+export { hydrateManifestFromGithub } from './github-hydrate.js';
 
 async function refreshWorkspaceCacheFromGithub(cfg) {
   try {

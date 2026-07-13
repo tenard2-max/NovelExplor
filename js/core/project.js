@@ -414,6 +414,7 @@ export function countCharactersWithPhotos(characters = []) {
 
 export function characterHasPhoto(ch) {
   if (!ch) return false;
+  if (String(ch.avatarPath || '').trim()) return true;
   const avatar = String(ch.avatarDataUrl || ch.image || ch.avatar || ch.avatarUrl || ch.photo || '').trim();
   if (avatar) return true;
   if (Array.isArray(ch.images) && ch.images.some((u) => String(u || '').trim())) return true;

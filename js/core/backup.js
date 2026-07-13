@@ -14,6 +14,7 @@ import {
 import { writeBackupToSyncFolder, hasSyncDir, initSyncFolder } from './sync-folder.js';
 import { syncProjectToGithub } from './github-sync.js';
 import { hasGithubToken } from './github-config.js';
+import { hydrateSplitBackupJson } from './github-hydrate.js';
 
 const BACKUP_VERSION = 1;
 const LOCAL_KEY_PREFIX = 'fft-backup-';
@@ -219,7 +220,8 @@ export async function restoreFromBackup(jsonText, {
     await project.clearAllProjects();
     clearLocalBackupCache();
   }
-  await project.importProjectJson(jsonText);
+  const hydrated = await hydrateSplitBackupJson(jsonText);
+  await project.importProjectJson(hydrated);
   if (sourceFilename || exportedAt) {
     setJsonVersionFromSource(sourceFilename, exportedAt);
   }

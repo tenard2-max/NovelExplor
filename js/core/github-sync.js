@@ -4,6 +4,7 @@ import { buildBackupPayload, timestampBackupFilename } from './backup.js';
 import {
   commitRepoFiles,
   fetchGithubRateLimit,
+  getRepoFileJson,
   GITHUB_RATE_LIMIT_WARN_THRESHOLD,
 } from './github-api.js';
 import { showDialog } from '../ui/dialog.js';
@@ -164,6 +165,23 @@ export async function syncProjectToGithub({
           reason,
         }, null, 2),
       });
+
+      // character-image 등 uploadOnly는 PNG만 올리고 스냅샷 JSON을 안 갱신해
+      // 다른 브라우저가 avatarPath 없는 manifest를 읽는 문제 방지
+      try {
+        const latest = await getRepoFileJson(`${snapDir}/latest.json`);
+        const snapId = latest?.snapshotId
+          || (latest?.filename ? String(latest.filename).replace(/\.json$/i, '') : '');
+        if (snapId) {
+          const patchManifest = { ...manifest, snapshotId: snapId };
+          files.push({
+            repoPath: `${snapDir}/${snapId}.json`,
+            content: JSON.stringify(patchManifest, null, 2),
+          });
+        }
+      } catch (err) {
+        console.warn('[github-sync] latest 스냅샷 manifest 갱신 스킵:', err);
+      }
     } else {
       files.push({
         repoPath: `${snapDir}/${stamp}.json`,
