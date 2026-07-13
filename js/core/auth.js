@@ -1,12 +1,19 @@
 /** 사용자 인증 · 역할 · 세션
  *
- * 저장소: IndexedDB `users` 스토어 (브라우저 로컬 DB)
- * - 아이디: SHA-256 조회 해시 + AES-GCM 암호문 (평문 미저장)
- * - 비밀번호: PBKDF2(SHA-256, 120000회) + salt 해시
+ * SoT: GitHub data/workspace/auth/users.json
+ * 캐시: IndexedDB `users` (브라우저 로컬)
+ * - 로그인: 로컬 조회 → 없으면 GitHub pull → 재조회
+ * - 가입·비번·역할: 로컬 저장 후 GitHub push
  */
 
 import * as storage from './storage.js';
-import { syncMasterAuthFromGithub, pushMasterAuthToGithub, ensureMasterAuthPublished } from './auth-sync.js';
+import {
+  syncUsersFromGithub,
+  pushUsersToGithub,
+  ensureUsersPublished,
+  fetchRemoteAuthCatalog,
+  applyRemoteUsers,
+} from './auth-sync.js';
 import { nowIso, uuid } from './utils.js';
 import { emit } from './events.js';
 
@@ -87,28 +94,23 @@ export function canManageProjectContent(project, user = currentUser) {
   if (writers.includes(user.id)) return true;
   if (uname && writerNames.includes(uname)) return true;
 
-  // ACL이 명시되어 있으면 owner 폴백 없이 거부 (다른 기기·다른 userId 대비 writerUsernames 사용)
   if (writers.length || writerNames.length) return false;
 
   return Boolean(project.ownerId && project.ownerId === user.id);
 }
 
-/** 관리자(마스터·개발자·소설가)만 프로젝트 저장·생성 가능. 일반 사용자는 열기만 */
 export function canSaveProject(user = currentUser) {
   return canUpload(user);
 }
 
-/** 마스터만 기본 프로젝트 지정 가능 */
 export function canSetDefaultProject(user = currentUser) {
   return user?.role === ROLES.MASTER;
 }
 
-/** 로그인한 사용자는 프로젝트 열기 가능 */
 export function canOpenProject(user = currentUser) {
   return !!user;
 }
 
-/** 마스터만 사용자/관리자 권한 변경 */
 export function canManageRoles(user = currentUser) {
   return user?.role === ROLES.MASTER;
 }
@@ -121,25 +123,38 @@ export function roleLabel(role) {
   return ROLE_LABELS[role] || role;
 }
 
-/** 앱 시작 시 마스터 계정 보장 + GitHub 인증 동기화 + 세션 복원 */
+/**
+ * 앱 시작: GitHub 사용자 목록 → 로컬 캐시 → (원격 없을 때만) 마스터 부트스트랩
+ */
 export async function initAuth() {
-  // 다른 기기에서 변경한 마스터 비밀번호를 먼저 반영
   try {
-    await syncMasterAuthFromGithub();
+    // 브라우저에 사용자 없으면 GitHub에서 무조건 가져옴
+    const local = await storage.getAll('users');
+    await syncUsersFromGithub({ force: !local.length });
   } catch (err) {
-    console.warn('[auth] GitHub 마스터 동기화 실패:', err);
+    console.warn('[auth] GitHub 사용자 동기화 실패:', err);
   }
+
   await ensureMasterAccount();
   await migrateAllUsers();
+
   try {
-    await ensureMasterAuthPublished();
+    await ensureUsersPublished();
   } catch (err) {
-    console.warn('[auth] 마스터 인증 게시 실패:', err);
+    console.warn('[auth] 사용자 GitHub 게시 실패:', err);
   }
 
   const session = readSession();
   if (session?.userId) {
-    const user = await storage.get('users', session.userId);
+    let user = await storage.get('users', session.userId);
+    if (!user) {
+      try {
+        await syncUsersFromGithub({ force: true });
+        user = await storage.get('users', session.userId);
+      } catch {
+        /* ignore */
+      }
+    }
     if (user && !user.disabled) {
       currentUser = await toPublicUser(user);
       emit('auth:changed', currentUser);
@@ -152,6 +167,9 @@ export async function initAuth() {
   return null;
 }
 
+/**
+ * 마스터 보장 — GitHub에 이미 계정이 있으면 로컬 초기 master/master 생성하지 않음
+ */
 async function ensureMasterAccount() {
   const users = await storage.getAll('users');
   let master = users.find((u) => u.role === ROLES.MASTER);
@@ -164,6 +182,17 @@ async function ensureMasterAccount() {
     return master;
   }
 
+  // GitHub에 사용자(마스터)가 있으면 로컬 부트스트랩 금지 — pull 재시도
+  const remote = await fetchRemoteAuthCatalog();
+  if (remote?.users?.length) {
+    await applyRemoteUsers(remote);
+    const after = await storage.getAll('users');
+    master = after.find((u) => u.role === ROLES.MASTER);
+    if (master) return master;
+    throw new Error('GitHub에 사용자 정보가 있으나 마스터 계정을 찾을 수 없습니다.');
+  }
+
+  // 최초 1대: 로컬에만 초기 마스터 생성 (이후 비번 변경·PAT로 GitHub 게시)
   const salt = uuid().replace(/-/g, '').slice(0, 16);
   const passwordHash = await hashPassword('master', salt);
   const usernameHash = await hashUsername(MASTER_USERNAME);
@@ -191,7 +220,6 @@ async function migrateAllUsers() {
   }
 }
 
-/** 구버전 평문 username → 해시+암호문 */
 async function migrateUserRecord(user) {
   if (!user) return user;
   let changed = false;
@@ -219,6 +247,14 @@ async function migrateUserRecord(user) {
   return user;
 }
 
+async function publishUsersQuiet() {
+  try {
+    await pushUsersToGithub();
+  } catch (err) {
+    console.warn('[auth] GitHub 사용자 반영 실패:', err.message || err);
+  }
+}
+
 export async function signup(username, password) {
   const id = String(username || '').trim().toLowerCase();
   const pw = String(password || '');
@@ -231,6 +267,9 @@ export async function signup(username, password) {
   if (id === MASTER_USERNAME) {
     throw new Error('이 아이디는 사용할 수 없습니다.');
   }
+
+  // GitHub에 동일 아이디 있는지 확인
+  await syncUsersFromGithub({ force: true }).catch(() => {});
 
   const existing = await findUserByUsername(id);
   if (existing) throw new Error('이미 사용 중인 아이디입니다.');
@@ -252,21 +291,58 @@ export async function signup(username, password) {
     updatedAt: nowIso(),
   };
   await storage.put('users', record);
+  await publishUsersQuiet();
   return toPublicUser(record);
 }
 
+/**
+ * 로그인: 로컬 조회 → 없으면 GitHub pull → 재조회 → 비밀번호 검증
+ */
 export async function login(username, password) {
   const id = String(username || '').trim().toLowerCase();
-  // 마스터 로그인 직전 GitHub 인증 최신화
-  if (id === MASTER_USERNAME) {
-    await syncMasterAuthFromGithub();
+
+  let user = await findUserByUsername(id);
+  if (!user) {
+    try {
+      await syncUsersFromGithub({ force: true });
+    } catch (err) {
+      console.warn('[auth] 로그인 전 GitHub pull 실패:', err);
+    }
+    user = await findUserByUsername(id);
+  } else {
+    // 로컬에 있어도 GitHub가 더 최신이면 갱신 (다른 기기에서 비번 변경)
+    try {
+      await syncUsersFromGithub({ force: false });
+      user = (await findUserByUsername(id)) || user;
+    } catch {
+      /* 오프라인 등 — 로컬로 계속 */
+    }
   }
 
-  const user = await findUserByUsername(id);
-  if (!user || user.disabled) throw new Error('아이디 또는 비밀번호가 올바르지 않습니다.');
+  if (!user || user.disabled) {
+    throw new Error('아이디 또는 비밀번호가 올바르지 않습니다.');
+  }
 
   const ok = await verifyPassword(password, user.salt, user.passwordHash);
-  if (!ok) throw new Error('아이디 또는 비밀번호가 올바르지 않습니다.');
+  if (!ok) {
+    // 실패 시 강제 pull 후 한 번 더 (원격 비번 반영)
+    try {
+      await syncUsersFromGithub({ force: true });
+      user = await findUserByUsername(id);
+      if (user && !user.disabled) {
+        const ok2 = await verifyPassword(password, user.salt, user.passwordHash);
+        if (ok2) {
+          currentUser = await toPublicUser(user);
+          writeSession(currentUser);
+          emit('auth:changed', currentUser);
+          return currentUser;
+        }
+      }
+    } catch {
+      /* ignore */
+    }
+    throw new Error('아이디 또는 비밀번호가 올바르지 않습니다.');
+  }
 
   currentUser = await toPublicUser(user);
   writeSession(currentUser);
@@ -274,7 +350,6 @@ export async function login(username, password) {
   return currentUser;
 }
 
-/** 마스터 전용 로그인 (게이트용) */
 export async function loginMaster(password) {
   return login(MASTER_USERNAME, password);
 }
@@ -296,7 +371,6 @@ export async function changePassword(currentPassword, newPassword) {
   const ok = await verifyPassword(currentPassword, user.salt, user.passwordHash);
   if (!ok) throw new Error('현재 비밀번호가 올바르지 않습니다.');
 
-  // salt 변경 시 아이디 암호문도 재암호화
   const plainId = await decryptUsername(user.usernameEnc, user.salt);
   const salt = uuid().replace(/-/g, '').slice(0, 16);
   user.passwordHash = await hashPassword(newPassword, salt);
@@ -309,18 +383,25 @@ export async function changePassword(currentPassword, newPassword) {
   writeSession(currentUser);
   emit('auth:changed', currentUser);
 
-  if (user.role === ROLES.MASTER) {
-    try {
-      await pushMasterAuthToGithub();
-    } catch (err) {
-      console.warn('[auth] 마스터 인증 GitHub 반영 실패:', err);
-    }
+  try {
+    await pushUsersToGithub();
+  } catch (err) {
+    console.warn('[auth] 비밀번호 변경 GitHub 반영 실패:', err);
+    throw new Error(
+      `비밀번호는 이 브라우저에 저장되었습니다. GitHub 반영 실패: ${err.message || err}`
+    );
   }
 
   return currentUser;
 }
 
 export async function listUsers() {
+  // 목록은 GitHub 최신 반영 후
+  try {
+    await syncUsersFromGithub({ force: false });
+  } catch {
+    /* ignore */
+  }
   const users = await storage.getAll('users');
   const out = [];
   for (const u of users) {
@@ -329,7 +410,6 @@ export async function listUsers() {
   return out.sort((a, b) => a.username.localeCompare(b.username));
 }
 
-/** 마스터만: 역할 변경 */
 export async function setUserRole(userId, role) {
   if (!canManageRoles()) throw new Error('마스터관리자만 권한을 변경할 수 있습니다.');
   if (!Object.values(ROLES).includes(role)) throw new Error('잘못된 역할입니다.');
@@ -349,6 +429,8 @@ export async function setUserRole(userId, role) {
   user.role = role;
   user.updatedAt = nowIso();
   await storage.put('users', user);
+
+  await publishUsersQuiet();
 
   if (user.id === currentUser.id) {
     currentUser = await toPublicUser(user);
@@ -394,7 +476,6 @@ function readSession() {
 }
 
 function writeSession(user) {
-  // 세션에는 userId·역할만 — 아이디 평문은 메모리(currentUser)에만
   localStorage.setItem(SESSION_KEY, JSON.stringify({
     userId: user.id,
     role: user.role,
@@ -406,7 +487,6 @@ function clearSession() {
   localStorage.removeItem(SESSION_KEY);
 }
 
-/** 아이디 조회용 결정적 해시 (DB에 평문 아이디 없음) */
 async function hashUsername(username) {
   const enc = new TextEncoder();
   const data = enc.encode(`${APP_PEPPER}|id|${String(username).trim().toLowerCase()}`);

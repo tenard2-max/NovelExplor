@@ -15,10 +15,17 @@
 ## 운영 정책 (적용)
 
 ```
-GitHub = SoT (snapshots + overlays + workspace XML)
+GitHub = SoT (snapshots + overlays + workspace XML + auth/users.json)
 브라우저 IndexedDB = 실행·캐시
 화면 = XML(Pages) + IndexedDB 병합
 ```
+
+### 인증 (관리자·사용자)
+
+- **SoT**: `data/workspace/auth/users.json` (해시만 저장, 평문 비밀번호 없음)
+- **로그인**: 브라우저 IndexedDB 조회 → 없으면 GitHub pull → 재조회
+- **가입·비번·역할 변경**: 로컬 저장 후 GitHub push (PAT 필요)
+- GitHub에 계정이 있으면 로컬 초기 `master/master` 부트스트랩을 만들지 않음
 
 1. **Push** — 저장·적용·업로드 시 DB 기준으로:
    - `data/workspace/snapshots/YYYYMMDDHHMMSS.json` (분리 manifest)
