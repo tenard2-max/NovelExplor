@@ -1,6 +1,6 @@
 {
   "format": "novel-explor-users/v1",
-  "updatedAt": "2026-07-13T01:04:13.015Z",
+  "updatedAt": "2026-07-13T01:18:08.120Z",
   "users": [
     {
       "id": "user-b41f6892-fe10-431f-84f3-2912f7eed331",
@@ -13,6 +13,18 @@
       "disabled": false,
       "createdAt": "2026-07-13T01:04:13.014Z",
       "updatedAt": "2026-07-13T01:04:13.014Z"
+    },
+    {
+      "id": "user-b5e111dc-8b2d-4a16-ae07-5075843c5ac2",
+      "usernameHash": "jyNeKaucbTw74fi5jU6xY3e4XSKyMHvVnDwfPTU8DVg=",
+      "usernameEnc": "4P91KmFRyc5oxNms.BNVsSPq5SVVCR11ELz9Jjw+uf9cotpM=",
+      "passwordHash": "zvtnGEjR9v2vtamsswOJd4Q1YqS46uTTznq7R4ObvUQ=",
+      "salt": "685d3920dbd64045",
+      "role": "user",
+      "mustChangePassword": false,
+      "disabled": false,
+      "createdAt": "2026-07-13T01:18:08.119Z",
+      "updatedAt": "2026-07-13T01:18:08.119Z"
     },
     {
       "id": "user-c7f2a335-c25d-40c5-b031-a49b38b946d2",
