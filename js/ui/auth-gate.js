@@ -52,7 +52,7 @@ export function initAuthGate() {
         <label class="auth-field"><span>비밀번호</span>
           <input type="password" name="password" autocomplete="new-password" required minlength="4">
         </label>
-        <p class="auth-hint">가입 정보는 GitHub에 저장됩니다 (PAT 있는 환경에서 반영).</p>
+        <p class="auth-hint">가입은 로컬에 먼저 저장되고, PAT가 있으면 GitHub에도 커밋을 시도합니다.</p>
         <p class="auth-error" id="auth-signup-error" hidden></p>
         <button type="submit" class="auth-submit">회원가입</button>
       </form>

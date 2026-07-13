@@ -142,7 +142,11 @@ export async function syncUsersFromGithub() {
   };
 }
 
-/** 로컬 전체 → GitHub (1커밋) + Contents API로 즉시 검증 */
+/**
+ * 로컬 전체 → GitHub Trees 1커밋.
+ * 성공/실패만 의미함. 인원수 재검증 없음.
+ * (업무 흐름에서 직접 throw로 막지 말고 tryPushUsersToGithub 사용)
+ */
 export async function pushUsersToGithub() {
   if (!hasGithubToken()) {
     throw new Error('GitHub PAT가 필요합니다. 우측 패널 GitHub에서 토큰(repo 권한)을 저장하세요.');
@@ -179,10 +183,32 @@ export async function pushUsersToGithub() {
     });
   }
 
+  // commitRepoFiles 성공 = 커밋 성공 (여기까지만 확인)
   await commitRepoFiles(files, `NovelExplor: auth users sync (${users.length})`);
+  return { userCount: users.length, updatedAt, committed: true };
+}
 
-  // Trees 커밋 성공 = 게시 성공 (인원수·재검증 없음)
-  return { userCount: users.length, updatedAt };
+/**
+ * 로컬 저장 후 GitHub 게시는 별도 시도.
+ * 커밋 성공/실패는 반환값에만 담고, 호출부 업무(가입·비번·등급·목록)를 막지 않음.
+ * @returns {Promise<{ ok: boolean, userCount?: number, skipped?: boolean, error?: string, committed?: boolean }>}
+ */
+export async function tryPushUsersToGithub() {
+  if (!hasGithubToken()) {
+    return { ok: false, skipped: true, error: 'PAT 없음 — 로컬만 저장됨' };
+  }
+  try {
+    const result = await pushUsersToGithub();
+    return {
+      ok: true,
+      committed: true,
+      userCount: result.userCount,
+      updatedAt: result.updatedAt,
+    };
+  } catch (err) {
+    console.warn('[auth-sync] GitHub 게시 실패(업무는 계속):', err);
+    return { ok: false, committed: false, error: err?.message || String(err) };
+  }
 }
 
 /**
@@ -207,12 +233,8 @@ export async function ensureUsersPublished() {
 
   if (!needsPush) return false;
 
-  try {
-    return await pushUsersToGithub();
-  } catch (err) {
-    console.warn('[auth-sync] users publish 실패:', err);
-    return false;
-  }
+  const result = await tryPushUsersToGithub();
+  return result.ok ? result : false;
 }
 
 /**
@@ -232,11 +254,7 @@ export async function refreshMergedUserCatalog() {
     const remote = await fetchRemoteAuthCatalog();
     const remoteCount = remote?.users?.length || 0;
     if (merged.length > remoteCount) {
-      try {
-        published = await pushUsersToGithub();
-      } catch (err) {
-        console.warn('[auth-sync] 로컬 초과분 게시 실패:', err);
-      }
+      published = await tryPushUsersToGithub();
     }
   }
 

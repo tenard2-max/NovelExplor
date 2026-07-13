@@ -9,13 +9,12 @@
 import * as storage from './storage.js';
 import {
   syncUsersFromGithub,
-  pushUsersToGithub,
+  tryPushUsersToGithub,
   ensureUsersPublished,
   fetchRemoteAuthCatalog,
   applyRemoteUsers,
   refreshMergedUserCatalog,
 } from './auth-sync.js';
-import { hasGithubToken } from './github-config.js';
 import { nowIso, uuid } from './utils.js';
 import { emit } from './events.js';
 
@@ -260,11 +259,6 @@ export async function signup(username, password) {
   if (id === MASTER_USERNAME) {
     throw new Error('이 아이디는 사용할 수 없습니다.');
   }
-  if (!hasGithubToken()) {
-    throw new Error(
-      '회원가입은 GitHub에 등록됩니다. 우측 패널에서 PAT(repo)를 먼저 저장하세요.'
-    );
-  }
 
   await syncUsersFromGithub().catch(() => {});
 
@@ -288,8 +282,9 @@ export async function signup(username, password) {
     updatedAt: nowIso(),
   };
   await storage.put('users', record);
-  await pushUsersToGithub();
-  return toPublicUser(record);
+  // 로컬 가입 성공이 본업. GitHub 커밋은 별도 시도(실패해도 가입 유지)
+  const github = await tryPushUsersToGithub();
+  return { user: await toPublicUser(record), github };
 }
 
 /**
@@ -360,12 +355,6 @@ export async function changePassword(currentPassword, newPassword) {
   if (String(newPassword || '').length < 4) {
     throw new Error('새 비밀번호는 4자 이상이어야 합니다.');
   }
-  if (!hasGithubToken()) {
-    throw new Error(
-      'GitHub PAT가 없습니다. 우측 패널 GitHub에서 토큰(repo)을 먼저 저장한 뒤 '
-      + '비밀번호를 변경해야 계정 정보가 GitHub에 등록됩니다.'
-    );
-  }
 
   const user = await storage.get('users', currentUser.id);
   if (!user) throw new Error('사용자를 찾을 수 없습니다.');
@@ -385,8 +374,9 @@ export async function changePassword(currentPassword, newPassword) {
   writeSession(currentUser);
   emit('auth:changed', currentUser);
 
-  const result = await pushUsersToGithub();
-  return { user: currentUser, github: result };
+  // 로컬 변경이 본업. GitHub 커밋은 별도 시도
+  const github = await tryPushUsersToGithub();
+  return { user: currentUser, github };
 }
 
 export async function listUsers() {
@@ -407,9 +397,6 @@ export async function listUsers() {
 export async function setUserRole(userId, role) {
   if (!canManageRoles()) throw new Error('마스터관리자만 권한을 변경할 수 있습니다.');
   if (!Object.values(ROLES).includes(role)) throw new Error('잘못된 역할입니다.');
-  if (!hasGithubToken()) {
-    throw new Error('등급 변경은 GitHub에도 반영됩니다. 우측 패널에서 PAT를 저장하세요.');
-  }
 
   const user = await storage.get('users', userId);
   if (!user) throw new Error('사용자를 찾을 수 없습니다.');
@@ -427,14 +414,14 @@ export async function setUserRole(userId, role) {
   user.updatedAt = nowIso();
   await storage.put('users', user);
 
-  await pushUsersToGithub();
+  const github = await tryPushUsersToGithub();
 
   if (user.id === currentUser.id) {
     currentUser = await toPublicUser(user);
     writeSession(currentUser);
     emit('auth:changed', currentUser);
   }
-  return toPublicUser(user);
+  return { user: await toPublicUser(user), github };
 }
 
 async function findUserByUsername(username) {

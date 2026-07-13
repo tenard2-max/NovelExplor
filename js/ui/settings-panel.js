@@ -141,12 +141,11 @@ async function onPasswordSubmit(e) {
     if (next !== next2) throw new Error('새 비밀번호 확인이 일치하지 않습니다.');
     const result = await changePassword(fd.get('current'), next);
     errEl.hidden = true;
-    const n = result?.github?.userCount ?? '?';
-    await showAlert(
-      '설정',
-      `비밀번호가 변경되었고 GitHub에 계정 ${n}명이 등록되었습니다.<br>`
-      + `<code>data/workspace/auth/users.json</code>`
-    );
+    const gh = result?.github;
+    const ghNote = gh?.ok
+      ? `GitHub 커밋 성공 (${gh.userCount}명).`
+      : `로컬 저장 완료. GitHub: ${gh?.error || '미반영'} (업무는 제한하지 않음)`;
+    await showAlert('설정', `비밀번호가 변경되었습니다.<br>${ghNote}`);
     e.target.reset();
     renderSettings();
   } catch (err) {
@@ -182,8 +181,12 @@ async function renderAdminUserList(mount) {
     const select = row.querySelector('.settings-role-select');
     select?.addEventListener('change', async () => {
       try {
-        await setUserRole(row.dataset.userId, select.value);
-        await showAlert('권한', '역할이 변경되었고 GitHub에 반영되었습니다.');
+        const result = await setUserRole(row.dataset.userId, select.value);
+        const gh = result?.github;
+        const ghNote = gh?.ok
+          ? 'GitHub 커밋 성공.'
+          : `로컬 반영됨. GitHub: ${gh?.error || '미반영'}`;
+        await showAlert('권한', `역할이 변경되었습니다.<br>${ghNote}`);
         renderAdminUserList(mount);
         refreshGithubAuthStatus();
         updateUserBadge();
