@@ -1,9 +1,22 @@
-/** 리더 TTS — Web Speech API + 캐릭터 등장 시 배경 전환 + 문단 하이라이트 */
+/** 리더 TTS — Web Speech API + Voice 선택 + 캐릭터 배경 + 문단 하이라이트 */
 
 import { on } from '../core/events.js';
 import * as project from '../core/project.js';
 import { getCurrentStoryMarkdownSync, tagReaderBlocksForTts } from './reader.js';
 import { setTtsWallpaper } from './canvas-wallpaper.js';
+import {
+  initTtsVoices,
+  applySelectedVoice,
+  selectVoiceByUri,
+  formatVoiceLabel,
+  getVoiceList,
+  getSelectedVoice,
+  onVoicesChanged,
+  refreshVoices,
+  getTtsDebugInfo,
+  isSpeechSupported,
+  isPreferredTtsBrowser,
+} from './tts-voices.js';
 
 const synth = typeof window !== 'undefined' ? window.speechSynthesis : null;
 const TTS_MAX_CHUNK = 200;
@@ -17,11 +30,25 @@ let chunks = [];
 let nameEntries = [];
 let statusTimer = null;
 let statusRestore = '';
+let uiBound = false;
 
 /** @type {SpeechSynthesisUtterance | null} */
 let currentUtterance = null;
 
 export function initReaderTts() {
+  if (uiBound) return;
+  uiBound = true;
+
+  initTtsVoices();
+  bindVoiceUi();
+  renderVoiceSelect();
+  renderTtsDebug();
+
+  onVoicesChanged(() => {
+    renderVoiceSelect();
+    renderTtsDebug();
+  });
+
   const playBtn = document.querySelector('[data-action="tts-play"]');
   const testBtn = document.querySelector('[data-action="tts-test"]');
   const stopBtn = document.querySelector('[data-action="tts-stop"]');
@@ -47,15 +74,128 @@ export function initReaderTts() {
     nameEntries = [];
     stop({ silent: true });
   });
+
+  updateButtons();
+  maybeShowBrowserHint();
 }
 
-/** Edge에서 동작 확인된 패턴과 동일한 utterance 생성 */
+function bindVoiceUi() {
+  const select = document.getElementById('tts-voice-select');
+  const refreshBtn = document.querySelector('[data-action="tts-voice-refresh"]');
+  const debugToggle = document.querySelector('[data-action="tts-debug-toggle"]');
+
+  select?.addEventListener('change', () => {
+    selectVoiceByUri(select.value);
+    renderTtsDebug();
+    const v = getSelectedVoice();
+    if (v) showStatus(`음성: ${formatVoiceLabel(v)}`);
+  });
+
+  refreshBtn?.addEventListener('click', () => {
+    refreshVoices();
+    renderVoiceSelect();
+    renderTtsDebug();
+    showStatus(`Voice ${getVoiceList().length}개 새로고침`);
+  });
+
+  debugToggle?.addEventListener('click', () => {
+    const panel = document.getElementById('tts-debug-panel');
+    if (!panel) return;
+    panel.hidden = !panel.hidden;
+    if (!panel.hidden) renderTtsDebug();
+  });
+}
+
+function renderVoiceSelect() {
+  const select = document.getElementById('tts-voice-select');
+  if (!select) return;
+
+  const list = getVoiceList();
+  const selected = getSelectedVoice();
+  const prev = select.value;
+
+  select.innerHTML = '';
+
+  if (!isSpeechSupported()) {
+    const opt = document.createElement('option');
+    opt.value = '';
+    opt.textContent = 'TTS 미지원 브라우저';
+    select.appendChild(opt);
+    select.disabled = true;
+    return;
+  }
+
+  if (!list.length) {
+    const opt = document.createElement('option');
+    opt.value = '';
+    opt.textContent = 'Voice 로딩 중… (새로고침 가능)';
+    select.appendChild(opt);
+    select.disabled = false;
+    return;
+  }
+
+  select.disabled = false;
+  for (const v of list) {
+    const opt = document.createElement('option');
+    opt.value = v.voiceURI || `${v.name}||${v.lang}`;
+    opt.textContent = formatVoiceLabel(v);
+    select.appendChild(opt);
+  }
+
+  const want = selected
+    ? (selected.voiceURI || `${selected.name}||${selected.lang}`)
+    : prev;
+  if (want && [...select.options].some((o) => o.value === want)) {
+    select.value = want;
+  } else if (select.options.length) {
+    select.selectedIndex = 0;
+    selectVoiceByUri(select.value);
+  }
+}
+
+function renderTtsDebug() {
+  const panel = document.getElementById('tts-debug-panel');
+  if (!panel) return;
+
+  const info = getTtsDebugInfo();
+  const lines = info.voices.map((v) =>
+    `${v.index} ${v.name} ${v.lang} ${v.default} ${v.localService}`
+  );
+
+  panel.innerHTML = `
+    <div class="tts-debug-meta"><strong>Browser :</strong> ${esc(info.browser)}</div>
+    <div class="tts-debug-meta"><strong>Preferred (Chrome/Edge) :</strong> ${info.preferredBrowser}</div>
+    <div class="tts-debug-meta"><strong>Voice Count :</strong> ${info.voiceCount}</div>
+    <div class="tts-debug-meta"><strong>Selected :</strong> ${
+      info.selected
+        ? esc(`${info.selected.name} (${info.selected.lang})`)
+        : '—'
+    }</div>
+    <pre class="tts-debug-list" aria-label="Voice List">${esc(
+      ['번호 이름 언어 Default LocalService', ...lines].join('\n') || '(empty)'
+    )}</pre>`;
+}
+
+function maybeShowBrowserHint() {
+  if (isSpeechSupported() && isPreferredTtsBrowser()) return;
+  const hint = document.getElementById('tts-browser-hint');
+  if (!hint) return;
+  hint.hidden = false;
+  if (!isSpeechSupported()) {
+    hint.textContent = '이 브라우저는 Web Speech TTS를 지원하지 않습니다.';
+  } else {
+    hint.textContent = '권장: Chrome 또는 Edge. 다른 브라우저는 Voice 목록이 제한될 수 있습니다.';
+  }
+}
+
+/** Edge/Chrome 동작 패턴 + 선택 Voice 적용 */
 function createUtterance(text) {
   const utterance = new SpeechSynthesisUtterance(text);
-  utterance.lang = 'ko-KR';
   utterance.rate = 1.0;
   utterance.pitch = 1.0;
   utterance.volume = 1.0;
+  applySelectedVoice(utterance);
+  if (!utterance.lang) utterance.lang = 'ko-KR';
   return utterance;
 }
 
@@ -71,7 +211,8 @@ function speakTestVoice() {
 
   const utterance = createUtterance(TEST_VOICE_TEXT);
   speechSynthesis.speak(utterance);
-  showStatus('테스트 음성 재생 중…');
+  const v = getSelectedVoice();
+  showStatus(v ? `테스트: ${formatVoiceLabel(v)}` : '테스트 음성 재생 중…');
 }
 
 function start() {
@@ -111,13 +252,11 @@ function start() {
   clearHighlight();
   updateButtons();
 
-  // 테스트 음성과 동일: 클릭 핸들러 안에서 동기 speak (await 없음)
   speakNextChunk();
 }
 
-/** 이전 재생만 정지 — 새 chunks는 비우지 않음 */
 function stopPreviousPlayback() {
-  if (synth.speaking || synth.pending) {
+  if (synth?.speaking || synth?.pending) {
     synth.cancel();
   }
   playing = false;
@@ -138,8 +277,7 @@ function speakNextChunk() {
     return;
   }
 
-  const chunk = chunks[chunkIndex];
-  speakChunk(chunk);
+  speakChunk(chunks[chunkIndex]);
 }
 
 function speakChunk(chunk) {
@@ -152,7 +290,6 @@ function speakChunk(chunk) {
     return;
   }
 
-  // speakTestVoice()와 동일한 utterance 생성·speak 패턴
   const utterance = createUtterance(text);
   currentUtterance = utterance;
 
@@ -238,11 +375,8 @@ function stop(opts = {}) {
 
 function togglePause() {
   if (!playing || !synth) return;
-  if (paused) {
-    resume();
-  } else {
-    pause();
-  }
+  if (paused) resume();
+  else pause();
 }
 
 function pause() {
@@ -283,9 +417,7 @@ function updateButtons() {
     playBtn.textContent = playing && paused ? '▶ 재개' : '🔊 재생';
     playBtn.classList.toggle('is-active', isActive && !paused);
   }
-  if (stopBtn) {
-    stopBtn.disabled = !isActive;
-  }
+  if (stopBtn) stopBtn.disabled = !isActive;
   if (pauseBtn) {
     pauseBtn.disabled = !isActive || paused;
     pauseBtn.hidden = !isActive;
@@ -312,7 +444,14 @@ function showStatus(message, opts = {}) {
   }, duration);
 }
 
-/** DOM에 표시된 블록(p/h1)과 동일한 순서·인덱스로 TTS 구간 생성 */
+function esc(s) {
+  return String(s ?? '')
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;');
+}
+
 export function buildTtsChunksFromReaderDom(inner) {
   if (!inner) return [];
 

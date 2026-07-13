@@ -165,6 +165,62 @@
   color: var(--accent, #60a5fa);
 }
 
+.tts-voice-field {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  color: var(--text-muted, #94a3b8);
+}
+
+.tts-voice-label {
+  white-space: nowrap;
+}
+
+.tts-voice-select {
+  max-width: min(280px, 42vw);
+  min-width: 140px;
+  padding: 4px 8px;
+  border-radius: 6px;
+  border: 1px solid var(--border, #334155);
+  background: var(--surface-2, #1e293b);
+  color: var(--text, #f8fafc);
+  font-size: 12px;
+}
+
+.tts-browser-hint {
+  display: inline-block;
+  font-size: 11px;
+  color: #fbbf24;
+  max-width: 220px;
+}
+
+.tts-debug-panel {
+  margin: 0 12px 8px;
+  padding: 10px 12px;
+  border-radius: 8px;
+  border: 1px solid #334155;
+  background: #020617;
+  color: #cbd5e1;
+  font-size: 11px;
+  line-height: 1.45;
+}
+
+.tts-debug-meta {
+  margin-bottom: 4px;
+  word-break: break-all;
+}
+
+.tts-debug-list {
+  margin: 8px 0 0;
+  max-height: 180px;
+  overflow: auto;
+  white-space: pre;
+  font-family: ui-monospace, Consolas, monospace;
+  font-size: 11px;
+  color: #e2e8f0;
+}
+
 .editor-filename {
   flex: 1;
   font-size: 13px;

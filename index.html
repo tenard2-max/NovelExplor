@@ -21,7 +21,7 @@
           <small id="nav-project-name">프로젝트 없음</small>
           <small id="nav-project-access" class="nav-project-access" hidden>(열람만가능)</small>
           <small id="nav-user-badge" class="nav-user-badge">미로그인</small>
-          <small id="nav-app-version" class="nav-app-version">APP: 2026-07-13 10:17:00</small>
+          <small id="nav-app-version" class="nav-app-version">APP: 2026-07-13 10:46:36</small>
           <small id="nav-json-version" class="nav-json-version">JSON: 20260711181754_유진이의_모험2(완결)</small>
           <small id="nav-upload-version" class="nav-upload-version">UPLOAD: 20260711215542</small>
           <small id="nav-sync-progress" class="nav-sync-progress" hidden></small>
@@ -212,15 +212,23 @@
               <button class="btn-sm btn-danger" data-action="delete-story" title="현재 소설 삭제">삭제</button>
               <button class="btn-sm btn-danger" data-action="delete-all-stories" title="등록된 소설 전체 삭제">전체 삭제</button>
               <span class="reader-nav-divider" aria-hidden="true"></span>
+              <label class="tts-voice-field" title="TTS Voice">
+                <span class="tts-voice-label">Voice</span>
+                <select id="tts-voice-select" class="tts-voice-select" aria-label="TTS Voice 선택"></select>
+              </label>
+              <button class="btn-sm" data-action="tts-voice-refresh" title="Voice 목록 새로고침">⟳</button>
               <button class="btn-sm" data-action="tts-play" title="현재 소설 음성 읽기">🔊 재생</button>
               <button class="btn-sm" data-action="tts-test" title="TTS 테스트 음성">테스트 음성</button>
               <button class="btn-sm" data-action="tts-pause" title="일시정지" hidden disabled>⏸ 일시정지</button>
               <button class="btn-sm" data-action="tts-stop" title="읽기 정지" disabled>⏹ 정지</button>
+              <button class="btn-sm" data-action="tts-debug-toggle" title="TTS Debug">Debug</button>
               <span id="reader-tts-status" class="reader-tts-status" aria-live="polite"></span>
+              <span id="tts-browser-hint" class="tts-browser-hint" hidden></span>
               <label class="reader-option">
                 <input type="range" id="reader-font-size" min="14" max="24" value="17"> 글꼴
               </label>
             </div>
+            <div id="tts-debug-panel" class="tts-debug-panel" hidden></div>
             <article id="reader-content" class="reader-content"></article>
           </div>
 
