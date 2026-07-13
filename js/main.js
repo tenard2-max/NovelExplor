@@ -76,7 +76,11 @@ async function boot() {
     console.warn('[NovelExplor] workspace.xml 없음/실패 — IndexedDB 모드만 사용:', err.message);
   }
 
-  await initAuth();
+  try {
+    await initAuth();
+  } catch (err) {
+    console.error('[NovelExplor] 인증 초기화 실패:', err);
+  }
   if (!isLoggedIn()) {
     showAuthGate();
     await whenAuthenticated();

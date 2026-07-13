@@ -5,6 +5,7 @@
  * - 비밀번호: PBKDF2(SHA-256, 120000회) + salt 해시
  */
 
+import * as storage from './storage.js';
 import { syncMasterAuthFromGithub, pushMasterAuthToGithub, ensureMasterAuthPublished } from './auth-sync.js';
 import { nowIso, uuid } from './utils.js';
 import { emit } from './events.js';
@@ -123,10 +124,18 @@ export function roleLabel(role) {
 /** 앱 시작 시 마스터 계정 보장 + GitHub 인증 동기화 + 세션 복원 */
 export async function initAuth() {
   // 다른 기기에서 변경한 마스터 비밀번호를 먼저 반영
-  await syncMasterAuthFromGithub();
+  try {
+    await syncMasterAuthFromGithub();
+  } catch (err) {
+    console.warn('[auth] GitHub 마스터 동기화 실패:', err);
+  }
   await ensureMasterAccount();
   await migrateAllUsers();
-  await ensureMasterAuthPublished();
+  try {
+    await ensureMasterAuthPublished();
+  } catch (err) {
+    console.warn('[auth] 마스터 인증 게시 실패:', err);
+  }
 
   const session = readSession();
   if (session?.userId) {
