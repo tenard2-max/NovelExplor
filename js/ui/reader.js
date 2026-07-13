@@ -11,6 +11,7 @@ const LIST_VISIBLE_ROWS = 10;
 /** @type {Array<{ id: string, number: number, title: string, src: string, content?: string, source: 'xml'|'idb' }>} */
 let catalog = [];
 let currentStoryNum = null;
+let isEditingContent = false;
 
 export function initReader() {
   const select = document.getElementById('reader-episode-select');
@@ -32,7 +33,9 @@ export function initReader() {
   });
 
   fontSlider?.addEventListener('input', () => {
-    if (content) content.style.fontSize = `${fontSlider.value}px`;
+    const size = `${fontSlider.value}px`;
+    if (content) content.style.fontSize = size;
+    document.getElementById('reader-edit-textarea')?.style.setProperty('font-size', size);
   });
 
   document.querySelector('[data-action="prev-episode"]')?.addEventListener('click', () => {
@@ -51,6 +54,18 @@ export function initReader() {
 
   document.querySelector('[data-action="delete-all-stories"]')?.addEventListener('click', () => {
     deleteAllStories();
+  });
+
+  document.querySelector('[data-action="edit-story-content"]')?.addEventListener('click', () => {
+    startContentEdit();
+  });
+
+  document.querySelector('[data-action="save-story-content"]')?.addEventListener('click', () => {
+    saveContentEdit();
+  });
+
+  document.querySelector('[data-action="cancel-story-content"]')?.addEventListener('click', () => {
+    cancelContentEdit();
   });
 }
 
@@ -86,6 +101,9 @@ function initScrollableSelect(select) {
 export async function refreshReader() {
   const select = document.getElementById('reader-episode-select');
   const content = document.getElementById('reader-content');
+
+  isEditingContent = false;
+  content?.classList.remove('is-editing');
 
   catalog = await buildCatalog();
   populateSelect(select, catalog);
@@ -140,9 +158,11 @@ function updateReaderNavState(stories) {
   const current = stories.find((s) => s.number === currentStoryNum);
   const allowDelete = project.canManageCurrentProject();
   const canDelete = allowDelete && hasStories && (current?.source === 'idb' || current?.source === 'overlay');
+  const canEdit = allowDelete && hasStories && current?.source === 'idb' && !isEditingContent;
 
-  document.querySelector('[data-action="prev-episode"]')?.toggleAttribute('disabled', !hasStories);
-  document.querySelector('[data-action="next-episode"]')?.toggleAttribute('disabled', !hasStories);
+  document.querySelector('[data-action="prev-episode"]')?.toggleAttribute('disabled', !hasStories || isEditingContent);
+  document.querySelector('[data-action="next-episode"]')?.toggleAttribute('disabled', !hasStories || isEditingContent);
+  document.getElementById('reader-episode-select')?.toggleAttribute('disabled', !hasStories || isEditingContent);
 
   const delBtn = document.querySelector('[data-action="delete-story"]');
   const delAllBtn = document.querySelector('[data-action="delete-all-stories"]');
@@ -157,11 +177,26 @@ function updateReaderNavState(stories) {
       !allowDelete || !stories.some((s) => s.source === 'idb' || s.source === 'overlay')
     );
   }
+
+  const editBtn = document.querySelector('[data-action="edit-story-content"]');
+  const saveBtn = document.querySelector('[data-action="save-story-content"]');
+  const cancelBtn = document.querySelector('[data-action="cancel-story-content"]');
+  if (editBtn) {
+    editBtn.hidden = !allowDelete || isEditingContent;
+    editBtn.toggleAttribute('disabled', !canEdit);
+  }
+  if (saveBtn) saveBtn.hidden = !isEditingContent;
+  if (cancelBtn) cancelBtn.hidden = !isEditingContent;
 }
 
 export async function showStory(num, contentEl, selectEl) {
   const entry = catalog.find((s) => s.number === num);
   if (!entry || !contentEl) return;
+
+  if (isEditingContent && num !== currentStoryNum) {
+    isEditingContent = false;
+    contentEl.classList.remove('is-editing');
+  }
 
   currentStoryNum = num;
   emit('reader:story-changed', { number: num });
@@ -207,6 +242,72 @@ export async function getCurrentStoryMarkdown() {
   const entry = catalog.find((s) => s.number === currentStoryNum);
   if (!entry) return '';
   return resolveStoryContent(entry);
+}
+
+async function startContentEdit() {
+  if (!project.canManageCurrentProject()) {
+    alert('이 프로젝트의 소설은 소유 관리자 또는 마스터만 수정할 수 있습니다.');
+    return;
+  }
+  const entry = catalog.find((s) => s.number === currentStoryNum);
+  if (!entry || entry.source !== 'idb') {
+    await showDialog({
+      title: '수정 불가',
+      bodyHtml: '<p>IndexedDB에 등록된 소설만 앱에서 수정할 수 있습니다.</p>',
+      onConfirm: null,
+    });
+    return;
+  }
+
+  const contentEl = document.getElementById('reader-content');
+  if (!contentEl) return;
+
+  const markdown = await resolveStoryContent(entry);
+  isEditingContent = true;
+  contentEl.classList.add('is-editing');
+  updateReaderNavState(catalog);
+  emit('reader:story-changed', { number: currentStoryNum });
+
+  contentEl.innerHTML = '<textarea id="reader-edit-textarea" class="reader-edit-textarea" spellcheck="false" aria-label="소설 본문 편집"></textarea>';
+  const textarea = document.getElementById('reader-edit-textarea');
+  if (!textarea) return;
+  textarea.value = markdown;
+
+  const fontSlider = document.getElementById('reader-font-size');
+  if (fontSlider) textarea.style.fontSize = `${fontSlider.value}px`;
+
+  textarea.focus();
+}
+
+async function saveContentEdit() {
+  if (!project.canManageCurrentProject()) return;
+
+  const entry = catalog.find((s) => s.number === currentStoryNum);
+  const textarea = document.getElementById('reader-edit-textarea');
+  if (!entry || !textarea) return;
+
+  const story = project.getStoryByNumber(entry.number);
+  if (!story?.id) return;
+
+  const content = textarea.value;
+  await project.updateStory(story.id, content);
+
+  entry.content = content;
+  isEditingContent = false;
+  document.getElementById('reader-content')?.classList.remove('is-editing');
+
+  autosave.markDirty();
+  emit('project:loaded', project.getCurrentProject());
+
+  const contentEl = document.getElementById('reader-content');
+  await showStory(currentStoryNum, contentEl);
+}
+
+function cancelContentEdit() {
+  isEditingContent = false;
+  document.getElementById('reader-content')?.classList.remove('is-editing');
+  const contentEl = document.getElementById('reader-content');
+  showStory(currentStoryNum, contentEl);
 }
 
 async function deleteCurrentStory() {

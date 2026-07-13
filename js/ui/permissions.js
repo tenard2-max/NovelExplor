@@ -192,7 +192,7 @@ function applyStoryNavToolbar(lock) {
 }
 
 function applyReaderToolbar(lock) {
-  ['delete-story', 'delete-all-stories'].forEach((action) => {
+  ['delete-story', 'delete-all-stories', 'edit-story-content'].forEach((action) => {
     document.querySelectorAll(`[data-action="${action}"]`).forEach((btn) => {
       setHidden(btn, lock);
     });
