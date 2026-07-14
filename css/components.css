@@ -2292,4 +2292,85 @@ body.auth-locked #app {
   display: none !important;
 }
 
+/* ——— PWA 홈 화면 추가 ——— */
+.pwa-install-banner {
+  position: fixed;
+  left: 12px;
+  right: 12px;
+  bottom: 12px;
+  z-index: 10050;
+  pointer-events: none;
+}
+
+.pwa-install-banner[hidden] {
+  display: none !important;
+}
+
+.pwa-install-inner {
+  pointer-events: auto;
+  display: flex;
+  gap: 12px;
+  align-items: flex-start;
+  padding: 14px 16px;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: linear-gradient(160deg, #151a26 0%, #0c0e14 70%);
+  box-shadow: var(--shadow);
+  max-width: 520px;
+  margin: 0 auto;
+}
+
+.pwa-install-brand {
+  flex: 0 0 auto;
+  width: 40px;
+  height: 40px;
+  border-radius: 10px;
+  display: grid;
+  place-items: center;
+  background: #0b1220;
+  color: #4ecdc4;
+  font-size: 20px;
+  border: 1px solid #2a3142;
+}
+
+.pwa-install-body {
+  flex: 1;
+  min-width: 0;
+}
+
+.pwa-install-title {
+  display: block;
+  font-size: 14px;
+  color: var(--text);
+  margin-bottom: 4px;
+}
+
+.pwa-install-text {
+  margin: 0 0 10px;
+  font-size: 12px;
+  line-height: 1.45;
+  color: var(--text-muted);
+}
+
+.pwa-install-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+}
+
+.pwa-install-note {
+  margin: 8px 0 0;
+  font-size: 12px;
+  color: var(--color-info);
+}
+
+@media (max-width: 480px) {
+  .pwa-install-banner {
+    left: 8px;
+    right: 8px;
+    bottom: 8px;
+  }
+}
+
 

@@ -42,8 +42,10 @@ import { pullProjectFromGithub } from './core/github-pull.js';
 import { initAuthGate, showAuthGate, hideAuthGate, whenAuthenticated } from './ui/auth-gate.js';
 import { initSettings, updateUserBadge } from './ui/settings-panel.js';
 import { initPermissions, applyUploadPermissions } from './ui/permissions.js';
+import { initPwaInstall } from './ui/pwa-install.js';
 
 async function boot() {
+  initPwaInstall();
   initAuthGate();
   initNav();
   initWorkspace();
