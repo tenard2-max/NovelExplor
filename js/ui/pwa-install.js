@@ -44,6 +44,11 @@ function wasDismissed() {
 }
 
 function dismiss(days = DISMISS_DAYS) {
+  // 카톡: 이번 페이지만 닫기 (다음 링크 클릭 때는 무조건 다시 표시)
+  if (isKakaoInApp()) {
+    hideBanner();
+    return;
+  }
   try {
     localStorage.setItem(DISMISS_KEY, String(Date.now() + days * 86400000));
   } catch {
@@ -57,9 +62,13 @@ function hideBanner() {
 }
 
 function showBanner() {
-  if (!bannerEl || isStandalone()) return;
-  // 카톡 인앱에서는 dismiss를 무시하고 계속 안내 (설치 자체가 불가능해서)
-  if (!isKakaoInApp() && wasDismissed()) return;
+  if (!bannerEl) return;
+  // 카톡 인앱: 설치됨/실패/닫기 기록과 무관하게 항상 표시
+  if (isKakaoInApp()) {
+    bannerEl.hidden = false;
+    return;
+  }
+  if (isStandalone() || wasDismissed()) return;
   bannerEl.hidden = false;
 }
 
@@ -181,7 +190,7 @@ function renderBanner() {
     const note = el.querySelector('[data-pwa-note]');
 
     if (action === 'dismiss') {
-      dismiss(isKakaoInApp() ? 1 : DISMISS_DAYS);
+      dismiss();
       return;
     }
 
@@ -248,7 +257,12 @@ function registerServiceWorker() {
  */
 export function initPwaInstall() {
   registerServiceWorker();
-  if (isStandalone()) return;
+
+  const kakao = isKakaoInApp();
+
+  // 일반 브라우저는 이미 설치된 standalone이면 배너 생략
+  // 카톡은 설치 여부와 관계없이 안내 필수
+  if (isStandalone() && !kakao) return;
 
   renderBanner();
 
@@ -260,13 +274,20 @@ export function initPwaInstall() {
 
   window.addEventListener('appinstalled', () => {
     deferredPrompt = null;
-    dismiss(365);
+    if (!isKakaoInApp()) dismiss(365);
   });
 
-  // 카톡/iOS/Android: 안내 배너 표시 (카톡은 즉시)
-  const delay = isKakaoInApp() ? 400 : 1200;
+  // 카톡: 즉시 + 재시도(DOM/지연 로드 대비)로 무조건 표시
+  if (kakao) {
+    showBanner();
+    window.setTimeout(showBanner, 300);
+    window.setTimeout(showBanner, 1000);
+    window.addEventListener('pageshow', showBanner);
+    return;
+  }
+
   window.setTimeout(() => {
     if (isStandalone()) return;
     showBanner();
-  }, delay);
+  }, 1200);
 }
