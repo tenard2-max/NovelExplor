@@ -66,11 +66,12 @@ export async function hydrateManifestFromGithub(manifest) {
 
   for (const ch of manifest.characters || []) {
     const entry = { ...ch };
-    delete entry.avatarPath;
-    delete entry.imagePaths;
-
     const cid = characterIdOf(ch);
     const defaultAvatarPath = `${charactersDir}/${cid}.png`;
+    const fallbackAvatarPath = String(ch.avatarPath || defaultAvatarPath).trim();
+    const fallbackImagePaths = Array.isArray(ch.imagePaths)
+      ? ch.imagePaths.map((p) => String(p || '').trim()).filter(Boolean)
+      : [];
 
     let avatarDataUrl = '';
     if (ch.avatarPath) {
@@ -80,10 +81,12 @@ export async function hydrateManifestFromGithub(manifest) {
       avatarDataUrl = await tryFetchPngAsDataUrl(defaultAvatarPath);
     }
     if (avatarDataUrl) entry.avatarDataUrl = avatarDataUrl;
+    // data URL 변환 실패해도 정적 경로를 남겨 TTS/카드가 사진을 쓸 수 있게 한다
+    entry.avatarPath = fallbackAvatarPath;
 
     const images = [];
-    if (Array.isArray(ch.imagePaths) && ch.imagePaths.length) {
-      for (const p of ch.imagePaths) {
+    if (fallbackImagePaths.length) {
+      for (const p of fallbackImagePaths) {
         const url = await tryFetchPngAsDataUrl(p);
         if (url) images.push(url);
       }
@@ -101,8 +104,12 @@ export async function hydrateManifestFromGithub(manifest) {
         const url = await tryFetchPngAsDataUrl(f.path);
         if (url) images.push(url);
       }
+      if (!fallbackImagePaths.length) {
+        entry.imagePaths = galleryFiles.map((f) => f.path);
+      }
     }
     if (images.length) entry.images = images;
+    else if (fallbackImagePaths.length) entry.imagePaths = fallbackImagePaths;
 
     payload.characters.push(entry);
   }

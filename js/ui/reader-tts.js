@@ -654,25 +654,81 @@ export function chunkSpeakableText(text) {
   return result;
 }
 
+function resolveAvatarSrc(src) {
+  const raw = String(src || '').trim();
+  if (!raw) return '';
+  if (
+    raw.startsWith('data:')
+    || raw.startsWith('blob:')
+    || /^https?:\/\//i.test(raw)
+    || raw.startsWith('/')
+  ) {
+    return raw;
+  }
+  try {
+    return new URL(raw.replace(/^\.\//, ''), document.baseURI || location.href).href;
+  } catch {
+    return raw;
+  }
+}
+
+function defaultCharacterOverlayPath(ch) {
+  const cid = ch?.characterId
+    || String(ch?.id || '').split('-').filter(Boolean).pop()
+    || '';
+  if (!cid || !/^CHR\d+/i.test(cid)) return '';
+  return `data/workspace/overlays/characters/${cid}.png`;
+}
+
 function characterAvatarUrl(ch) {
-  // avatarPath: GitHub 분리 스냅샷 경로(예: data/workspace/overlays/characters/CHR0001.png)
-  return String(
-    ch.avatarDataUrl || ch.image || ch.avatar || ch.avatarUrl || ch.photo || ch.avatarPath || ''
+  // TTS 월페이퍼는 큰 data URL보다 정적 overlay 경로가 안정적이다
+  const pathLike = String(ch.avatarPath || '').trim()
+    || (Array.isArray(ch.imagePaths) ? String(ch.imagePaths.find((u) => String(u || '').trim()) || '').trim() : '')
+    || defaultCharacterOverlayPath(ch);
+
+  if (pathLike && !pathLike.startsWith('data:') && !pathLike.startsWith('blob:')) {
+    return resolveAvatarSrc(pathLike);
+  }
+
+  const fromFields = String(
+    ch.avatarDataUrl || ch.image || ch.avatar || ch.avatarUrl || ch.photo || ''
   ).trim()
     || (Array.isArray(ch.images) ? String(ch.images.find((u) => String(u || '').trim()) || '').trim() : '');
+
+  return resolveAvatarSrc(fromFields || pathLike);
+}
+
+/** 이름 변형 — 예: 가은이 → 가은 */
+function nameVariants(name) {
+  const n = String(name || '').trim();
+  if (!n) return [];
+  const out = [n];
+  if (n.length >= 3 && /[이가]$/.test(n)) {
+    const short = n.slice(0, -1);
+    if (short.length >= 2) out.push(short);
+  }
+  return out;
 }
 
 export function buildCharacterNameEntries(characters) {
   const entries = [];
+  const seen = new Set();
 
   for (const ch of characters) {
     const avatar = characterAvatarUrl(ch);
     if (!avatar) continue;
 
-    if (ch.name) entries.push({ name: String(ch.name).trim(), character: ch, avatar });
+    const names = new Set();
+    for (const variant of nameVariants(ch.name)) names.add(variant);
     for (const alias of ch.alias || []) {
-      const name = String(alias || '').trim();
-      if (name) entries.push({ name, character: ch, avatar });
+      for (const variant of nameVariants(alias)) names.add(variant);
+    }
+
+    for (const name of names) {
+      const key = `${name}::${avatar}`;
+      if (seen.has(key)) continue;
+      seen.add(key);
+      entries.push({ name, character: ch, avatar });
     }
   }
 

@@ -1,6 +1,6 @@
 /** 배포 빌드 버전 — 커밋·푸시 시 scripts/bump-version.js 로 갱신 */
 
-export const APP_BUILD = '20260715095743';
+export const APP_BUILD = '20260715101525';
 
 /**
  * 로컬/오프라인에서도 네비에 표시할 기본 스탬프.
