@@ -382,6 +382,22 @@
   margin-top: 8px;
 }
 
+.open-proj-file-row {
+  display: flex;
+  align-items: stretch;
+  gap: 6px;
+}
+
+.open-proj-file-row .open-proj-file {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.open-proj-gh-delete {
+  flex: 0 0 auto;
+  align-self: center;
+}
+
 .open-proj-file,
 .open-proj-db {
   display: flex;

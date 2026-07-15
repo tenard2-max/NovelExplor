@@ -10,10 +10,13 @@ import {
 } from '../core/sync-folder.js';
 import { countCharactersWithPhotos, listProjects } from '../core/project.js';
 import {
+  canDeleteGithubProjectSnapshot,
+  deleteGithubProjectSnapshots,
   fetchGithubDefaultMeta,
   getLocalDefaultMeta,
   listGithubProjectsDetailed,
 } from '../core/default-project.js';
+import { hasGithubToken } from '../core/github-config.js';
 
 /**
  * @returns {Promise<
@@ -335,28 +338,95 @@ async function showGithubOpenProjectDialog() {
   try {
     countEl.textContent = 'GitHub 스냅샷 불러오는 중…';
     const snaps = await listGithubProjectsDetailed();
+    const githubDefaultId = String(
+      ghDefault?.snapshotId
+      || ghDefault?.filename
+      || ''
+    ).replace(/\.json$/i, '');
     const remoteNote = localDefault && !snaps.some((s) => s.snapshotId === localDefault.snapshotId)
       ? ` · 이 브라우저 기본(${localDefault.filename || localDefault.snapshotId})은 원격에 없음`
       : '';
-    countEl.textContent = snaps.length
-      ? `원격 스냅샷 ${snaps.length}개 (저장소 기준)${remoteNote}`
-      : `원격 스냅샷 0개 — PAT로 「프로젝트 저장」해야 여기에 쌓입니다.${remoteNote}`;
-    if (!snaps.length) {
-      githubListEl.innerHTML = '<p class="open-proj-empty">GitHub에 타임스탬프 JSON이 없습니다.</p>';
-    } else {
-      githubListEl.innerHTML = snaps.map((s) => `
-        <button type="button" class="open-proj-file" data-id="${esc(s.snapshotId)}" role="option">
-          <span class="open-proj-file-stamp">${esc(s.label)}</span>
-          <span class="open-proj-file-name">${esc(s.title || s.name)}</span>
-          <code class="open-proj-file-name">${esc(s.name)}${s.author ? ` · ${esc(s.author)}` : ''}</code>
-        </button>`).join('');
+
+    const renderGithubSnapshots = (statusMessage = '') => {
+      countEl.textContent = statusMessage || (snaps.length
+        ? `원격 스냅샷 ${snaps.length}개 (저장소 기준)${remoteNote}`
+        : `원격 스냅샷 0개 — PAT로 「프로젝트 저장」해야 여기에 쌓입니다.${remoteNote}`);
+
+      if (!snaps.length) {
+        githubListEl.innerHTML = '<p class="open-proj-empty">GitHub에 타임스탬프 JSON이 없습니다.</p>';
+        return;
+      }
+
+      githubListEl.innerHTML = snaps.map((s) => {
+        const isDefault = Boolean(githubDefaultId && s.snapshotId === githubDefaultId);
+        const canDelete = canDeleteGithubProjectSnapshot(s) && !isDefault;
+        const deleteTitle = isDefault
+          ? '기본 프로젝트는 이 목록에서 삭제할 수 없습니다.'
+          : hasGithubToken()
+            ? '이 GitHub 스냅샷 삭제'
+            : '삭제하려면 GitHub PAT를 먼저 연결하세요.';
+        return `
+          <div class="open-proj-file-row">
+            <button type="button" class="open-proj-file" data-id="${esc(s.snapshotId)}" role="option">
+              <span class="open-proj-file-stamp">${esc(s.label)}${isDefault ? ' · 기본' : ''}</span>
+              <span class="open-proj-file-name">${esc(s.title || s.name)}</span>
+              <code class="open-proj-file-name">${esc(s.name)}${s.author ? ` · ${esc(s.author)}` : ''}</code>
+            </button>
+            ${canDelete ? `
+              <button type="button"
+                      class="btn-sm btn-danger open-proj-gh-delete"
+                      data-delete-id="${esc(s.snapshotId)}"
+                      title="${esc(deleteTitle)}"
+                      ${hasGithubToken() ? '' : 'disabled'}>
+                삭제
+              </button>` : ''}
+          </div>`;
+      }).join('');
+
       githubListEl.querySelectorAll('.open-proj-file').forEach((btn) => {
         btn.addEventListener('click', () => {
           const item = snaps.find((x) => x.snapshotId === btn.dataset.id);
           if (item) selectGithub(item);
         });
       });
-    }
+
+      githubListEl.querySelectorAll('.open-proj-gh-delete').forEach((btn) => {
+        btn.addEventListener('click', async () => {
+          const snapshotId = btn.dataset.deleteId;
+          const item = snaps.find((snapshot) => snapshot.snapshotId === snapshotId);
+          if (!item) return;
+          if (!hasGithubToken()) {
+            alert('GitHub 프로젝트를 삭제하려면 PAT를 먼저 연결하세요.');
+            return;
+          }
+          if (!confirm(
+            `GitHub에서 이 프로젝트 버전을 삭제할까요?\n\n`
+            + `${item.title || item.name}\n${item.name}\n\n이 작업은 되돌릴 수 없습니다.`
+          )) return;
+
+          btn.disabled = true;
+          btn.textContent = '삭제 중…';
+          countEl.textContent = `${item.name} 삭제 중…`;
+          try {
+            await deleteGithubProjectSnapshots([snapshotId]);
+            const index = snaps.findIndex((snapshot) => snapshot.snapshotId === snapshotId);
+            if (index >= 0) snaps.splice(index, 1);
+            if (selection?.type === 'github' && selection.snapshotId === snapshotId) {
+              selection = null;
+              previewEl.hidden = true;
+              previewBodyEl.innerHTML = '';
+              confirmBtn.disabled = true;
+            }
+            renderGithubSnapshots(`삭제 완료 · 원격 스냅샷 ${snaps.length}개`);
+          } catch (err) {
+            alert(`GitHub 프로젝트 삭제 실패: ${err.message || err}`);
+            renderGithubSnapshots();
+          }
+        });
+      });
+    };
+
+    renderGithubSnapshots();
   } catch (err) {
     countEl.textContent = '';
     githubListEl.innerHTML = `<p class="open-proj-empty">GitHub 목록 로드 실패: ${esc(err.message)}</p>`;

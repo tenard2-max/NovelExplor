@@ -2,7 +2,12 @@
 
 import * as storage from './storage.js';
 import { nowIso } from './utils.js';
-import { canSetDefaultProject, getCurrentUser, isMaster } from './auth.js';
+import {
+  canManageProjectContent,
+  canSetDefaultProject,
+  getCurrentUser,
+  isMaster,
+} from './auth.js';
 import { getGithubConfig, snapshotsDir, hasGithubToken, rawGithubUrl } from './github-config.js';
 import { getRepoFileJson, listRepoDir, deleteRepoPaths, commitRepoFiles, isGithubRateLimitError } from './github-api.js';
 import { pullProjectFromGithub } from './github-pull.js';
@@ -165,13 +170,16 @@ function formatStampLabel(stamp) {
 }
 
 /**
- * 마스터: GitHub 타임스탬프 스냅샷 JSON 삭제
+ * GitHub 타임스탬프 스냅샷 JSON 삭제
+ * - 마스터: 모든 스냅샷
+ * - 권한 관리자(소설가·개발자): writers/owner 권한이 있는 스냅샷
  * latest/default 포인터가 가리키면 남은 최신으로 갱신하거나 포인터 파일도 제거
  * @param {string[]} snapshotIds 파일명에서 .json 제외 (예: 20260711120000_테마)
  * @returns {Promise<{ deleted: string[], latestUpdated: boolean, defaultUpdated: boolean }>}
  */
 export async function deleteGithubProjectSnapshots(snapshotIds) {
-  if (!isMaster()) throw new Error('마스터만 GitHub 스냅샷을 삭제할 수 있습니다.');
+  const user = getCurrentUser();
+  if (!user) throw new Error('로그인이 필요합니다.');
   if (!hasGithubToken()) {
     throw new Error('GitHub Personal Access Token이 필요합니다. 우측 패널에서 연결하세요.');
   }
@@ -186,6 +194,18 @@ export async function deleteGithubProjectSnapshots(snapshotIds) {
   const before = await listGithubProjectSnapshots();
   const toDelete = before.filter((s) => deleteSet.has(s.snapshotId));
   if (!toDelete.length) throw new Error('선택한 스냅샷을 저장소에서 찾지 못했습니다.');
+
+  if (!isMaster(user)) {
+    const detailed = await listGithubProjectsDetailed();
+    const detailedById = new Map(detailed.map((snapshot) => [snapshot.snapshotId, snapshot]));
+    const unauthorized = toDelete.filter((snapshot) => {
+      const detail = detailedById.get(snapshot.snapshotId);
+      return !detail || !canDeleteGithubProjectSnapshot(detail, user);
+    });
+    if (unauthorized.length) {
+      throw new Error('쓰기 권한이 있는 GitHub 프로젝트만 삭제할 수 있습니다.');
+    }
+  }
 
   let latestMeta = null;
   let defaultMeta = null;
@@ -227,6 +247,9 @@ export async function deleteGithubProjectSnapshots(snapshotIds) {
 
   const defaultId = defaultMeta?.snapshotId
     || String(defaultMeta?.filename || '').replace(/\.json$/i, '');
+  if (!isMaster(user) && defaultMeta && deletedIds.has(String(defaultId))) {
+    throw new Error('기본 프로젝트는 마스터만 삭제할 수 있습니다.');
+  }
   if (defaultMeta && deletedIds.has(String(defaultId))) {
     if (nextLatest) {
       pointerWrites.push({
@@ -265,6 +288,13 @@ export async function deleteGithubProjectSnapshots(snapshotIds) {
     latestUpdated,
     defaultUpdated,
   };
+}
+
+/** 현재 사용자가 해당 GitHub 스냅샷을 삭제할 수 있는지 반환한다. */
+export function canDeleteGithubProjectSnapshot(snapshot, user = getCurrentUser()) {
+  if (!user || !snapshot) return false;
+  if (isMaster(user)) return true;
+  return canManageProjectContent(snapshot, user);
 }
 
 /**

@@ -1,4 +1,4 @@
-/** 캔버스 배경 월페이퍼 — 등록 · 채도/알파/크기 조절 */
+/** 캔버스 배경 월페이퍼 — 등록 · 채도/알파/크기/세로 위치 조절 */
 
 import * as storage from '../core/storage.js';
 import * as project from '../core/project.js';
@@ -6,7 +6,7 @@ import { on, emit } from '../core/events.js';
 import { resolveMediaSrc } from '../core/character-media.js';
 import { getCurrentView } from './nav-menu.js';
 
-const DEFAULTS = { saturation: 100, alpha: 45, size: 100 };
+const DEFAULTS = { saturation: 100, alpha: 45, size: 100, positionY: 50 };
 const MAX_IMAGE_WIDTH = 1600;
 
 let state = { ...DEFAULTS, dataUrl: '', dataPath: '' };
@@ -19,6 +19,7 @@ export function initCanvasWallpaper() {
   const sat = document.getElementById('wp-saturation');
   const alpha = document.getElementById('wp-alpha');
   const size = document.getElementById('wp-size');
+  const positionY = document.getElementById('wp-position-y');
 
   uploadBtn?.addEventListener('click', () => {
     if (!project.canManageCurrentProject()) {
@@ -55,6 +56,7 @@ export function initCanvasWallpaper() {
     state.saturation = Number(sat?.value ?? DEFAULTS.saturation);
     state.alpha = Number(alpha?.value ?? DEFAULTS.alpha);
     state.size = Number(size?.value ?? DEFAULTS.size);
+    state.positionY = Number(positionY?.value ?? DEFAULTS.positionY);
     syncGaugeLabels();
     applyWallpaper();
     scheduleSave();
@@ -63,6 +65,7 @@ export function initCanvasWallpaper() {
   sat?.addEventListener('input', onGauge);
   alpha?.addEventListener('input', onGauge);
   size?.addEventListener('input', onGauge);
+  positionY?.addEventListener('input', onGauge);
 
   on('project:loaded', () => {
     ttsOverrideUrl = '';
@@ -86,6 +89,7 @@ function syncGaugeLabels() {
   setLabel('wp-saturation-val', `${state.saturation}%`);
   setLabel('wp-alpha-val', `${state.alpha}%`);
   setLabel('wp-size-val', `${state.size}%`);
+  setLabel('wp-position-y-val', `${state.positionY}%`);
 }
 
 function setLabel(id, text) {
@@ -97,17 +101,19 @@ function syncGaugesFromState() {
   const sat = document.getElementById('wp-saturation');
   const alpha = document.getElementById('wp-alpha');
   const size = document.getElementById('wp-size');
+  const positionY = document.getElementById('wp-position-y');
   if (sat) sat.value = String(state.saturation);
   if (alpha) alpha.value = String(state.alpha);
   if (size) size.value = String(state.size);
+  if (positionY) positionY.value = String(state.positionY);
   syncGaugeLabels();
 }
 
-function gaugeValue(raw, fallback, { min = 0, allowZero = true } = {}) {
+function gaugeValue(raw, fallback, { min = 0, max = 200, allowZero = true } = {}) {
   const n = Number(raw);
   if (!Number.isFinite(n)) return fallback;
   if (!allowZero && n <= 0) return fallback;
-  return Math.min(200, Math.max(min, n));
+  return Math.min(max, Math.max(min, n));
 }
 
 /** TTS 등 일시 배경 — 저장하지 않음, 마지막 캐릭터 사진 유지 */
@@ -122,6 +128,11 @@ export function setTtsWallpaper(dataUrl) {
     state.saturation = gaugeValue(state.saturation, DEFAULTS.saturation);
     state.alpha = gaugeValue(state.alpha, DEFAULTS.alpha, { min: 1 });
     state.size = gaugeValue(state.size, DEFAULTS.size, { min: 1, allowZero: false });
+    state.positionY = gaugeValue(
+      state.positionY,
+      DEFAULTS.positionY,
+      { max: 100 }
+    );
   }
 
   // hidden → 표시 전환 시 첫 페인트 누락 방지: 즉시 + 디코드 후 재적용
@@ -164,6 +175,7 @@ function applyWallpaper(viewId) {
     layer.setAttribute('aria-hidden', 'true');
     layer.style.removeProperty('background-image');
     layer.style.removeProperty('background-size');
+    layer.style.removeProperty('background-position');
     layer.style.removeProperty('opacity');
     layer.style.removeProperty('filter');
     body.classList.remove('has-wallpaper');
@@ -174,11 +186,13 @@ function applyWallpaper(viewId) {
   const saturation = gaugeValue(state.saturation, DEFAULTS.saturation);
   const alpha = gaugeValue(state.alpha, DEFAULTS.alpha, { min: 1 });
   const size = gaugeValue(state.size, DEFAULTS.size, { min: 1, allowZero: false });
+  const positionY = gaugeValue(state.positionY, DEFAULTS.positionY, { max: 100 });
   const imageUrl = `url(${JSON.stringify(dataUrl)})`;
 
   // 스타일을 먼저 넣고 hidden 해제 (최초 표시 시 배경 미적용 방지)
   layer.style.backgroundImage = imageUrl;
   layer.style.backgroundSize = `${size}%`;
+  layer.style.backgroundPosition = `center ${positionY}%`;
   layer.style.opacity = String(alpha / 100);
   layer.style.filter = `saturate(${saturation}%)`;
   layer.hidden = false;
@@ -207,6 +221,7 @@ async function loadWallpaperForProject() {
     saturation: gaugeValue(saved?.saturation, DEFAULTS.saturation),
     alpha: gaugeValue(saved?.alpha, DEFAULTS.alpha, { min: 1 }),
     size: gaugeValue(saved?.size, DEFAULTS.size, { min: 1, allowZero: false }),
+    positionY: gaugeValue(saved?.positionY, DEFAULTS.positionY, { max: 100 }),
   };
   syncGaugesFromState();
   applyWallpaper();
@@ -231,6 +246,7 @@ async function persistWallpaper() {
     saturation: state.saturation,
     alpha: state.alpha,
     size: state.size,
+    positionY: state.positionY,
     updatedAt: new Date().toISOString(),
   });
   emit('wallpaper:updated', state);
