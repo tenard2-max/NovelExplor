@@ -36,7 +36,7 @@
       <Avatar src="../overlays/characters/CHR0007.png" mime="image/png"/>
       <Gallery/>
     </Character>
-    <Character id="CHR0008" name="애디" race="" gender="" age="0" occupation="" firstEpisode="1" lastEpisode="3" status="Alive">
+    <Character id="CHR0008" name="에디" race="" gender="" age="0" occupation="" firstEpisode="1" lastEpisode="3" status="Alive">
       <Description>EP 자동 감지 (13회 언급)</Description>
       <Avatar src="../overlays/characters/CHR0008.png" mime="image/png"/>
       <Gallery/>
