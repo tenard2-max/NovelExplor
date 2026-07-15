@@ -1107,6 +1107,10 @@ export function findCharacterByXmlRef(xmlId, name = '') {
 export async function ensureCharacterFromXml(xmlChar) {
   if (!xmlChar?.id && !xmlChar?.name) return null;
 
+  const characterId = xmlChar.id
+    || `CHR${String((cache.characters?.length || 0) + 1).padStart(4, '0')}`;
+  const defaultAvatarPath = `data/workspace/overlays/characters/${characterId}.png`;
+
   const existing = findCharacterByXmlRef(xmlChar.id, xmlChar.name);
   if (existing) {
     // XML 메타가 더 최신이면 비어 있는 필드만 보강
@@ -1121,6 +1125,8 @@ export async function ensureCharacterFromXml(xmlChar) {
       firstEpisode: existing.firstEpisode || Number(xmlChar.firstEpisode) || 0,
       lastEpisode: existing.lastEpisode || Number(xmlChar.lastEpisode) || 0,
       status: existing.status || xmlChar.status || 'Alive',
+      // 저장소 PNG 경로가 비어 있으면 기본 overlay 경로를 보강 (상세 패널 표시용)
+      avatarPath: String(existing.avatarPath || '').trim() || defaultAvatarPath,
       updatedAt: nowIso(),
     };
     const changed = JSON.stringify(patched) !== JSON.stringify(existing);
@@ -1131,7 +1137,6 @@ export async function ensureCharacterFromXml(xmlChar) {
   const proj = getCurrentProject();
   if (!proj) return null;
 
-  const characterId = xmlChar.id || `CHR${String((cache.characters?.length || 0) + 1).padStart(4, '0')}`;
   const record = {
     id: `${proj.projectId}-${characterId}`,
     projectId: proj.projectId,
@@ -1149,6 +1154,7 @@ export async function ensureCharacterFromXml(xmlChar) {
     status: xmlChar.status || 'Alive',
     images: [],
     avatarDataUrl: '',
+    avatarPath: defaultAvatarPath,
     createdAt: nowIso(),
     updatedAt: nowIso(),
   };
@@ -1708,7 +1714,15 @@ export async function addCharacterImages(characterId, dataUrls, { makeRepresenta
     avatarDataUrl = dataUrls[dataUrls.length - 1];
   }
 
-  const updated = { ...ch, images, avatarDataUrl, updatedAt: nowIso() };
+  // avatarPath(저장소 원본)는 유지 — 로컬 추가가 저장소 참조를 지우지 않음
+  const updated = {
+    ...ch,
+    images,
+    avatarDataUrl,
+    avatarPath: ch.avatarPath || '',
+    imagePaths: Array.isArray(ch.imagePaths) ? [...ch.imagePaths] : ch.imagePaths,
+    updatedAt: nowIso(),
+  };
   await updateCharacter(updated);
   return updated;
 }

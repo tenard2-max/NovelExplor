@@ -1603,6 +1603,13 @@
   color: #111;
 }
 
+.char-gallery-badge--path {
+  left: auto;
+  right: 4px;
+  background: #64748b;
+  color: #f8fafc;
+}
+
 /* 인물 자동추가 다이얼로그 */
 .autoadd-desc {
   margin: 0 0 12px;

@@ -3,6 +3,11 @@
 import { on, emit } from '../core/events.js';
 import * as project from '../core/project.js';
 import * as autosave from '../core/autosave.js';
+import {
+  getCharacterRepresentativeUrl,
+  listCharacterGalleryEntries,
+  resolveMediaSrc,
+} from '../core/character-media.js';
 import { showDialog } from './dialog.js';
 import { canManageCurrentProject } from '../core/project.js';
 
@@ -228,8 +233,10 @@ function renderPanel(ch) {
   const img = document.getElementById('char-avatar-img');
   const empty = document.getElementById('char-avatar-empty');
   const actions = document.getElementById('char-avatar-actions');
-  const avatar = ch.avatarDataUrl || ch.image || ch.avatar || '';
+  // 로컬 data URL뿐 아니라 GitHub overlay 경로(avatarPath)도 표시
+  const avatar = getCharacterRepresentativeUrl(ch);
   const hasAvatar = !!avatar;
+  const hasLocalAvatar = Boolean(String(ch.avatarDataUrl || '').trim());
 
   if (hasAvatar) {
     img.src = avatar;
@@ -251,8 +258,10 @@ function renderPanel(ch) {
   const addGalleryBtn = document.querySelector('[data-action="char-images-add"]');
   if (allowUpload) {
     if (actions) actions.hidden = false;
-    if (reg) reg.hidden = hasAvatar;
-    if (del) del.hidden = !hasAvatar;
+    // 경로만 있는 경우에도 「대표 등록」으로 로컬 추가 가능
+    if (reg) reg.hidden = hasLocalAvatar;
+    // 삭제는 로컬 대표만 (GitHub 파일은 동기화에서 관리)
+    if (del) del.hidden = !hasLocalAvatar;
     if (addGalleryBtn) addGalleryBtn.hidden = false;
   } else {
     if (actions) actions.hidden = true;
@@ -399,30 +408,38 @@ function renderGallery(ch) {
   const countEl = document.getElementById('char-gallery-count');
   if (!gallery) return;
 
-  const images = Array.isArray(ch.images) ? ch.images : [];
+  const entries = listCharacterGalleryEntries(ch);
   const allowUpload = canManageCurrentProject();
-  if (countEl) countEl.textContent = images.length ? `${images.length}장` : '';
+  const repUrl = getCharacterRepresentativeUrl(ch);
+  if (countEl) countEl.textContent = entries.length ? `${entries.length}장` : '';
 
-  if (!images.length) {
+  if (!entries.length) {
     gallery.innerHTML = allowUpload
       ? '<p class="char-gallery-empty">등록된 이미지가 없습니다. 파일을 끌어다 놓거나 “＋ 이미지 추가”로 여러 장 등록하세요.</p>'
       : '<p class="char-gallery-empty">등록된 이미지가 없습니다. (일반 사용자는 이미지 등록 불가)</p>';
     return;
   }
 
-  gallery.innerHTML = images.map((url, i) => {
-    const isRep = url === ch.avatarDataUrl;
+  gallery.innerHTML = entries.map((entry, i) => {
+    const isRep = entry.url === repUrl
+      || resolveMediaSrc(entry.raw) === repUrl;
+    const pathBadge = entry.kind === 'path'
+      ? '<span class="char-gallery-badge char-gallery-badge--path">저장소</span>'
+      : '';
     const tools = allowUpload
       ? `<div class="char-gallery-tools">
           <button type="button" class="char-gallery-btn" data-action="set-rep" title="대표로 지정">★</button>
-          <button type="button" class="char-gallery-btn char-gallery-del" data-action="remove" title="삭제">✕</button>
+          ${entry.kind === 'local'
+            ? '<button type="button" class="char-gallery-btn char-gallery-del" data-action="remove" title="삭제">✕</button>'
+            : ''}
         </div>`
       : '';
     return `
-      <div class="char-gallery-item${isRep ? ' is-rep' : ''}" data-index="${i}">
-        <img class="char-gallery-thumb" src="${url}" alt="이미지 ${i + 1}" data-action="view">
+      <div class="char-gallery-item${isRep ? ' is-rep' : ''}" data-index="${i}" data-kind="${entry.kind}" data-local-index="${entry.localIndex}">
+        <img class="char-gallery-thumb" src="${entry.url}" alt="이미지 ${i + 1}" data-action="view">
         ${tools}
         ${isRep ? '<span class="char-gallery-badge">대표</span>' : ''}
+        ${pathBadge}
       </div>`;
   }).join('');
 }
@@ -436,8 +453,9 @@ function triggerPicker(input) {
 function onAvatarBoxClick() {
   const ch = getCurrentCharacter();
   if (!ch) return;
-  if (ch.avatarDataUrl) {
-    openImageLightbox(ch.avatarDataUrl);
+  const avatar = getCharacterRepresentativeUrl(ch);
+  if (avatar) {
+    openImageLightbox(avatar);
   } else if (assertCanUploadImages()) {
     triggerPicker(document.getElementById('character-avatar-file'));
   }
@@ -463,21 +481,30 @@ async function onGalleryClick(e) {
   const btn = e.target.closest('[data-action]');
   const item = e.target.closest('.char-gallery-item');
   if (!btn || !item || !currentId) return;
-  const index = Number(item.dataset.index);
   const action = btn.dataset.action;
   const ch = getCurrentCharacter();
-  if (!ch || !Array.isArray(ch.images)) return;
-  const url = ch.images[index];
+  if (!ch) return;
+
+  const entries = listCharacterGalleryEntries(ch);
+  const index = Number(item.dataset.index);
+  const entry = entries[index];
+  if (!entry) return;
 
   if (action === 'view') {
-    openImageLightbox(url);
+    openImageLightbox(entry.url);
   } else if (action === 'set-rep') {
     if (!assertCanUploadImages()) return;
-    await project.setCharacterRepresentative(currentId, url);
+    // 경로 이미지를 대표로 쓰면 avatarDataUrl을 비우고 avatarPath를 유지한다.
+    if (entry.kind === 'path') {
+      await project.setCharacterRepresentative(currentId, '');
+    } else {
+      await project.setCharacterRepresentative(currentId, entry.raw);
+    }
     refresh();
   } else if (action === 'remove') {
     if (!assertCanUploadImages()) return;
-    await project.removeCharacterImage(currentId, index);
+    if (entry.kind !== 'local' || entry.localIndex < 0) return;
+    await project.removeCharacterImage(currentId, entry.localIndex);
     refresh();
   }
 }
@@ -518,7 +545,7 @@ async function onDeleteRepresentative() {
   const ch = getCurrentCharacter();
   if (!ch?.avatarDataUrl) return;
   if (!assertCanUploadImages()) return;
-  if (!confirm('대표 이미지를 삭제할까요? (갤러리에서도 제거됩니다)')) return;
+  if (!confirm('로컬 대표 이미지를 삭제할까요? (저장소 원본 이미지는 그대로 둡니다)')) return;
   const index = (ch.images || []).indexOf(ch.avatarDataUrl);
   if (index >= 0) {
     await project.removeCharacterImage(currentId, index);

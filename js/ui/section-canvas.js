@@ -8,6 +8,7 @@ import {
   parseMasterFields,
 } from '../core/workspace-xml.js';
 import { escapeHtml } from '../core/utils.js';
+import { getCharacterRepresentativeUrl } from '../core/character-media.js';
 import * as project from '../core/project.js';
 import { openCharacterPanel } from './character-panel.js';
 import { on } from '../core/events.js';
@@ -155,7 +156,13 @@ export function mergeCharacterDisplay(xmlChar, idb, xmlUrl = '') {
     || idb?.avatarUrl
     || (Array.isArray(idb?.images) && idb.images[0])
     || '';
+  // IndexedDB에 data URL이 없어도 avatarPath(저장소 PNG)가 있으면 카드에 표시
+  const pathAvatar = idb ? getCharacterRepresentativeUrl({
+    ...idb,
+    avatarDataUrl: dbAvatar || '',
+  }) : '';
   const avatarUrl = dbAvatar
+    || pathAvatar
     || (xmlChar?.avatarSrc && xmlUrl ? resolveAssetUrl(xmlChar.avatarSrc, xmlUrl) : '')
     || (xmlChar?.avatarUrl || '');
 

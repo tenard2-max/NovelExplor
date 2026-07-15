@@ -1,5 +1,5 @@
 /* NovelExplor PWA service worker — app shell cache */
-const CACHE_VERSION = 'ne-pwa-v2-20260715';
+const CACHE_VERSION = 'ne-pwa-v2-20260715b';
 const APP_SHELL = [
   './',
   './index.html',
