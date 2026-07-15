@@ -9,6 +9,7 @@
 import * as storage from './storage.js';
 import { commitRepoFiles } from './github-api.js';
 import { getGithubConfig, hasGithubToken, rawGithubUrl } from './github-config.js';
+import { trackedRawFetch } from './github-metrics.js';
 import { nowIso } from './utils.js';
 
 const USERS_FORMAT = 'novel-explor-users/v1';
@@ -115,7 +116,7 @@ export async function pruneDuplicateUsers(preferId = '') {
 export async function fetchRemoteUsers() {
   try {
     const url = rawGithubUrl(usersAuthPath());
-    const res = await fetch(`${url}?t=${Date.now()}`, { cache: 'no-store' });
+    const res = await trackedRawFetch(`${url}?t=${Date.now()}`, { cache: 'no-store' });
     if (!res.ok) return null;
     const data = await res.json();
     if (!Array.isArray(data?.users) || !data.users.length) return null;
@@ -128,7 +129,7 @@ export async function fetchRemoteUsers() {
 async function fetchLegacyMasterAsUsers() {
   try {
     const url = rawGithubUrl(masterAuthPath());
-    const res = await fetch(`${url}?t=${Date.now()}`, { cache: 'no-store' });
+    const res = await trackedRawFetch(`${url}?t=${Date.now()}`, { cache: 'no-store' });
     if (!res.ok) return null;
     const m = await res.json();
     if (!m?.passwordHash || !m?.salt) return null;

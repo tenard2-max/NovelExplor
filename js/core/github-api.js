@@ -2,6 +2,11 @@
 
 import { getGithubConfig, rawGithubUrl } from './github-config.js';
 import { emit } from './events.js';
+import {
+  recordGithubApiCall,
+  trackedRawFetch,
+  updateGithubRateLimitMetrics,
+} from './github-metrics.js';
 
 const API = 'https://api.github.com';
 /** GitHub REST API 잔량이 이 값 미만이면 저장·동기화 전 경고 */
@@ -33,6 +38,7 @@ function updateRateLimitFromHeaders(res) {
     next.resetAt = new Date(Number(reset) * 1000);
   }
   rateLimitCache = next;
+  updateGithubRateLimitMetrics(getGithubRateLimit());
   emit('github:rate-limit', getGithubRateLimit());
 }
 
@@ -51,6 +57,7 @@ export async function fetchGithubRateLimit() {
       remaining: data.rate.remaining,
       resetAt: new Date(data.rate.reset * 1000),
     };
+    updateGithubRateLimitMetrics(getGithubRateLimit());
     emit('github:rate-limit', getGithubRateLimit());
   }
   return getGithubRateLimit();
@@ -216,6 +223,7 @@ async function githubRequest(path, {
       };
       if (hasToken) headers.Authorization = `Bearer ${token.trim()}`;
 
+      recordGithubApiCall({ path, method, attempt });
       const res = await fetch(`${API}${path}`, {
         method,
         headers,
@@ -374,7 +382,7 @@ export async function listRepoDir(repoPath) {
 export async function getRepoFileText(repoPath) {
   // 공개 raw URL 우선 — Contents API 쿼터·base64 오버헤드 회피
   try {
-    const res = await fetch(rawGithubUrl(repoPath), { cache: 'no-store' });
+    const res = await trackedRawFetch(rawGithubUrl(repoPath), { cache: 'no-store' });
     if (res.ok) return await res.text();
   } catch {
     /* fall through to API */

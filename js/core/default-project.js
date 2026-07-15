@@ -11,6 +11,7 @@ import { exportTimestampedBackup, buildBackupJson, restoreFromBackup } from './b
 import { getCurrentProject } from './project.js';
 import { flushSave } from './autosave.js';
 import { emit } from './events.js';
+import { trackedRawFetch } from './github-metrics.js';
 
 const SETTINGS_KEY = 'app-default-project';
 const BACKUP_KEY = 'app-default-project-backup';
@@ -110,7 +111,10 @@ export async function listGithubProjectsDetailed() {
     const metas = await Promise.all(chunk.map(async (s) => {
       try {
         // raw 만 사용 — Contents API 추가 호출로 한도를 소모하지 않음
-        const res = await fetch(rawGithubUrl(`${snapDir}/${s.name}`), { cache: 'no-store' });
+        const res = await trackedRawFetch(
+          rawGithubUrl(`${snapDir}/${s.name}`),
+          { cache: 'no-store' }
+        );
         if (!res.ok) {
           return {
             ...s,

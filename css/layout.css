@@ -94,7 +94,8 @@ body.role-user .upload-panel {
 
 .nav-app-version,
 .nav-json-version,
-.nav-upload-version {
+.nav-upload-version,
+.nav-github-metrics {
   display: block;
   margin-top: 2px;
   font-size: 10px;
@@ -110,6 +111,30 @@ body.role-user .upload-panel {
 
 .nav-app-version {
   color: var(--text-dim, #6b7280);
+}
+
+.nav-github-metrics {
+  color: #60a5fa;
+}
+
+.nav-github-metrics.is-warning {
+  color: #f59e0b;
+  font-weight: 700;
+}
+
+.nav-github-warning {
+  display: block;
+  margin-top: 3px;
+  max-width: 140px;
+  color: #f59e0b;
+  font-size: 9px;
+  line-height: 1.35;
+  font-weight: 700;
+  white-space: normal;
+}
+
+.nav-github-warning[hidden] {
+  display: none;
 }
 
 .nav-sync-progress {

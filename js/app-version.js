@@ -1,6 +1,8 @@
 /** 배포 빌드 버전 — 커밋·푸시 시 scripts/bump-version.js 로 갱신 */
 
-export const APP_BUILD = '20260715165826';
+import { trackedRawFetch } from './core/github-metrics.js';
+
+export const APP_BUILD = '20260715170907';
 
 /**
  * 로컬/오프라인에서도 네비에 표시할 기본 스탬프.
@@ -173,7 +175,7 @@ async function fetchJsonStamp(url) {
   const timer = ctrl ? setTimeout(() => ctrl.abort(), 4000) : null;
   try {
     const joiner = url.includes('?') ? '&' : '?';
-    const res = await fetch(`${url}${joiner}t=${Date.now()}`, {
+    const res = await trackedRawFetch(`${url}${joiner}t=${Date.now()}`, {
       cache: 'no-store',
       signal: ctrl?.signal,
     });

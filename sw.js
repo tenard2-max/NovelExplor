@@ -1,5 +1,5 @@
 /* NovelExplor PWA service worker — app shell cache */
-const CACHE_VERSION = 'ne-pwa-v2-20260715c';
+const CACHE_VERSION = 'ne-pwa-v2-20260715d';
 const PROJECT_ASSET_CACHE = 'ne-project-assets-v1';
 const APP_SHELL = [
   './',
@@ -13,6 +13,12 @@ const APP_SHELL = [
   './icons/icon-512.png',
   './icons/apple-touch-icon.png',
 ];
+
+async function reportRawDownload(clientId, url) {
+  if (!clientId) return;
+  const client = await self.clients.get(clientId);
+  client?.postMessage({ type: 'ne:raw-download', url });
+}
 
 self.addEventListener('install', (event) => {
   event.waitUntil(
@@ -48,6 +54,7 @@ self.addEventListener('fetch', (event) => {
         const response = await fetch(req);
         if (response?.ok) {
           cache.put(req, response.clone()).catch(() => {});
+          reportRawDownload(event.clientId, req.url).catch(() => {});
         }
         return response;
       })

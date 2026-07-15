@@ -14,6 +14,10 @@ import { refreshNavVersionsFromGithub } from '../app-version.js';
 import { canSetDefaultProject } from '../core/auth.js';
 import { showAlert } from './dialog.js';
 import { on } from '../core/events.js';
+import {
+  beginGithubOperation,
+  endGithubOperation,
+} from '../core/github-metrics.js';
 
 function assertMasterGithub() {
   if (canSetDefaultProject()) return true;
@@ -168,6 +172,7 @@ export function initGithubPanel() {
 
   pullBtn?.addEventListener('click', async () => {
     if (!assertMasterGithub()) return;
+    const openMetrics = beginGithubOperation('project-open');
     try {
       if (!hasGithubToken()) throw new Error('토큰을 먼저 저장하세요.');
       pullBtn.disabled = true;
@@ -182,6 +187,7 @@ export function initGithubPanel() {
       updateRateLimitDisplay();
       updateGithubStatus(statusEl, `Pull 실패: ${err.message}`);
     } finally {
+      endGithubOperation(openMetrics);
       pullBtn.disabled = false;
       if (syncBtn) syncBtn.disabled = false;
     }

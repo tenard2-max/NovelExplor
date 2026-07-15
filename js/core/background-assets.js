@@ -3,6 +3,7 @@
 import { on, emit } from './events.js';
 import * as project from './project.js';
 import * as storage from './storage.js';
+import { trackedRawFetch } from './github-metrics.js';
 import {
   getCharacterRepresentativeUrl,
   listCharacterGalleryEntries,
@@ -216,7 +217,7 @@ async function cacheAsset(url) {
   const cache = await caches.open(PROJECT_ASSET_CACHE);
   if (await cache.match(url)) return;
 
-  const response = await fetch(url, {
+  const response = await trackedRawFetch(url, {
     method: 'GET',
     mode: 'cors',
     credentials: 'omit',

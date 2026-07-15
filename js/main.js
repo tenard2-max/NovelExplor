@@ -45,9 +45,15 @@ import { initSettings, updateUserBadge } from './ui/settings-panel.js';
 import { initPermissions, applyUploadPermissions } from './ui/permissions.js';
 import { initPwaInstall } from './ui/pwa-install.js';
 import { initBackgroundAssets } from './core/background-assets.js';
+import { initGithubMetricsUi } from './ui/github-metrics.js';
+import {
+  beginGithubOperation,
+  endGithubOperation,
+} from './core/github-metrics.js';
 
 async function boot() {
   initPwaInstall();
+  initGithubMetricsUi();
   initAuthGate();
   // 인증 확인 전엔 앱만 잠금 — 로그인 창은 세션이 없을 때만 표시
   document.body.classList.add('auth-locked');
@@ -107,22 +113,27 @@ async function boot() {
   updateUserBadge();
   applyUploadPermissions();
 
-  const projects = await project.listProjects();
-  const bootProjectId = project.resolveBootProjectId(projects);
-  if (bootProjectId) {
-    await project.loadProject(bootProjectId);
-  } else if (!canSaveProject(user)) {
-    // 일반 사용자: 기본 프로젝트 자동 로드 시도
-    try {
-      await loadDefaultProject({ skipConfirm: true });
-    } catch (err) {
-      console.info('[NovelExplor] 기본 프로젝트 없음:', err.message);
+  const bootOpenMetrics = beginGithubOperation('project-open');
+  try {
+    const projects = await project.listProjects();
+    const bootProjectId = project.resolveBootProjectId(projects);
+    if (bootProjectId) {
+      await project.loadProject(bootProjectId);
+    } else if (!canSaveProject(user)) {
+      // 일반 사용자: 기본 프로젝트 자동 로드 시도
+      try {
+        await loadDefaultProject({ skipConfirm: true });
+      } catch (err) {
+        console.info('[NovelExplor] 기본 프로젝트 없음:', err.message);
+      }
+    } else {
+      const recovered = await offerLocalRecovery();
+      if (!recovered) {
+        await project.createProject('인류 생존 프로젝트', true);
+      }
     }
-  } else {
-    const recovered = await offerLocalRecovery();
-    if (!recovered) {
-      await project.createProject('인류 생존 프로젝트', true);
-    }
+  } finally {
+    endGithubOperation(bootOpenMetrics);
   }
   warnIfWrongOrigin();
   refreshNavVersions();
@@ -186,6 +197,7 @@ function initActions() {
   });
 
   bindAction('open-project', async () => {
+    const openMetrics = beginGithubOperation('project-open');
     try {
       const picked = await showOpenProjectDialog();
       if (!picked) return;
@@ -249,6 +261,8 @@ function initActions() {
       }
     } catch (err) {
       alert(`프로젝트 열기 실패: ${err.message}`);
+    } finally {
+      endGithubOperation(openMetrics);
     }
   });
 
