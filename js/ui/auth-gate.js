@@ -40,9 +40,9 @@ export function initAuthGate() {
   const root = document.getElementById('auth-gate');
   if (!root) return;
 
-  // 세션 만료·로그아웃 시 앱을 막고 로그인 유도
+  // 의도적 로그아웃 시에만 게이트 표시 (부트 중 null emit으로 깜빡이지 않음)
   on('auth:changed', (user) => {
-    if (!user) showAuthGate();
+    if (!user && document.body.dataset.authBootDone === '1') showAuthGate();
   });
 
   root.innerHTML = `

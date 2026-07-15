@@ -48,12 +48,8 @@ import { initPwaInstall } from './ui/pwa-install.js';
 async function boot() {
   initPwaInstall();
   initAuthGate();
-  // 세션이 없거나 검증 전이면 앱 UI를 잠그고 로그인을 유도
-  if (!hasStoredSession()) {
-    showAuthGate();
-  } else {
-    document.body.classList.add('auth-locked');
-  }
+  // 인증 확인 전엔 앱만 잠금 — 로그인 창은 세션이 없을 때만 표시
+  document.body.classList.add('auth-locked');
 
   initNav();
   initWorkspace();
@@ -94,6 +90,7 @@ async function boot() {
   } catch (err) {
     console.error('[NovelExplor] 인증 초기화 실패:', err);
   }
+  document.body.dataset.authBootDone = '1';
   if (!isLoggedIn()) {
     showAuthGate();
     await whenAuthenticated();
