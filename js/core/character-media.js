@@ -1,4 +1,6 @@
-/** 인물 이미지 URL 해석 — data URL · 정적 overlay 경로 공통 처리 */
+/** 미디어 URL 해석 — data URL · 로컬 URL · GitHub 저장소 경로 공통 처리 */
+
+import { rawGithubUrl } from './github-config.js';
 
 /** @param {string} src */
 export function resolveMediaSrc(src) {
@@ -11,6 +13,11 @@ export function resolveMediaSrc(src) {
     || raw.startsWith('/')
   ) {
     return raw;
+  }
+  // split snapshot에 기록된 저장소 루트 경로는 현재 앱 origin이 아니라
+  // 설정된 owner/repo/branch의 raw 파일을 가리켜야 한다.
+  if (/^(?:data\/workspace\/|data\/assets\/)/i.test(raw)) {
+    return rawGithubUrl(raw);
   }
   try {
     return new URL(raw.replace(/^\.\//, ''), document.baseURI || location.href).href;

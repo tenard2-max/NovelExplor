@@ -2,6 +2,7 @@
 
 import * as project from '../core/project.js';
 import { on } from '../core/events.js';
+import { resolveMediaSrc } from '../core/character-media.js';
 import { showAlert, showDialog } from './dialog.js';
 
 const MAX_IMAGE_WIDTH = 1920;
@@ -257,15 +258,7 @@ async function deleteSelectedSceneCut() {
 
 function sceneCutImageUrl(sceneCut) {
   const raw = String(sceneCut?.image || sceneCut?.imagePath || '').trim();
-  if (!raw) return '';
-  if (raw.startsWith('data:') || raw.startsWith('blob:') || /^https?:\/\//i.test(raw)) {
-    return raw;
-  }
-  try {
-    return new URL(raw.replace(/^\.\//, ''), document.baseURI).href;
-  } catch {
-    return raw;
-  }
+  return resolveMediaSrc(raw);
 }
 
 function formatDate(value) {

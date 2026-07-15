@@ -3,6 +3,7 @@
 import { on } from '../core/events.js';
 import * as project from '../core/project.js';
 import * as autosave from '../core/autosave.js';
+import { getCharacterRepresentativeUrl } from '../core/character-media.js';
 import { openCharacterPanel, openImageLightbox } from '../ui/character-panel.js';
 import { showDialog, showAlert } from '../ui/dialog.js';
 import { collectMultiverseRows } from '../core/story-sync-engine.js';
@@ -502,7 +503,7 @@ async function buildCharacterGraph(cache, gen) {
 
   const cx = canvas.clientWidth / 2;
   const cy = canvas.clientHeight / 2;
-  const hasAvatars = characters.some((c) => c.avatarDataUrl);
+  const hasAvatars = characters.some((c) => getCharacterRepresentativeUrl(c));
   const radius = Math.min(cx, cy) * (hasAvatars ? 0.82 : CHARACTER_GRAPH.layoutScale);
   const index = buildCharacterIndex(characters);
 
@@ -563,8 +564,8 @@ async function buildCharacterGraph(cache, gen) {
     color: protagonist.status === 'Dead' ? '#f87171' : '#6c8cff',
     x: pPos.x,
     y: pPos.y,
-    r: protagonist.avatarDataUrl ? AVATAR_NODE_R : CHARACTER_GRAPH.centerR,
-    shape: protagonist.avatarDataUrl ? 'square' : 'circle',
+    r: getCharacterRepresentativeUrl(protagonist) ? AVATAR_NODE_R : CHARACTER_GRAPH.centerR,
+    shape: getCharacterRepresentativeUrl(protagonist) ? 'square' : 'circle',
     data: protagonist,
     type: 'character',
   });
@@ -583,8 +584,8 @@ async function buildCharacterGraph(cache, gen) {
       color: ch.status === 'Dead' ? '#f87171' : '#6c8cff',
       x: pos.x,
       y: pos.y,
-      r: ch.avatarDataUrl ? AVATAR_NODE_R : CHARACTER_GRAPH.outerR,
-      shape: ch.avatarDataUrl ? 'square' : 'circle',
+      r: getCharacterRepresentativeUrl(ch) ? AVATAR_NODE_R : CHARACTER_GRAPH.outerR,
+      shape: getCharacterRepresentativeUrl(ch) ? 'square' : 'circle',
       data: ch,
       type: 'character',
     });
@@ -634,7 +635,7 @@ async function buildCharacterGraph(cache, gen) {
 
 function preloadAvatar(node) {
   if (node.type !== 'character') return;
-  const url = node.data?.avatarDataUrl;
+  const url = getCharacterRepresentativeUrl(node.data);
   if (!url) {
     avatarImages.delete(node.id);
     return;
@@ -1135,7 +1136,7 @@ function drawNode(n, labelLayout = null) {
   const isCharacter = n.type === 'character';
   const isSquare = n.shape === 'square';
   const isRect = n.shape === 'rect';
-  const hasAvatar = isCharacter && n.data?.avatarDataUrl;
+  const hasAvatar = isCharacter && getCharacterRepresentativeUrl(n.data);
   const img = hasAvatar ? avatarImages.get(n.id) : null;
   const avatarReady = img && img.complete && img.naturalWidth > 0;
   const cx = Math.round(n.x);
@@ -1582,7 +1583,7 @@ function handleCharacterClick(node) {
   if (isDouble) {
     if (pendingClickTimer) { clearTimeout(pendingClickTimer); pendingClickTimer = null; }
     lastClick = { id: null, time: 0 };
-    const url = node.data?.avatarDataUrl;
+    const url = getCharacterRepresentativeUrl(node.data);
     if (url) openImageLightbox(url);
     else openCharacterPanel(node.data);
     return;

@@ -2,6 +2,7 @@
 
 import { on, emit } from '../core/events.js';
 import * as project from '../core/project.js';
+import { getCharacterRepresentativeUrl } from '../core/character-media.js';
 import { switchView } from './nav-menu.js';
 import { renderMasterDashboard, renderStoryBibleView, renderSettingDocsWorkspace, renderSettingMdView } from './md-render.js';
 import { findSettingMdFile, getSettingMdFiles, parseSettingMdIndex } from '../core/utils.js';
@@ -71,7 +72,7 @@ function renderView(viewId) {
       id: c.id, type: 'character',
       title: c.name, badge: c.race,
       desc: c.description,
-      image: c.avatarDataUrl || '',
+      image: getCharacterRepresentativeUrl(c),
       deletable: true,
     }));
   } else if (viewId === 'settings') {

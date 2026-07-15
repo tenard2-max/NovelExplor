@@ -2,6 +2,7 @@
 
 import { on } from '../core/events.js';
 import * as project from '../core/project.js';
+import { resolveMediaSrc } from '../core/character-media.js';
 import { getCurrentStoryMarkdownSync, tagReaderBlocksForTts } from './reader.js';
 import { setTtsWallpaper, clearTtsWallpaper } from './canvas-wallpaper.js';
 import {
@@ -786,27 +787,9 @@ function sceneCutWallpaperUrl(sceneCut) {
   if (!sceneCut) return '';
   const imagePath = String(sceneCut.imagePath || '').trim();
   if (imagePath && !imagePath.startsWith('data:') && !imagePath.startsWith('blob:')) {
-    return resolveAvatarSrc(imagePath);
+    return resolveMediaSrc(imagePath);
   }
-  return resolveAvatarSrc(sceneCut.image || imagePath);
-}
-
-function resolveAvatarSrc(src) {
-  const raw = String(src || '').trim();
-  if (!raw) return '';
-  if (
-    raw.startsWith('data:')
-    || raw.startsWith('blob:')
-    || /^https?:\/\//i.test(raw)
-    || raw.startsWith('/')
-  ) {
-    return raw;
-  }
-  try {
-    return new URL(raw.replace(/^\.\//, ''), document.baseURI || location.href).href;
-  } catch {
-    return raw;
-  }
+  return resolveMediaSrc(sceneCut.image || imagePath);
 }
 
 function defaultCharacterOverlayPath(ch) {
@@ -824,7 +807,7 @@ function characterAvatarUrl(ch) {
     || defaultCharacterOverlayPath(ch);
 
   if (pathLike && !pathLike.startsWith('data:') && !pathLike.startsWith('blob:')) {
-    return resolveAvatarSrc(pathLike);
+    return resolveMediaSrc(pathLike);
   }
 
   const fromFields = String(
@@ -832,7 +815,7 @@ function characterAvatarUrl(ch) {
   ).trim()
     || (Array.isArray(ch.images) ? String(ch.images.find((u) => String(u || '').trim()) || '').trim() : '');
 
-  return resolveAvatarSrc(fromFields || pathLike);
+  return resolveMediaSrc(fromFields || pathLike);
 }
 
 /** 이름 변형 — 예: 가은이 → 가은 */

@@ -3,12 +3,13 @@
 import * as storage from '../core/storage.js';
 import * as project from '../core/project.js';
 import { on, emit } from '../core/events.js';
+import { resolveMediaSrc } from '../core/character-media.js';
 import { getCurrentView } from './nav-menu.js';
 
 const DEFAULTS = { saturation: 100, alpha: 45, size: 100 };
 const MAX_IMAGE_WIDTH = 1600;
 
-let state = { ...DEFAULTS, dataUrl: '' };
+let state = { ...DEFAULTS, dataUrl: '', dataPath: '' };
 let ttsOverrideUrl = '';
 let saveTimer = null;
 
@@ -42,6 +43,7 @@ export function initCanvasWallpaper() {
     try {
       ttsOverrideUrl = '';
       state.dataUrl = await resizeImageToDataUrl(file, MAX_IMAGE_WIDTH);
+      state.dataPath = '';
       applyWallpaper();
       await persistWallpaper();
     } catch (err) {
@@ -110,13 +112,13 @@ function gaugeValue(raw, fallback, { min = 0, allowZero = true } = {}) {
 
 /** TTS 등 일시 배경 — 저장하지 않음, 마지막 캐릭터 사진 유지 */
 export function setTtsWallpaper(dataUrl) {
-  const url = String(dataUrl || '').trim();
+  const url = resolveMediaSrc(dataUrl);
   if (!url) return;
 
   ttsOverrideUrl = url;
 
   // 베이스 월페이퍼가 한 번도 없을 때 게이지 0이면 안 보이므로 기본값 보정
-  if (!state.dataUrl) {
+  if (!state.dataUrl && !state.dataPath) {
     state.saturation = gaugeValue(state.saturation, DEFAULTS.saturation);
     state.alpha = gaugeValue(state.alpha, DEFAULTS.alpha, { min: 1 });
     state.size = gaugeValue(state.size, DEFAULTS.size, { min: 1, allowZero: false });
@@ -138,7 +140,7 @@ export function clearTtsWallpaper() {
 }
 
 function getActiveWallpaperUrl() {
-  return ttsOverrideUrl || state.dataUrl;
+  return ttsOverrideUrl || resolveMediaSrc(state.dataUrl || state.dataPath);
 }
 
 function isReaderViewVisible(viewId) {
@@ -192,7 +194,7 @@ async function loadWallpaperForProject() {
   // 여기서 지우면 비동기 로드 중 TTS 배경이 바로 사라질 수 있다.
   const proj = project.getCurrentProject();
   if (!proj) {
-    state = { ...DEFAULTS, dataUrl: '' };
+    state = { ...DEFAULTS, dataUrl: '', dataPath: '' };
     syncGaugesFromState();
     applyWallpaper();
     return;
@@ -201,6 +203,7 @@ async function loadWallpaperForProject() {
   const saved = await storage.get('settings', `${proj.projectId}-canvas-wallpaper`);
   state = {
     dataUrl: saved?.dataUrl || '',
+    dataPath: saved?.dataPath || '',
     saturation: gaugeValue(saved?.saturation, DEFAULTS.saturation),
     alpha: gaugeValue(saved?.alpha, DEFAULTS.alpha, { min: 1 }),
     size: gaugeValue(saved?.size, DEFAULTS.size, { min: 1, allowZero: false }),
@@ -224,6 +227,7 @@ async function persistWallpaper() {
     id: `${proj.projectId}-canvas-wallpaper`,
     projectId: proj.projectId,
     dataUrl: state.dataUrl,
+    dataPath: state.dataPath,
     saturation: state.saturation,
     alpha: state.alpha,
     size: state.size,
