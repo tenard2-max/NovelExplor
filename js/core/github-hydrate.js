@@ -1,10 +1,5 @@
-/** GitHub split 스냅샷 → foreshadow-backup (overlay PNG → data URL) */
+/** GitHub split 스냅샷 → 경량 foreshadow-backup (자산 경로만 보존) */
 
-import {
-  getRepoFileText,
-  getRepoFileBase64,
-  listRepoDir,
-} from './github-api.js';
 import { getGithubConfig, overlaysDir } from './github-config.js';
 
 export function isGithubSplitManifest(data) {
@@ -18,44 +13,17 @@ function characterIdOf(ch) {
     || 'CHR0000';
 }
 
-async function tryFetchPngAsDataUrl(repoPath) {
-  if (!repoPath) return '';
-  try {
-    const b64 = await getRepoFileBase64(repoPath);
-    return b64 ? `data:image/png;base64,${b64}` : '';
-  } catch {
-    return '';
-  }
-}
-
-async function tryFetchImageAsDataUrl(repoPath, mime = 'image/png') {
-  if (!repoPath) return '';
-  try {
-    const b64 = await getRepoFileBase64(repoPath);
-    return b64 ? `data:${mime || 'image/png'};base64,${b64}` : '';
-  } catch {
-    return '';
-  }
-}
-
-/** split manifest → foreshadow-backup 전체 payload */
+/**
+ * split manifest → 경량 foreshadow-backup payload.
+ *
+ * 프로젝트 열기에서는 JSON 메타데이터만 변환한다. PNG·MD/TXT를 Contents API로
+ * 가져오지 않으며, 화면/백그라운드 캐시가 나중에 사용할 저장소 경로를 보존한다.
+ * manifest에 data URL/본문이 직접 포함된 레거시 데이터는 그대로 유지한다.
+ */
 export async function hydrateManifestFromGithub(manifest) {
   const cfg = getGithubConfig();
   const overlayRoot = overlaysDir(cfg);
   const charactersDir = `${overlayRoot}/characters`;
-
-  /** @type {{ name: string, path: string, type: string }[] | null} */
-  let overlayListing = null;
-  async function listCharacterOverlays() {
-    if (overlayListing === null) {
-      try {
-        overlayListing = await listRepoDir(charactersDir);
-      } catch {
-        overlayListing = [];
-      }
-    }
-    return overlayListing;
-  }
 
   const payload = {
     format: 'foreshadow-backup',
@@ -79,49 +47,10 @@ export async function hydrateManifestFromGithub(manifest) {
     const entry = { ...ch };
     const cid = characterIdOf(ch);
     const defaultAvatarPath = `${charactersDir}/${cid}.png`;
-    const fallbackAvatarPath = String(ch.avatarPath || defaultAvatarPath).trim();
-    const fallbackImagePaths = Array.isArray(ch.imagePaths)
+    entry.avatarPath = String(ch.avatarPath || defaultAvatarPath).trim();
+    entry.imagePaths = Array.isArray(ch.imagePaths)
       ? ch.imagePaths.map((p) => String(p || '').trim()).filter(Boolean)
       : [];
-
-    let avatarDataUrl = '';
-    if (ch.avatarPath) {
-      avatarDataUrl = await tryFetchPngAsDataUrl(ch.avatarPath);
-    }
-    if (!avatarDataUrl) {
-      avatarDataUrl = await tryFetchPngAsDataUrl(defaultAvatarPath);
-    }
-    if (avatarDataUrl) entry.avatarDataUrl = avatarDataUrl;
-    // data URL 변환 실패해도 정적 경로를 남겨 TTS/카드가 사진을 쓸 수 있게 한다
-    entry.avatarPath = fallbackAvatarPath;
-
-    const images = [];
-    if (fallbackImagePaths.length) {
-      for (const p of fallbackImagePaths) {
-        const url = await tryFetchPngAsDataUrl(p);
-        if (url) images.push(url);
-      }
-    } else {
-      const listing = await listCharacterOverlays();
-      const galleryRe = new RegExp(`^${cid.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}_(\\d+)\\.png$`, 'i');
-      const galleryFiles = listing
-        .filter((f) => f.type === 'file' && galleryRe.test(f.name))
-        .sort((a, b) => {
-          const na = Number(a.name.match(galleryRe)?.[1] || 0);
-          const nb = Number(b.name.match(galleryRe)?.[1] || 0);
-          return na - nb;
-        });
-      for (const f of galleryFiles) {
-        const url = await tryFetchPngAsDataUrl(f.path);
-        if (url) images.push(url);
-      }
-      if (!fallbackImagePaths.length) {
-        entry.imagePaths = galleryFiles.map((f) => f.path);
-      }
-    }
-    if (images.length) entry.images = images;
-    else if (fallbackImagePaths.length) entry.imagePaths = fallbackImagePaths;
-
     payload.characters.push(entry);
   }
 
@@ -131,49 +60,27 @@ export async function hydrateManifestFromGithub(manifest) {
       || String(sceneCut.id || '').split('-').filter(Boolean).pop()
       || 'SCN0000';
     const defaultImagePath = `${overlayRoot}/scene-cuts/${sceneCutId}.png`;
-    const imagePath = String(sceneCut.imagePath || defaultImagePath).trim();
-    const image = await tryFetchImageAsDataUrl(
-      imagePath,
-      String(sceneCut.imageMime || 'image/png')
-    );
-
-    entry.imagePath = imagePath;
-    entry.image = image || String(sceneCut.image || '').trim();
+    entry.imagePath = String(sceneCut.imagePath || defaultImagePath).trim();
+    entry.image = String(sceneCut.image || '').trim();
     payload.sceneCuts.push(entry);
   }
 
   for (const f of manifest.files || []) {
-    let content = f.content || '';
-    if (f.contentPath) {
-      try {
-        content = await getRepoFileText(f.contentPath);
-      } catch {
-        content = '';
-      }
-    }
-    const next = { ...f, content };
-    delete next.contentPath;
-    payload.files.push(next);
+    payload.files.push({
+      ...f,
+      content: String(f.content || ''),
+      contentPath: String(f.contentPath || '').trim(),
+    });
   }
 
-  const wp = manifest.settings?.canvasWallpaper;
-  if (wp?.dataPath) {
-    const dataUrl = await tryFetchPngAsDataUrl(wp.dataPath);
-    payload.settings = {
-      canvasWallpaper: {
-        ...wp,
-        dataUrl: dataUrl || wp.dataUrl || '',
-        dataPath: undefined,
-      },
-    };
-  } else if (manifest.settings) {
+  if (manifest.settings) {
     payload.settings = manifest.settings;
   }
 
   return payload;
 }
 
-/** split 스냅샷 JSON이면 GitHub overlay에서 이미지를 채운 뒤 foreshadow-backup JSON 문자열 반환 */
+/** split 스냅샷 JSON이면 자산 경로를 보존한 경량 백업 JSON 문자열 반환 */
 export async function hydrateSplitBackupJson(jsonText) {
   let data;
   try {
