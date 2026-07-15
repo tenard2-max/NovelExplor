@@ -2314,12 +2314,20 @@ body.auth-locked .pwa-install-banner {
 }
 
 /* ——— 장면컷 ——— */
+#view-scene-cuts {
+  position: relative;
+  z-index: 1;
+  overflow: hidden;
+  background: var(--bg-canvas);
+}
+
 .scene-cut-layout {
   display: grid;
   grid-template-columns: minmax(260px, 340px) minmax(0, 1fr);
   width: 100%;
   height: 100%;
   min-height: 0;
+  overflow: hidden;
   background: var(--bg-canvas);
 }
 
@@ -2449,15 +2457,21 @@ body.auth-locked .pwa-install-banner {
   display: flex;
   justify-content: center;
   margin: 0 0 24px;
+  max-width: 100%;
+  overflow: hidden;
 }
 
 .scene-cut-main-image {
   display: block;
-  width: min(100%, 1100px);
-  max-height: 68vh;
+  box-sizing: border-box;
+  max-width: min(100%, 1100px);
+  width: auto;
+  height: auto;
+  max-height: min(68vh, 720px);
   border: 1px solid var(--border);
   border-radius: 12px;
   object-fit: contain;
+  object-position: center;
   background: #080a0f;
   box-shadow: var(--shadow);
 }

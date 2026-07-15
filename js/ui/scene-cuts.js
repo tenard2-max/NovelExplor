@@ -139,6 +139,12 @@ function renderDetail(container, sceneCut) {
     image.className = 'scene-cut-main-image';
     image.src = imageUrl;
     image.alt = `${sceneCut.name || '장면컷'} 이미지`;
+    image.decoding = 'async';
+    // 대용량 data URL 첫 페인트 시 원본 해상도로 레이아웃이 터지지 않게
+    image.style.maxWidth = '100%';
+    image.style.maxHeight = 'min(68vh, 720px)';
+    image.style.width = 'auto';
+    image.style.height = 'auto';
     figure.appendChild(image);
   } else {
     const placeholder = document.createElement('div');

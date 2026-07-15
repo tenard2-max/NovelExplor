@@ -1,5 +1,5 @@
 /* NovelExplor PWA service worker — app shell cache */
-const CACHE_VERSION = 'ne-pwa-v1';
+const CACHE_VERSION = 'ne-pwa-v2-20260715';
 const APP_SHELL = [
   './',
   './index.html',
@@ -34,9 +34,12 @@ self.addEventListener('fetch', (event) => {
   const url = new URL(req.url);
   if (url.origin !== self.location.origin) return;
 
-  // JS / JSON / XML: network first so Pages 배포가 바로 반영
-  if (/\.(js|mjs|json|xml|webmanifest)(\?|$)/i.test(url.pathname) || req.mode === 'navigate'
-      || (req.headers.get('accept') || '').includes('text/html')) {
+  // HTML / JS / CSS / JSON / XML: network first — 배포 직후 옛 캐시로 UI가 깨지지 않게
+  if (
+    /\.(js|mjs|css|json|xml|webmanifest)(\?|$)/i.test(url.pathname)
+    || req.mode === 'navigate'
+    || (req.headers.get('accept') || '').includes('text/html')
+  ) {
     event.respondWith(
       fetch(req)
         .then((res) => {
@@ -49,7 +52,7 @@ self.addEventListener('fetch', (event) => {
     return;
   }
 
-  // 정적 자산: cache first
+  // 아이콘 등 정적 이미지: cache first
   event.respondWith(
     caches.match(req).then((cached) => {
       if (cached) return cached;
