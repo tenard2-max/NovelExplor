@@ -37,7 +37,7 @@ import { initGithubPanel } from './ui/github-panel.js';
 import { initGithubSync } from './core/github-sync.js';
 import { initStorySync } from './ui/story-sync.js';
 import { initTimeline } from './ui/timeline-panel.js';
-import { initAuth, isLoggedIn, hasStoredSession, getCurrentUser, ROLES, canSaveProject, canSetDefaultProject, canManageProjectContent } from './core/auth.js';
+import { initAuth, isLoggedIn, getCurrentUser, ROLES, canSaveProject, canSetDefaultProject, canManageProjectContent } from './core/auth.js';
 import { loadDefaultProject, saveAsDefaultProject } from './core/default-project.js';
 import { pullProjectFromGithub } from './core/github-pull.js';
 import { initAuthGate, showAuthGate, hideAuthGate, whenAuthenticated } from './ui/auth-gate.js';
