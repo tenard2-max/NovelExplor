@@ -14,6 +14,7 @@ import {
   fetchRemoteAuthCatalog,
   applyRemoteUsers,
   refreshMergedUserCatalog,
+  withTimeout,
 } from './auth-sync.js';
 import { nowIso, uuid } from './utils.js';
 import { emit } from './events.js';
@@ -131,61 +132,69 @@ export function hasStoredSession() {
 }
 
 /**
- * 앱 시작: 로컬 세션 우선 복구 → GitHub 사용자 목록 → 마스터 부트스트랩
+ * 앱 시작: 로컬 세션/마스터 우선 → GitHub 동기화는 백그라운드
  * IndexedDB가 비었는데 세션만 남은 경우 → 세션 폐기 후 미로그인
  */
 export async function initAuth() {
-  // 1) 로컬 세션이 유효하면 네트워크 전에 즉시 복구 (로그인 UX)
   const earlySession = readSession();
   if (earlySession?.userId) {
-    const localUser = await storage.get('users', earlySession.userId);
-    if (localUser && !localUser.disabled) {
-      currentUser = await toPublicUser(localUser);
-      emit('auth:changed', currentUser);
+    try {
+      const localUser = await withTimeout(
+        storage.get('users', earlySession.userId),
+        5000,
+        'idb-timeout'
+      );
+      if (localUser && !localUser.disabled) {
+        currentUser = await toPublicUser(localUser);
+        emit('auth:changed', currentUser);
+      }
+    } catch (err) {
+      console.warn('[auth] 로컬 세션 복구 실패:', err);
     }
   }
 
+  // 로컬 마스터만 빠르게 보장 (네트워크에 막히지 않음)
   try {
-    await syncUsersFromGithub();
+    await withTimeout(ensureMasterAccount({ allowRemote: false }), 20000, 'master-bootstrap-timeout');
   } catch (err) {
-    console.warn('[auth] GitHub 사용자 동기화 실패:', err);
+    console.warn('[auth] 마스터 보장 실패:', err);
   }
 
-  await ensureMasterAccount();
-  await migrateAllUsers();
+  // GitHub pull/push 는 로그인 UI를 막지 않도록 백그라운드
+  (async () => {
+    try {
+      await syncUsersFromGithub();
+      await ensureMasterAccount({ allowRemote: true });
+      await migrateAllUsers();
+      await ensureUsersPublished();
+    } catch (err) {
+      console.warn('[auth] 백그라운드 인증 동기화 실패:', err);
+    }
+  })();
 
-  try {
-    // 로컬에만 있는 계정(가입분)을 GitHub에 올림
-    await ensureUsersPublished();
-  } catch (err) {
-    console.warn('[auth] 사용자 GitHub 게시 실패:', err);
-  }
-
-  // 동기화 중 로그인한 경우 덮어쓰지 않음
   if (currentUser) {
-    const still = await storage.get('users', currentUser.id);
-    if (still && !still.disabled) return currentUser;
+    try {
+      const still = await withTimeout(storage.get('users', currentUser.id), 5000, 'idb-timeout');
+      if (still && !still.disabled) return currentUser;
+    } catch {
+      /* ignore */
+    }
     currentUser = null;
     clearSession();
   }
 
   const session = readSession();
   if (session?.userId) {
-    let user = await storage.get('users', session.userId);
-    if (!user) {
-      try {
-        await syncUsersFromGithub();
-        user = await storage.get('users', session.userId);
-      } catch {
-        /* ignore */
+    try {
+      const user = await withTimeout(storage.get('users', session.userId), 5000, 'idb-timeout');
+      if (user && !user.disabled) {
+        currentUser = await toPublicUser(user);
+        emit('auth:changed', currentUser);
+        return currentUser;
       }
+    } catch {
+      /* ignore */
     }
-    if (user && !user.disabled) {
-      currentUser = await toPublicUser(user);
-      emit('auth:changed', currentUser);
-      return currentUser;
-    }
-    // 브라우저 데이터가 날아가 사용자 레코드가 없으면 세션도 폐기
     clearSession();
   }
   currentUser = null;
@@ -195,8 +204,10 @@ export async function initAuth() {
 
 /**
  * 마스터 보장 — GitHub에 이미 계정이 있으면 로컬 초기 master/master 생성하지 않음
+ * @param {{ allowRemote?: boolean }} [opts]
  */
-async function ensureMasterAccount() {
+async function ensureMasterAccount(opts = {}) {
+  const allowRemote = opts.allowRemote !== false;
   const users = await storage.getAll('users');
   let master = users.find((u) => u.role === ROLES.MASTER);
   if (!master) {
@@ -208,14 +219,19 @@ async function ensureMasterAccount() {
     return master;
   }
 
-  // GitHub에 사용자(마스터)가 있으면 로컬 부트스트랩 금지 — pull 재시도
-  const remote = await fetchRemoteAuthCatalog();
-  if (remote?.users?.length) {
-    await applyRemoteUsers(remote);
-    const after = await storage.getAll('users');
-    master = after.find((u) => u.role === ROLES.MASTER);
-    if (master) return master;
-    throw new Error('GitHub에 사용자 정보가 있으나 마스터 계정을 찾을 수 없습니다.');
+  if (allowRemote) {
+    try {
+      const remote = await withTimeout(fetchRemoteAuthCatalog(), 6000, 'remote-master-timeout');
+      if (remote?.users?.length) {
+        await applyRemoteUsers(remote);
+        const after = await storage.getAll('users');
+        master = after.find((u) => u.role === ROLES.MASTER);
+        if (master) return master;
+        throw new Error('GitHub에 사용자 정보가 있으나 마스터 계정을 찾을 수 없습니다.');
+      }
+    } catch (err) {
+      console.warn('[auth] 원격 마스터 조회 실패, 로컬 부트스트랩 검토:', err?.message || err);
+    }
   }
 
   // 최초 1대: 로컬에만 초기 마스터 생성 (이후 비번 변경·PAT로 GitHub 게시)
@@ -314,20 +330,32 @@ export async function signup(username, password) {
 }
 
 /**
- * 로그인: 로컬 비밀번호 먼저 검증(네트워크에 막히지 않음)
- * → 실패/계정 없을 때만 GitHub pull 후 재시도
+ * 로그인: 로컬만으로 완료. 네트워크는 계정 없을 때만 짧게 시도.
  */
 export async function login(username, password) {
   const id = String(username || '').trim().toLowerCase();
   const pw = String(password || '');
 
-  let user = await findUserByUsername(id);
+  // 로컬 계정이 비어 있으면 마스터 부트스트랩 (네트워크 없이)
+  try {
+    const localUsers = await withTimeout(storage.getAll('users'), 5000, 'idb-timeout');
+    if (!localUsers.length) {
+      await withTimeout(ensureMasterAccount({ allowRemote: false }), 20000, 'master-bootstrap-timeout');
+    }
+  } catch (err) {
+    console.warn('[auth] 로그인 전 로컬 준비 실패:', err);
+  }
 
-  // 로컬에 계정이 있으면 즉시 검증 — GitHub 대기로 버튼이 멈추지 않게
+  let user = await withTimeout(findUserByUsername(id), 8000, 'idb-timeout');
+
   if (user && !user.disabled) {
-    const ok = await verifyPassword(pw, user.salt, user.passwordHash);
+    const ok = await withTimeout(
+      verifyPassword(pw, user.salt, user.passwordHash),
+      25000,
+      '비밀번호 확인이 너무 오래 걸립니다. 다시 시도해 주세요.'
+    );
     if (ok) {
-      currentUser = await toPublicUser(user);
+      currentUser = await withTimeout(toPublicUser(user), 15000, '사용자 정보 복호화 시간 초과');
       writeSession(currentUser);
       emit('auth:changed', currentUser);
       syncUsersFromGithub().catch(() => {});
@@ -335,23 +363,28 @@ export async function login(username, password) {
     }
   }
 
+  // 로컬 실패/없음 → 짧게만 원격 pull (인앱 브라우저 hang 방지)
   try {
-    await syncUsersFromGithub();
+    await withTimeout(syncUsersFromGithub(), 7000, 'github-sync-timeout');
   } catch (err) {
-    console.warn('[auth] 로그인 전 GitHub pull 실패:', err);
+    console.warn('[auth] 로그인 전 GitHub pull 실패:', err?.message || err);
   }
-  user = await findUserByUsername(id);
+  user = await withTimeout(findUserByUsername(id), 8000, 'idb-timeout');
 
   if (!user || user.disabled) {
-    throw new Error('아이디 또는 비밀번호가 올바르지 않습니다.');
+    throw new Error('아이디 또는 비밀번호가 올바르지 않습니다. (로컬/GitHub에 계정이 없거나 아직 동기화되지 않았습니다)');
   }
 
-  const ok = await verifyPassword(pw, user.salt, user.passwordHash);
+  const ok = await withTimeout(
+    verifyPassword(pw, user.salt, user.passwordHash),
+    25000,
+    '비밀번호 확인이 너무 오래 걸립니다. 다시 시도해 주세요.'
+  );
   if (!ok) {
     throw new Error('아이디 또는 비밀번호가 올바르지 않습니다.');
   }
 
-  currentUser = await toPublicUser(user);
+  currentUser = await withTimeout(toPublicUser(user), 15000, '사용자 정보 복호화 시간 초과');
   writeSession(currentUser);
   emit('auth:changed', currentUser);
   return currentUser;

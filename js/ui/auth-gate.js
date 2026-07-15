@@ -10,8 +10,11 @@ import {
 import {
   syncUsersFromGithub,
   getAuthCatalogStatus,
+  withTimeout,
 } from '../core/auth-sync.js';
 import { on } from '../core/events.js';
+
+const LOGIN_UI_TIMEOUT_MS = 35000;
 
 let resolveReady = null;
 let readyPromise = null;
@@ -105,7 +108,11 @@ export function initAuthGate() {
         btn.disabled = true;
         btn.textContent = '로그인 중…';
       }
-      await login(fd.get('username'), fd.get('password'));
+      await withTimeout(
+        login(fd.get('username'), fd.get('password')),
+        LOGIN_UI_TIMEOUT_MS,
+        '로그인 응답이 없습니다. 네트워크/브라우저를 확인한 뒤 다시 시도하세요.'
+      );
       hideAuthGate();
       resolveAuthenticated(getCurrentUser());
     } catch (err) {
@@ -136,8 +143,14 @@ export function initAuthGate() {
         btn.disabled = true;
         btn.textContent = '가입 중…';
       }
-      await signup(fd.get('username'), fd.get('password'));
-      await login(fd.get('username'), fd.get('password'));
+      await withTimeout(
+        (async () => {
+          await signup(fd.get('username'), fd.get('password'));
+          await login(fd.get('username'), fd.get('password'));
+        })(),
+        LOGIN_UI_TIMEOUT_MS,
+        '회원가입 응답이 없습니다. 다시 시도하세요.'
+      );
       hideAuthGate();
       resolveAuthenticated(getCurrentUser());
     } catch (err) {
@@ -160,10 +173,11 @@ async function refreshAuthHint(root) {
   const hint = root.querySelector('#auth-catalog-hint');
   if (!hint) return;
   const token = ++hintRefreshToken;
+  hint.textContent = '계정 확인 중… (로컬 우선, GitHub는 백그라운드)';
   try {
-    await syncUsersFromGithub();
+    await withTimeout(syncUsersFromGithub(), 7000, 'hint-sync-timeout').catch(() => false);
     if (token !== hintRefreshToken) return;
-    const status = await getAuthCatalogStatus();
+    const status = await withTimeout(getAuthCatalogStatus(), 7000, 'hint-status-timeout');
     if (status.remoteAvailable || status.localUserCount) {
       hint.textContent = `로컬 ${status.localUserCount}명 · GitHub ${status.remoteUserCount}명. 등록된 비밀번호로 로그인하세요.`;
     } else {

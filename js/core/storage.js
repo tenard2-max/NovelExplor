@@ -66,9 +66,16 @@ async function tx(storeName, mode, fn) {
   return new Promise((resolve, reject) => {
     const transaction = db.transaction(storeName, mode);
     const store = transaction.objectStore(storeName);
-    const result = fn(store);
-    transaction.oncomplete = () => resolve(result);
-    transaction.onerror = () => reject(transaction.error);
+    let req;
+    try {
+      req = fn(store);
+    } catch (err) {
+      reject(err);
+      return;
+    }
+    transaction.oncomplete = () => resolve(req?.result);
+    transaction.onerror = () => reject(transaction.error || req?.error);
+    transaction.onabort = () => reject(transaction.error || new Error('IndexedDB aborted'));
   });
 }
 
@@ -77,23 +84,12 @@ export async function put(storeName, record) {
 }
 
 export async function get(storeName, id) {
-  return tx(storeName, 'readonly', (store) => {
-    return new Promise((resolve, reject) => {
-      const req = store.get(id);
-      req.onsuccess = () => resolve(req.result);
-      req.onerror = () => reject(req.error);
-    });
-  });
+  return tx(storeName, 'readonly', (store) => store.get(id));
 }
 
 export async function getAll(storeName) {
-  return tx(storeName, 'readonly', (store) => {
-    return new Promise((resolve, reject) => {
-      const req = store.getAll();
-      req.onsuccess = () => resolve(req.result || []);
-      req.onerror = () => reject(req.error);
-    });
-  });
+  const result = await tx(storeName, 'readonly', (store) => store.getAll());
+  return result || [];
 }
 
 export async function getByProject(storeName, projectId) {
