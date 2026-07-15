@@ -28,7 +28,7 @@ export function initSettings() {
   document.addEventListener('click', (e) => {
     const btn = e.target.closest('[data-action="logout"]');
     if (!btn) return;
-    logout();
+    logout(); // auth:changed(null) → showAuthGate
     location.reload();
   });
 }

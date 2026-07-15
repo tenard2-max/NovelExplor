@@ -11,18 +11,39 @@ import {
   syncUsersFromGithub,
   getAuthCatalogStatus,
 } from '../core/auth-sync.js';
+import { on } from '../core/events.js';
 
 let resolveReady = null;
-const readyPromise = new Promise((r) => { resolveReady = r; });
+let readyPromise = null;
+
+/** 로그아웃 후에도 다시 대기할 수 있도록 Promise를 재장전 */
+function armReadyWait() {
+  if (resolveReady != null) return;
+  readyPromise = new Promise((r) => { resolveReady = r; });
+}
+
+armReadyWait();
 
 export function whenAuthenticated() {
   if (isLoggedIn()) return Promise.resolve(getCurrentUser());
+  armReadyWait();
   return readyPromise;
+}
+
+function resolveAuthenticated(user) {
+  const done = resolveReady;
+  resolveReady = null;
+  done?.(user);
 }
 
 export function initAuthGate() {
   const root = document.getElementById('auth-gate');
   if (!root) return;
+
+  // 세션 만료·로그아웃 시 앱을 막고 로그인 유도
+  on('auth:changed', (user) => {
+    if (!user) showAuthGate();
+  });
 
   root.innerHTML = `
     <div class="auth-card">
@@ -79,7 +100,7 @@ export function initAuthGate() {
       if (btn) btn.disabled = true;
       await login(fd.get('username'), fd.get('password'));
       hideAuthGate();
-      resolveReady?.(getCurrentUser());
+      resolveAuthenticated(getCurrentUser());
     } catch (err) {
       errEl.textContent = err.message || '로그인 실패';
       errEl.hidden = false;
@@ -99,7 +120,7 @@ export function initAuthGate() {
       await signup(fd.get('username'), fd.get('password'));
       await login(fd.get('username'), fd.get('password'));
       hideAuthGate();
-      resolveReady?.(getCurrentUser());
+      resolveAuthenticated(getCurrentUser());
     } catch (err) {
       errEl.textContent = err.message || '회원가입 실패';
       errEl.hidden = false;
@@ -128,6 +149,7 @@ async function refreshAuthHint(root) {
 export function showAuthGate() {
   const root = document.getElementById('auth-gate');
   const app = document.getElementById('app');
+  armReadyWait();
   if (root) {
     root.hidden = false;
     refreshAuthHint(root);

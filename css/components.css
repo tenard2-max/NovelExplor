@@ -2054,7 +2054,7 @@
 .auth-gate {
   position: fixed;
   inset: 0;
-  z-index: 10000;
+  z-index: 10100;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -2069,6 +2069,11 @@
 body.auth-locked #app {
   visibility: hidden;
   pointer-events: none;
+}
+
+/* 로그인 중에는 PWA 배너가 게이트를 가리지 않도록 */
+body.auth-locked .pwa-install-banner {
+  display: none !important;
 }
 
 .auth-card {

@@ -37,7 +37,7 @@ import { initGithubPanel } from './ui/github-panel.js';
 import { initGithubSync } from './core/github-sync.js';
 import { initStorySync } from './ui/story-sync.js';
 import { initTimeline } from './ui/timeline-panel.js';
-import { initAuth, isLoggedIn, getCurrentUser, ROLES, canSaveProject, canSetDefaultProject, canManageProjectContent } from './core/auth.js';
+import { initAuth, isLoggedIn, hasStoredSession, getCurrentUser, ROLES, canSaveProject, canSetDefaultProject, canManageProjectContent } from './core/auth.js';
 import { loadDefaultProject, saveAsDefaultProject } from './core/default-project.js';
 import { pullProjectFromGithub } from './core/github-pull.js';
 import { initAuthGate, showAuthGate, hideAuthGate, whenAuthenticated } from './ui/auth-gate.js';
@@ -48,6 +48,13 @@ import { initPwaInstall } from './ui/pwa-install.js';
 async function boot() {
   initPwaInstall();
   initAuthGate();
+  // 세션이 없거나 검증 전이면 앱 UI를 잠그고 로그인을 유도
+  if (!hasStoredSession()) {
+    showAuthGate();
+  } else {
+    document.body.classList.add('auth-locked');
+  }
+
   initNav();
   initWorkspace();
   initUploadPanel();

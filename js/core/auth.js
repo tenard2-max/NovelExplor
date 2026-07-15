@@ -124,10 +124,27 @@ export function roleLabel(role) {
   return ROLE_LABELS[role] || role;
 }
 
+/** localStorage에 세션 키가 있는지 (검증 전·빠른 게이트용) */
+export function hasStoredSession() {
+  const session = readSession();
+  return !!(session && session.userId);
+}
+
 /**
- * 앱 시작: GitHub 사용자 목록 → 로컬 캐시 → (원격 없을 때만) 마스터 부트스트랩
+ * 앱 시작: 로컬 세션 우선 복구 → GitHub 사용자 목록 → 마스터 부트스트랩
+ * IndexedDB가 비었는데 세션만 남은 경우 → 세션 폐기 후 미로그인
  */
 export async function initAuth() {
+  // 1) 로컬 세션이 유효하면 네트워크 전에 즉시 복구 (로그인 UX)
+  const earlySession = readSession();
+  if (earlySession?.userId) {
+    const localUser = await storage.get('users', earlySession.userId);
+    if (localUser && !localUser.disabled) {
+      currentUser = await toPublicUser(localUser);
+      emit('auth:changed', currentUser);
+    }
+  }
+
   try {
     await syncUsersFromGithub();
   } catch (err) {
@@ -142,6 +159,14 @@ export async function initAuth() {
     await ensureUsersPublished();
   } catch (err) {
     console.warn('[auth] 사용자 GitHub 게시 실패:', err);
+  }
+
+  // 동기화 중 로그인한 경우 덮어쓰지 않음
+  if (currentUser) {
+    const still = await storage.get('users', currentUser.id);
+    if (still && !still.disabled) return currentUser;
+    currentUser = null;
+    clearSession();
   }
 
   const session = readSession();
@@ -160,6 +185,7 @@ export async function initAuth() {
       emit('auth:changed', currentUser);
       return currentUser;
     }
+    // 브라우저 데이터가 날아가 사용자 레코드가 없으면 세션도 폐기
     clearSession();
   }
   currentUser = null;
