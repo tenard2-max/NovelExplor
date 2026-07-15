@@ -55,7 +55,61 @@ export function mergeUserRecords(localUsers = [], remoteUsers = []) {
     const prev = map.get(u.id);
     if (!prev || ts(next) >= ts(prev)) map.set(u.id, next);
   }
-  return [...map.values()];
+  return dedupeByUsernameHash([...map.values()]);
+}
+
+/**
+ * 동일 usernameHash(같은 아이디)는 1명만 유지 — 최신 updatedAt 우선
+ * @param {object[]} users
+ * @param {{ preferId?: string }} [opts]
+ */
+export function dedupeByUsernameHash(users = [], opts = {}) {
+  const preferId = opts.preferId || '';
+  const byHash = new Map();
+  const noHash = [];
+
+  for (const u of users) {
+    if (!u?.id) continue;
+    const rec = toAuthRecord(u);
+    if (!rec.usernameHash) {
+      noHash.push(rec);
+      continue;
+    }
+    const prev = byHash.get(rec.usernameHash);
+    if (!prev) {
+      byHash.set(rec.usernameHash, rec);
+      continue;
+    }
+    if (preferId && rec.id === preferId) {
+      byHash.set(rec.usernameHash, rec);
+      continue;
+    }
+    if (preferId && prev.id === preferId) continue;
+    if (ts(rec) >= ts(prev)) byHash.set(rec.usernameHash, rec);
+  }
+
+  return [...byHash.values(), ...noHash];
+}
+
+/**
+ * IndexedDB에서 중복 아이디 레코드 제거
+ * @returns {Promise<{ kept: number, removed: number }>}
+ */
+export async function pruneDuplicateUsers(preferId = '') {
+  const all = await storage.getAll('users');
+  const kept = dedupeByUsernameHash(all, { preferId });
+  const keptIds = new Set(kept.map((u) => u.id));
+  let removed = 0;
+  for (const u of all) {
+    if (!u?.id || keptIds.has(u.id)) continue;
+    await storage.remove('users', u.id);
+    removed += 1;
+  }
+  for (const rec of kept) {
+    delete rec.username;
+    await storage.put('users', rec);
+  }
+  return { kept: kept.length, removed };
 }
 
 export async function fetchRemoteUsers() {
@@ -111,10 +165,18 @@ export async function applyRemoteUsers(remote) {
   const remoteList = remote?.users || [];
   const local = await storage.getAll('users');
   const merged = mergeUserRecords(local, remoteList);
+  const keptIds = new Set(merged.map((u) => u.id));
 
   for (const record of merged) {
     delete record.username;
     await storage.put('users', record);
+  }
+  // 동일 아이디의 구 레코드 제거 (id만 다른 중복)
+  for (const u of local) {
+    if (u?.id && !keptIds.has(u.id)) {
+      const stillDup = merged.some((m) => m.usernameHash && m.usernameHash === u.usernameHash);
+      if (stillDup) await storage.remove('users', u.id);
+    }
   }
   return merged.length;
 }
@@ -248,12 +310,14 @@ export async function refreshMergedUserCatalog() {
     console.warn('[auth-sync] GitHub 병합 실패:', err);
   }
 
+  await pruneDuplicateUsers();
+
   const merged = await storage.getAll('users');
   let published = null;
   if (hasGithubToken()) {
     const remote = await fetchRemoteAuthCatalog();
     const remoteCount = remote?.users?.length || 0;
-    if (merged.length > remoteCount) {
+    if (merged.length !== remoteCount) {
       published = await tryPushUsersToGithub();
     }
   }
