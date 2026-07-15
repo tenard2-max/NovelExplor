@@ -8,7 +8,7 @@
     </Character>
     <Character id="CHR0002" name="뽀로로" race="AI" gender="F" age="0" occupation="전략 AI" firstEpisode="1" lastEpisode="3" status="Alive">
       <Description>EP 자동 감지 (40회 언급)</Description>
-      <Avatar src="../overlays/characters/CHR0002.png" mime="image/png"/>
+      <Avatar src="" mime="image/png"/>
       <Gallery/>
     </Character>
     <Character id="CHR0003" name="패티" race="인간" gender="M" age="0" occupation="대학생" firstEpisode="1" lastEpisode="3" status="Alive">
@@ -18,7 +18,7 @@
     </Character>
     <Character id="CHR0004" name="루피" race="인간" gender="F" age="0" occupation="대학생" firstEpisode="1" lastEpisode="3" status="Alive">
       <Description>EP 자동 감지 (21회 언급)</Description>
-      <Avatar src="../overlays/characters/CHR0004.png" mime="image/png"/>
+      <Avatar src="" mime="image/png"/>
       <Gallery/>
     </Character>
     <Character id="CHR0005" name="유진이" race="인간" gender="F" age="0" occupation="대학생" firstEpisode="1" lastEpisode="3" status="Alive">
@@ -28,7 +28,7 @@
     </Character>
     <Character id="CHR0006" name="포비" race="인간" gender="M" age="0" occupation="기업 오너" firstEpisode="1" lastEpisode="3" status="Alive">
       <Description>EP 자동 감지 (13회 언급)</Description>
-      <Avatar src="../overlays/characters/CHR0006.png" mime="image/png"/>
+      <Avatar src="" mime="image/png"/>
       <Gallery/>
     </Character>
     <Character id="CHR0007" name="크롱" race="" gender="" age="0" occupation="" firstEpisode="1" lastEpisode="3" status="Alive">
@@ -48,24 +48,22 @@
     </Character>
     <Character id="CHR0010" name="가은이" race="" gender="" age="0" occupation="" firstEpisode="0" lastEpisode="0" status="Alive">
       <Description></Description>
-      <Avatar src="../overlays/characters/CHR0010.png" mime="image/png"/>
-      <Gallery>
-      <Image src="../overlays/characters/CHR0010_1.png" mime="image/png"/>
-      </Gallery>
+      <Avatar src="" mime="image/png"/>
+      <Gallery/>
     </Character>
     <Character id="CHR0011" name="이클립스" race="" gender="" age="0" occupation="" firstEpisode="0" lastEpisode="0" status="Alive">
       <Description></Description>
-      <Avatar src="../overlays/characters/CHR0011.png" mime="image/png"/>
+      <Avatar src="" mime="image/png"/>
       <Gallery/>
     </Character>
     <Character id="CHR0012" name="다이아나" race="" gender="" age="0" occupation="" firstEpisode="0" lastEpisode="0" status="Alive">
       <Description></Description>
-      <Avatar src="../overlays/characters/CHR0012.png" mime="image/png"/>
+      <Avatar src="" mime="image/png"/>
       <Gallery/>
     </Character>
     <Character id="CHR0013" name="오로라핑" race="" gender="" age="0" occupation="" firstEpisode="0" lastEpisode="0" status="Alive">
       <Description></Description>
-      <Avatar src="../overlays/characters/CHR0013.png" mime="image/png"/>
+      <Avatar src="" mime="image/png"/>
       <Gallery/>
     </Character>
   </Characters>
