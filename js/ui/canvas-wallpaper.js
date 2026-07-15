@@ -101,14 +101,45 @@ function syncGaugesFromState() {
   syncGaugeLabels();
 }
 
-/** TTS 등 일시 배경 — 저장하지 않음, 마지막 캐릭터 배경 유지 */
+function gaugeValue(raw, fallback, { min = 0, allowZero = true } = {}) {
+  const n = Number(raw);
+  if (!Number.isFinite(n)) return fallback;
+  if (!allowZero && n <= 0) return fallback;
+  return Math.min(200, Math.max(min, n));
+}
+
+/** TTS 등 일시 배경 — 저장하지 않음, 마지막 캐릭터 사진 유지 */
 export function setTtsWallpaper(dataUrl) {
-  ttsOverrideUrl = String(dataUrl || '').trim();
+  const url = String(dataUrl || '').trim();
+  if (!url) return;
+
+  ttsOverrideUrl = url;
+
+  // 베이스 월페이퍼가 한 번도 없을 때 게이지 0이면 안 보이므로 기본값 보정
+  if (!state.dataUrl) {
+    state.saturation = gaugeValue(state.saturation, DEFAULTS.saturation);
+    state.alpha = gaugeValue(state.alpha, DEFAULTS.alpha, { min: 1 });
+    state.size = gaugeValue(state.size, DEFAULTS.size, { min: 1, allowZero: false });
+  }
+
+  // hidden → 표시 전환 시 첫 페인트 누락 방지: 즉시 + 디코드 후 재적용
   applyWallpaper();
+  const img = new Image();
+  img.onload = () => applyWallpaper();
+  img.onerror = () => applyWallpaper();
+  img.src = url;
+  requestAnimationFrame(() => applyWallpaper());
 }
 
 function getActiveWallpaperUrl() {
   return ttsOverrideUrl || state.dataUrl;
+}
+
+function isReaderViewVisible(viewId) {
+  if (viewId === 'reader') return true;
+  if ((viewId || getCurrentView()) === 'reader') return true;
+  const readerView = document.getElementById('view-reader');
+  return Boolean(readerView && !readerView.hidden);
 }
 
 function applyWallpaper(viewId) {
@@ -117,9 +148,8 @@ function applyWallpaper(viewId) {
   const reader = document.getElementById('reader-content');
   if (!layer || !body) return;
 
-  const activeView = viewId || getCurrentView();
   const dataUrl = getActiveWallpaperUrl();
-  const show = activeView === 'reader' && !!dataUrl;
+  const show = isReaderViewVisible(viewId) && !!dataUrl;
 
   if (!show) {
     layer.hidden = true;
@@ -133,24 +163,27 @@ function applyWallpaper(viewId) {
     return;
   }
 
+  const saturation = gaugeValue(state.saturation, DEFAULTS.saturation);
+  const alpha = gaugeValue(state.alpha, DEFAULTS.alpha, { min: 1 });
+  const size = gaugeValue(state.size, DEFAULTS.size, { min: 1, allowZero: false });
   const imageUrl = `url(${JSON.stringify(dataUrl)})`;
-  const filter = `saturate(${state.saturation}%)`;
-  const opacity = String(state.alpha / 100);
-  const backgroundSize = `${state.size}%`;
 
+  // 스타일을 먼저 넣고 hidden 해제 (최초 표시 시 배경 미적용 방지)
+  layer.style.backgroundImage = imageUrl;
+  layer.style.backgroundSize = `${size}%`;
+  layer.style.opacity = String(alpha / 100);
+  layer.style.filter = `saturate(${saturation}%)`;
   layer.hidden = false;
   layer.setAttribute('aria-hidden', 'false');
-  layer.style.backgroundImage = imageUrl;
-  layer.style.backgroundSize = backgroundSize;
-  layer.style.opacity = opacity;
-  layer.style.filter = filter;
+  void layer.offsetWidth;
 
   body.classList.add('has-wallpaper');
   reader?.classList.add('has-wallpaper-bg');
 }
 
 async function loadWallpaperForProject() {
-  ttsOverrideUrl = '';
+  // ttsOverride는 project:loaded 핸들러에서만 초기화한다.
+  // 여기서 지우면 비동기 로드 중 TTS 배경이 바로 사라질 수 있다.
   const proj = project.getCurrentProject();
   if (!proj) {
     state = { ...DEFAULTS, dataUrl: '' };
@@ -162,9 +195,9 @@ async function loadWallpaperForProject() {
   const saved = await storage.get('settings', `${proj.projectId}-canvas-wallpaper`);
   state = {
     dataUrl: saved?.dataUrl || '',
-    saturation: saved?.saturation ?? DEFAULTS.saturation,
-    alpha: saved?.alpha ?? DEFAULTS.alpha,
-    size: saved?.size ?? DEFAULTS.size,
+    saturation: gaugeValue(saved?.saturation, DEFAULTS.saturation),
+    alpha: gaugeValue(saved?.alpha, DEFAULTS.alpha, { min: 1 }),
+    size: gaugeValue(saved?.size, DEFAULTS.size, { min: 1, allowZero: false }),
   };
   syncGaugesFromState();
   applyWallpaper();

@@ -655,7 +655,10 @@ export function chunkSpeakableText(text) {
 }
 
 function characterAvatarUrl(ch) {
-  return String(ch.avatarDataUrl || ch.image || ch.avatar || ch.avatarUrl || ch.photo || '').trim()
+  // avatarPath: GitHub 분리 스냅샷 경로(예: data/workspace/overlays/characters/CHR0001.png)
+  return String(
+    ch.avatarDataUrl || ch.image || ch.avatar || ch.avatarUrl || ch.photo || ch.avatarPath || ''
+  ).trim()
     || (Array.isArray(ch.images) ? String(ch.images.find((u) => String(u || '').trim()) || '').trim() : '');
 }
 
