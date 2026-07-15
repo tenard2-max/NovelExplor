@@ -23,14 +23,10 @@ import {
   setNavSyncProgress,
   clearNavSyncProgress,
 } from '../app-version.js';
-import { emit, on } from './events.js';
+import { emit } from './events.js';
 import { basename, nowIso } from './utils.js';
 
-let syncTimer = null;
 let syncInFlight = false;
-let pendingReason = 'change';
-/** @type {object | null} */
-let pendingSyncContext = null;
 let progressClearTimer = null;
 let githubSyncSuppressDepth = 0;
 
@@ -100,24 +96,16 @@ export async function confirmGithubSyncIfLowQuota() {
   });
 }
 
-/** 저장·적용·업로드 후 디바운스 동기화 */
-export function scheduleGithubSync(reason = 'change', context = {}) {
-  if (!hasGithubToken()) return;
-  if (isGithubSyncSuppressed()) return;
-  pendingReason = reason;
-  pendingSyncContext = { ...(pendingSyncContext || {}), ...context };
-  clearTimeout(syncTimer);
-  syncTimer = setTimeout(() => {
-    const r = pendingReason;
-    const ctx = pendingSyncContext || {};
-    pendingReason = 'change';
-    pendingSyncContext = null;
-    syncProjectToGithub({ reason: r, ...ctx }).catch((err) => {
-      console.warn('[github-sync]', err);
-      setNavSyncProgress(`실패: ${err.message || err}`, { error: true });
-      emit('github:sync-error', err);
-    });
-  }, 1500);
+/**
+ * 자동 GitHub 동기화는 사용하지 않는다.
+ * 편집·파일·이미지 변경은 IndexedDB에만 자동 저장하며,
+ * GitHub 반영은 프로젝트 저장/기본 프로젝트 저장/수동 동기화에서
+ * syncProjectToGithub()를 직접 호출할 때만 수행한다.
+ *
+ * 기존 호출부와의 호환성을 위해 no-op으로 유지한다.
+ */
+export function scheduleGithubSync() {
+  return false;
 }
 
 function onCommitProgress(p) {
@@ -399,10 +387,5 @@ function filterUploadOnlyAssets(assetFiles, { reason, characterId, manifest }) {
 }
 
 export function initGithubSync() {
-  const schedule = (reason) => () => scheduleGithubSync(reason);
-  on('character:updated', (ch) => scheduleGithubSync('character-image', { characterId: ch?.id || '' }));
-  on('character:deleted', (payload) => scheduleGithubSync('character-delete', { characterId: payload?.id || '' }));
-  on('upload:committed', schedule('file-upload'));
-  on('wallpaper:updated', schedule('wallpaper-upload'));
-  on('timeline:updated', schedule('change'));
+  // 자동 이벤트 구독 없음: 실시간 변경은 IndexedDB에만 저장한다.
 }
