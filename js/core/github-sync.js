@@ -272,6 +272,7 @@ export function splitPayloadForGithub(payload, snapshotId) {
     timeline: payload.timeline,
     characterRelations: payload.characterRelations,
     characters: [],
+    sceneCuts: [],
     files: [],
     settings: {},
   };
@@ -309,6 +310,34 @@ export function splitPayloadForGithub(payload, snapshotId) {
     if (galleryPaths.length) entry.imagePaths = galleryPaths;
 
     manifest.characters.push(entry);
+  }
+
+  for (const sceneCut of payload.sceneCuts || []) {
+    const sceneCutId = sceneCut.sceneCutId
+      || String(sceneCut.id || '').split('-').filter(Boolean).pop()
+      || 'SCN0000';
+    const entry = { ...sceneCut };
+    const image = String(sceneCut.image || '').trim();
+
+    if (image.startsWith('data:')) {
+      delete entry.image;
+      const mime = dataUrlMime(image);
+      const extension = mime === 'image/jpeg'
+        ? 'jpg'
+        : mime === 'image/webp'
+          ? 'webp'
+          : 'png';
+      const imagePath = `${root}/scene-cuts/${sceneCutId}.${extension}`;
+      assetFiles.push({
+        repoPath: imagePath,
+        content: dataUrlToBase64(image),
+        contentBase64: true,
+      });
+      entry.imagePath = imagePath;
+      entry.imageMime = mime;
+    }
+
+    manifest.sceneCuts.push(entry);
   }
 
   for (const f of payload.files || []) {
@@ -354,6 +383,11 @@ function dataUrlToBase64(dataUrl) {
   const s = String(dataUrl);
   const idx = s.indexOf(',');
   return idx >= 0 ? s.slice(idx + 1) : s;
+}
+
+function dataUrlMime(dataUrl) {
+  const match = String(dataUrl || '').match(/^data:([^;,]+)[;,]/i);
+  return match?.[1]?.toLowerCase() || 'image/png';
 }
 
 /** uploadOnly 동기화 — 변경된 자산만 (전체 프로젝트 재업로드 방지) */

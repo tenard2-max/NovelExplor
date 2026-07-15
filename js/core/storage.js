@@ -1,13 +1,14 @@
 /** IndexedDB 저장소 */
 
 const DB_NAME = 'FantasyForeshadowDB';
-const DB_VERSION = 3;
+const DB_VERSION = 4;
 
 const STORES = [
   'projects',
   'stories',
   'episodes',
   'characters',
+  'sceneCuts',
   'worlds',
   'foreshadows',
   'timeline',
@@ -32,6 +33,7 @@ function openDb() {
           if (store === 'episodes') os.createIndex('projectId', 'projectId');
           if (store === 'stories') os.createIndex('projectId', 'projectId');
           if (store === 'characters') os.createIndex('projectId', 'projectId');
+          if (store === 'sceneCuts') os.createIndex('projectId', 'projectId');
           if (store === 'foreshadows') os.createIndex('projectId', 'projectId');
           if (store === 'timeline') os.createIndex('projectId', 'projectId');
           if (store === 'worlds') os.createIndex('projectId', 'projectId');

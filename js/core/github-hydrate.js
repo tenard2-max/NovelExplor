@@ -28,6 +28,16 @@ async function tryFetchPngAsDataUrl(repoPath) {
   }
 }
 
+async function tryFetchImageAsDataUrl(repoPath, mime = 'image/png') {
+  if (!repoPath) return '';
+  try {
+    const b64 = await getRepoFileBase64(repoPath);
+    return b64 ? `data:${mime || 'image/png'};base64,${b64}` : '';
+  } catch {
+    return '';
+  }
+}
+
 /** split manifest → foreshadow-backup 전체 payload */
 export async function hydrateManifestFromGithub(manifest) {
   const cfg = getGithubConfig();
@@ -60,6 +70,7 @@ export async function hydrateManifestFromGithub(manifest) {
     timeline: manifest.timeline || [],
     characterRelations: manifest.characterRelations || [],
     characters: [],
+    sceneCuts: [],
     files: [],
     settings: {},
   };
@@ -112,6 +123,23 @@ export async function hydrateManifestFromGithub(manifest) {
     else if (fallbackImagePaths.length) entry.imagePaths = fallbackImagePaths;
 
     payload.characters.push(entry);
+  }
+
+  for (const sceneCut of manifest.sceneCuts || []) {
+    const entry = { ...sceneCut };
+    const sceneCutId = sceneCut.sceneCutId
+      || String(sceneCut.id || '').split('-').filter(Boolean).pop()
+      || 'SCN0000';
+    const defaultImagePath = `${overlayRoot}/scene-cuts/${sceneCutId}.png`;
+    const imagePath = String(sceneCut.imagePath || defaultImagePath).trim();
+    const image = await tryFetchImageAsDataUrl(
+      imagePath,
+      String(sceneCut.imageMime || 'image/png')
+    );
+
+    entry.imagePath = imagePath;
+    entry.image = image || String(sceneCut.image || '').trim();
+    payload.sceneCuts.push(entry);
   }
 
   for (const f of manifest.files || []) {

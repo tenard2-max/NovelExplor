@@ -15,6 +15,7 @@ import { initCanvasLayout } from './ui/canvas-layout.js';
 import { initCanvasWallpaper } from './ui/canvas-wallpaper.js';
 import { initCharacterPanel } from './ui/character-panel.js';
 import { initCharacterActions } from './ui/character-actions.js';
+import { initSceneCuts } from './ui/scene-cuts.js';
 import { initBackup, offerLocalRecovery, exportTimestampedBackup, openBackupJsonFile, sanitizeThemeTag } from './core/backup.js';
 import { confirmGithubSyncIfLowQuota } from './core/github-sync.js';
 import { hasGithubToken } from './core/github-config.js';
@@ -59,6 +60,7 @@ async function boot() {
   initCanvasWallpaper();
   initCharacterPanel();
   initCharacterActions();
+  initSceneCuts();
   initStorySync();
   initTimeline();
   initSettings();

@@ -32,6 +32,7 @@ let chunkIndex = 0;
 /** @type {Array<{ text: string, paraIndex: number }>} */
 let chunks = [];
 let nameEntries = [];
+let activeSceneCut = null;
 let statusTimer = null;
 let statusRestore = '';
 let uiBound = false;
@@ -325,6 +326,7 @@ function stopPreviousPlayback() {
   playing = false;
   paused = false;
   currentUtterance = null;
+  activeSceneCut = null;
   clearHighlight();
 }
 
@@ -332,6 +334,8 @@ function speakNextChunk() {
   if (!playing || !synth || paused) return;
 
   while (chunkIndex < chunks.length && !chunks[chunkIndex]?.text?.trim()) {
+    // [장면컷]만 있는 제어 청크도 음성 없이 월페이퍼는 적용한다.
+    onChunkStart(chunks[chunkIndex]);
     chunkIndex += 1;
   }
 
@@ -384,6 +388,21 @@ function speakChunk(chunk) {
 
 function onChunkStart(chunk) {
   highlightChunk(chunk.paraIndex);
+  const sceneCut = findSceneCutForTags(chunk.bracketTags);
+  const sceneCutImage = sceneCutWallpaperUrl(sceneCut);
+  if (sceneCutImage) {
+    activeSceneCut = sceneCut;
+    setTtsWallpaper(sceneCutImage);
+    return;
+  }
+
+  // 한 번 선택된 장면컷은 다음 장면컷 태그가 나올 때까지 인물 사진보다 우선한다.
+  if (activeSceneCut) {
+    const activeImage = sceneCutWallpaperUrl(activeSceneCut);
+    if (activeImage) setTtsWallpaper(activeImage);
+    return;
+  }
+
   const match = findCharacterInText(chunk.text, nameEntries);
   if (match?.avatar) {
     setTtsWallpaper(match.avatar);
@@ -411,6 +430,7 @@ function handleSpeakFailure(message) {
   playing = false;
   paused = false;
   currentUtterance = null;
+  activeSceneCut = null;
   clearHighlight();
   speechSynthesis.cancel();
   updateButtons();
@@ -424,6 +444,7 @@ function resetPlaybackState(opts = {}) {
   chunkIndex = 0;
   chunks = [];
   currentUtterance = null;
+  activeSceneCut = null;
   clearHighlight();
   updateButtons();
   if (!opts.silent && wasPlaying) {
@@ -463,11 +484,7 @@ function resume() {
 }
 
 function findNextChunkIndex(fromIndex) {
-  let i = fromIndex + 1;
-  while (i < chunks.length && !chunks[i]?.text?.trim()) {
-    i += 1;
-  }
-  return i;
+  return fromIndex + 1;
 }
 
 function skipToNextChunk() {
@@ -569,12 +586,10 @@ export function buildTtsChunksFromReaderDom(inner) {
     const paraIndex = parseInt(el.dataset.ttsIdx, 10);
     if (Number.isNaN(paraIndex)) continue;
 
-    const text = (el.textContent || '').replace(/\s+/g, ' ').trim();
-    if (!text) continue;
+    const sourceText = (el.textContent || '').replace(/\s+/g, ' ').trim();
+    if (!sourceText) continue;
 
-    for (const piece of splitLongSpeakableText(text, TTS_MAX_CHUNK)) {
-      result.push({ text: piece, paraIndex });
-    }
+    result.push(...buildParagraphChunks(sourceText, paraIndex));
   }
   return result;
 }
@@ -591,8 +606,9 @@ export function markdownToSpeakableText(md) {
   text = text.replace(/\*([^*]+)\*/g, '$1');
   text = text.replace(/__([^_]+)__/g, '$1');
   text = text.replace(/_([^_]+)_/g, '$1');
-  text = text.replace(/!\[([^\]]*)\]\([^)]+\)/g, '$1');
-  text = text.replace(/\[([^\]]+)\]\([^)]+\)/g, '$1');
+  // 링크/이미지의 대괄호 텍스트도 TTS 제어 태그로 유지한 뒤 청크 단계에서 제거
+  text = text.replace(/!\[([^\]]*)\]\([^)]+\)/g, '[$1]');
+  text = text.replace(/\[([^\]]+)\]\([^)]+\)/g, '[$1]');
   text = text.replace(/<[^>]+>/g, ' ');
   text = text.replace(/^\s*[-*+]\s+/gm, '');
   text = text.replace(/^\s*\d+\.\s+/gm, '');
@@ -640,18 +656,69 @@ export function chunkSpeakableText(text) {
   const paragraphs = text.split(/\n\s*\n/).map((p) => p.replace(/\s+/g, ' ').trim()).filter(Boolean);
   if (!paragraphs.length) {
     const trimmed = text.trim();
-    return trimmed
-      ? splitLongSpeakableText(trimmed, TTS_MAX_CHUNK).map((t) => ({ text: t, paraIndex: 0 }))
-      : [];
+    return trimmed ? buildParagraphChunks(trimmed, 0) : [];
   }
 
   const result = [];
   for (let paraIndex = 0; paraIndex < paragraphs.length; paraIndex += 1) {
-    for (const piece of splitLongSpeakableText(paragraphs[paraIndex], TTS_MAX_CHUNK)) {
-      result.push({ text: piece, paraIndex });
-    }
+    result.push(...buildParagraphChunks(paragraphs[paraIndex], paraIndex));
   }
   return result;
+}
+
+/**
+ * 모든 [내용]을 음성 텍스트에서 제거하면서 장면컷 조회용 태그를 보존한다.
+ * 닫히지 않은 '['는 일반 텍스트로 유지한다.
+ */
+export function parseBracketControls(source) {
+  const text = String(source || '');
+  const bracketTags = [];
+  let spokenText = '';
+  let cursor = 0;
+
+  for (const match of text.matchAll(/\[([^\]]*)\]/g)) {
+    spokenText += text.slice(cursor, match.index);
+    const tag = String(match[1] || '').replace(/\s+/g, ' ').trim();
+    if (tag) bracketTags.push(tag);
+    cursor = Number(match.index) + match[0].length;
+  }
+  spokenText += text.slice(cursor);
+  spokenText = spokenText.replace(/\s+/g, ' ').trim();
+
+  return { spokenText, bracketTags };
+}
+
+function buildParagraphChunks(sourceText, paraIndex) {
+  const { spokenText, bracketTags } = parseBracketControls(sourceText);
+  if (!spokenText) {
+    return bracketTags.length ? [{ text: '', paraIndex, bracketTags }] : [];
+  }
+
+  const pieces = splitLongSpeakableText(spokenText, TTS_MAX_CHUNK);
+  return pieces.map((piece, index) => ({
+    text: piece,
+    paraIndex,
+    bracketTags: index === 0 ? bracketTags : [],
+  }));
+}
+
+function findSceneCutForTags(tags) {
+  if (!Array.isArray(tags) || !tags.length) return null;
+  // 한 청크에 여러 태그가 있으면 원문상 마지막 장면 지시를 적용한다.
+  for (let index = tags.length - 1; index >= 0; index -= 1) {
+    const sceneCut = project.findSceneCutByName(tags[index]);
+    if (sceneCut) return sceneCut;
+  }
+  return null;
+}
+
+function sceneCutWallpaperUrl(sceneCut) {
+  if (!sceneCut) return '';
+  const imagePath = String(sceneCut.imagePath || '').trim();
+  if (imagePath && !imagePath.startsWith('data:') && !imagePath.startsWith('blob:')) {
+    return resolveAvatarSrc(imagePath);
+  }
+  return resolveAvatarSrc(sceneCut.image || imagePath);
 }
 
 function resolveAvatarSrc(src) {

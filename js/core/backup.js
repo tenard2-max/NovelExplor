@@ -316,6 +316,7 @@ export async function buildBackupPayload({ lite = false } = {}) {
   const wallpaper = await storage.get('settings', `${proj.projectId}-canvas-wallpaper`);
 
   let characters = cache.characters;
+  let sceneCuts = cache.sceneCuts || [];
   let settings = { canvasWallpaper: wallpaper || null };
 
   if (lite) {
@@ -323,6 +324,10 @@ export async function buildBackupPayload({ lite = false } = {}) {
       ...c,
       avatarDataUrl: '',
       images: [],
+    }));
+    sceneCuts = sceneCuts.map((sceneCut) => ({
+      ...sceneCut,
+      image: '',
     }));
     if (settings.canvasWallpaper) {
       settings = {
@@ -339,6 +344,7 @@ export async function buildBackupPayload({ lite = false } = {}) {
     stories: cache.stories,
     episodes: cache.episodes,
     characters,
+    sceneCuts,
     worlds: cache.worlds,
     foreshadows: cache.foreshadows,
     timeline: cache.timeline,

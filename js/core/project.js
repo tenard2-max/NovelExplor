@@ -51,6 +51,8 @@ let cache = {
 
   characters: [],
 
+  sceneCuts: [],
+
   worlds: [],
 
   foreshadows: [],
@@ -373,7 +375,7 @@ export async function clearAllProjects() {
       : projects.filter((p) => p.ownerId === user.id || !p.ownerId);
   const projectIds = new Set(targets.map((p) => p.id || p.projectId).filter(Boolean));
 
-  const entityStores = ['stories', 'episodes', 'characters', 'worlds', 'foreshadows', 'timeline', 'files'];
+  const entityStores = ['stories', 'episodes', 'characters', 'sceneCuts', 'worlds', 'foreshadows', 'timeline', 'files'];
   for (const store of entityStores) {
     const all = await storage.getAll(store);
     for (const rec of all) {
@@ -399,6 +401,7 @@ export async function clearAllProjects() {
     stories: [],
     episodes: [],
     characters: [],
+    sceneCuts: [],
     worlds: [],
     foreshadows: [],
     timeline: [],
@@ -458,6 +461,7 @@ export async function createProject(title = '새 프로젝트', useSeed = true) 
     stories: [],
     episodes: [],
     characters: [],
+    sceneCuts: [],
     worlds: [],
     foreshadows: [],
     timeline: [],
@@ -520,6 +524,8 @@ function emptyProject(projectId, title) {
     episodes: [],
 
     characters: [],
+
+    sceneCuts: [],
 
     worlds: [],
 
@@ -653,6 +659,12 @@ async function saveAllEntities(projectId, seed) {
 
   await storage.bulkPut('characters', seed.characters.map((c) => ({ ...c, id: `${projectId}-${c.characterId}`, projectId })));
 
+  await storage.bulkPut('sceneCuts', (seed.sceneCuts || []).map((sceneCut) => ({
+    ...sceneCut,
+    id: `${projectId}-${sceneCut.sceneCutId}`,
+    projectId,
+  })));
+
   await storage.bulkPut('worlds', seed.worlds.map((w) => ({ ...w, id: `${projectId}-${w.worldId}`, projectId })));
 
   await storage.bulkPut('foreshadows', seed.foreshadows.map((f) => ({ ...f, id: `${projectId}-${f.foreshadowId}`, projectId })));
@@ -682,6 +694,9 @@ export async function loadProject(projectId) {
     episodes: (await storage.getByProject('episodes', projectId)).sort((a, b) => a.number - b.number),
 
     characters: await storage.getByProject('characters', projectId),
+
+    sceneCuts: (await storage.getByProject('sceneCuts', projectId))
+      .sort((a, b) => String(a.createdAt || '').localeCompare(String(b.createdAt || ''))),
 
     worlds: await storage.getByProject('worlds', projectId),
 
@@ -731,6 +746,7 @@ export async function saveProjectFull() {
   if (cache.stories.length) await storage.bulkPut('stories', touch(cache.stories));
   if (cache.episodes.length) await storage.bulkPut('episodes', touch(cache.episodes));
   if (cache.characters.length) await storage.bulkPut('characters', touch(cache.characters));
+  if (cache.sceneCuts.length) await storage.bulkPut('sceneCuts', touch(cache.sceneCuts));
   if (cache.worlds.length) await storage.bulkPut('worlds', touch(cache.worlds));
   if (cache.foreshadows.length) await storage.bulkPut('foreshadows', touch(cache.foreshadows));
   if (cache.timeline.length) await storage.bulkPut('timeline', touch(cache.timeline));
@@ -1208,6 +1224,86 @@ export async function deleteCharacter(characterId) {
   }
 
   emit('character:deleted', { id: characterId });
+  return true;
+}
+
+/** 장면컷 생성 — 이름·설명·이미지를 프로젝트별 IndexedDB에 저장 */
+export async function addSceneCut(data = {}) {
+  const proj = getCurrentProject();
+  const name = String(data.name || '').trim();
+  if (!proj || !name) return null;
+  if (findSceneCutByName(name)) return null;
+
+  const nums = (cache.sceneCuts || [])
+    .map((item) => parseInt(String(item.sceneCutId || '').replace(/\D/g, ''), 10))
+    .filter((n) => !Number.isNaN(n));
+  const next = (nums.length ? Math.max(...nums) : 0) + 1;
+  const sceneCutId = `SCN${String(next).padStart(4, '0')}`;
+  const timestamp = nowIso();
+  const record = {
+    id: `${proj.projectId}-${sceneCutId}`,
+    projectId: proj.projectId,
+    sceneCutId,
+    name,
+    description: String(data.description || '').trim(),
+    image: String(data.image || '').trim(),
+    imagePath: String(data.imagePath || '').trim(),
+    createdAt: timestamp,
+    updatedAt: timestamp,
+  };
+
+  cache.sceneCuts.push(record);
+  await storage.put('sceneCuts', record);
+  emit('scene-cut:created', record);
+  return record;
+}
+
+/** 장면컷 이름·설명·이미지 수정 */
+export async function updateSceneCut(sceneCut) {
+  if (!sceneCut?.id) return null;
+  const idx = cache.sceneCuts.findIndex((item) => item.id === sceneCut.id);
+  if (idx < 0) return null;
+
+  const merged = { ...cache.sceneCuts[idx], ...sceneCut };
+  const updated = {
+    ...merged,
+    name: String(merged.name || '').trim(),
+    description: String(merged.description || '').trim(),
+    image: String(merged.image || '').trim(),
+    imagePath: String(merged.imagePath || '').trim(),
+    updatedAt: nowIso(),
+  };
+  if (!updated.name) return null;
+  const duplicate = cache.sceneCuts.find(
+    (item) => item.id !== updated.id
+      && String(item.name || '').trim().toLocaleLowerCase('ko')
+        === updated.name.toLocaleLowerCase('ko')
+  );
+  if (duplicate) return null;
+
+  cache.sceneCuts[idx] = updated;
+  await storage.put('sceneCuts', updated);
+  emit('scene-cut:updated', updated);
+  return updated;
+}
+
+/** TTS 태그 등에서 사용할 장면컷 이름 정확 일치 검색 */
+export function findSceneCutByName(name) {
+  const target = String(name || '').trim().toLocaleLowerCase('ko');
+  if (!target) return null;
+  return cache.sceneCuts.find(
+    (item) => String(item.name || '').trim().toLocaleLowerCase('ko') === target
+  ) || null;
+}
+
+/** 장면컷 삭제 */
+export async function deleteSceneCut(sceneCutId) {
+  const idx = cache.sceneCuts.findIndex((item) => item.id === sceneCutId);
+  if (idx < 0) return false;
+
+  await storage.remove('sceneCuts', sceneCutId);
+  const [removed] = cache.sceneCuts.splice(idx, 1);
+  emit('scene-cut:deleted', removed);
   return true;
 }
 
@@ -1778,6 +1874,24 @@ export async function importProjectJson(jsonText) {
   await storage.bulkPut('episodes', remap(data.episodes, 'episodeId'));
 
   await storage.bulkPut('characters', characters);
+
+  await storage.bulkPut('sceneCuts', (data.sceneCuts || []).map((item, index) => {
+    const rawSceneCutId = item.sceneCutId
+      || String(item.id || '').split('-').filter(Boolean).pop()
+      || `SCN${String(index + 1).padStart(4, '0')}`;
+    return {
+      ...item,
+      id: `${projectId}-${rawSceneCutId}`,
+      projectId,
+      sceneCutId: rawSceneCutId,
+      name: String(item.name || '').trim(),
+      description: String(item.description || '').trim(),
+      image: String(item.image || '').trim(),
+      imagePath: String(item.imagePath || '').trim(),
+      createdAt: item.createdAt || nowIso(),
+      updatedAt: item.updatedAt || nowIso(),
+    };
+  }));
 
   await storage.bulkPut('worlds', remap(data.worlds, 'worldId'));
 

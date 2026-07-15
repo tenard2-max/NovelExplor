@@ -61,6 +61,7 @@ export function applyRolePermissions() {
   applyNavMenu(isUser);
   applyProjectNav(canSave, canDefault, canManage);
   applyCharacterToolbar(!canManage);
+  applySceneCutToolbar(!canManage);
   applyStoryNavToolbar(!canManage);
   applyReaderToolbar(!canManage);
   applyToolNav(isUser, canManage);
@@ -180,6 +181,14 @@ function applyCharacterToolbar(lock) {
   });
   document.querySelectorAll('#graph-relation-controls').forEach((el) => {
     if (lock) setHidden(el, true);
+  });
+}
+
+function applySceneCutToolbar(lock) {
+  ['scene-cut-add', 'scene-cut-delete'].forEach((action) => {
+    document.querySelectorAll(`[data-action="${action}"]`).forEach((btn) => {
+      setHidden(btn, lock);
+    });
   });
 }
 

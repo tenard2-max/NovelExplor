@@ -14,6 +14,7 @@ const VIEW_META = {
   'story-nav': { title: '스토리 네비게이터', subtitle: '현재 프로젝트 IndexedDB' },
   foreshadow: { title: '떡밥 회수', subtitle: 'sections/04_foreshadows.xml' },
   character: { title: '인물', subtitle: 'sections/03_characters.xml' },
+  'scene-cuts': { title: '장면컷', subtitle: '현재 프로젝트 IndexedDB' },
   timeline: { title: '타임라인', subtitle: '이벤트 · 년월일' },
   editor: { title: '에디터', subtitle: 'sections/12_editor.xml' },
   settings: { title: '설정', subtitle: '계정 · 비밀번호 · 권한' },
@@ -59,6 +60,9 @@ export function initNav() {
     updateBadges();
     if (currentView === 'character') loadXmlCanvas('character');
   });
+  on('scene-cut:created', updateBadges);
+  on('scene-cut:updated', updateBadges);
+  on('scene-cut:deleted', updateBadges);
 }
 
 export function switchView(viewId) {
@@ -104,6 +108,12 @@ export function switchView(viewId) {
     return;
   }
 
+  if (viewId === 'scene-cuts') {
+    showView('view-scene-cuts');
+    emit('workspace:render', viewId);
+    return;
+  }
+
   showView('view-list');
   emit('workspace:render', viewId);
 }
@@ -140,6 +150,7 @@ function updateBadges() {
   document.getElementById('nav-project-name').textContent = proj.title;
   document.getElementById('badge-foreshadow').textContent = cache.foreshadows?.length || 0;
   document.getElementById('badge-character').textContent = cache.characters?.length || 0;
+  document.getElementById('badge-scene-cuts').textContent = cache.sceneCuts?.length || 0;
   document.getElementById('info-episodes').textContent = cache.episodes?.length || 0;
   document.getElementById('info-stories').textContent = project.getRegisteredStories().length;
   document.getElementById('info-foreshadows').textContent = cache.foreshadows?.length || 0;
