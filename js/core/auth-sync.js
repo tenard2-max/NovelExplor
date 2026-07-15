@@ -14,32 +14,6 @@ import { nowIso } from './utils.js';
 const USERS_FORMAT = 'novel-explor-users/v1';
 const MASTER_ROLE = 'admin_master';
 export const MASTER_USERNAME = 'master';
-const AUTH_FETCH_TIMEOUT_MS = 6000;
-
-/** AbortController가 무시되는 인앱 브라우저 대비 — Promise.race로 강제 종료 */
-export function withTimeout(promise, ms, label = 'timeout') {
-  let timer;
-  const timeout = new Promise((_, reject) => {
-    timer = setTimeout(() => reject(new Error(label)), ms);
-  });
-  return Promise.race([promise, timeout]).finally(() => clearTimeout(timer));
-}
-
-async function fetchWithTimeout(url, ms = AUTH_FETCH_TIMEOUT_MS) {
-  const ctrl = typeof AbortController !== 'undefined' ? new AbortController() : null;
-  const fetchPromise = fetch(url, {
-    cache: 'no-store',
-    ...(ctrl ? { signal: ctrl.signal } : {}),
-  });
-  try {
-    return await withTimeout(fetchPromise, ms, 'auth-fetch-timeout');
-  } catch (err) {
-    try { ctrl?.abort(); } catch { /* ignore */ }
-    throw err;
-  }
-}
-
-let syncInFlight = null;
 
 export function usersAuthPath(cfg = getGithubConfig()) {
   return `${cfg.workspaceRoot}/auth/users.json`;
@@ -87,7 +61,7 @@ export function mergeUserRecords(localUsers = [], remoteUsers = []) {
 export async function fetchRemoteUsers() {
   try {
     const url = rawGithubUrl(usersAuthPath());
-    const res = await fetchWithTimeout(`${url}?t=${Date.now()}`);
+    const res = await fetch(`${url}?t=${Date.now()}`, { cache: 'no-store' });
     if (!res.ok) return null;
     const data = await res.json();
     if (!Array.isArray(data?.users) || !data.users.length) return null;
@@ -100,7 +74,7 @@ export async function fetchRemoteUsers() {
 async function fetchLegacyMasterAsUsers() {
   try {
     const url = rawGithubUrl(masterAuthPath());
-    const res = await fetchWithTimeout(`${url}?t=${Date.now()}`);
+    const res = await fetch(`${url}?t=${Date.now()}`, { cache: 'no-store' });
     if (!res.ok) return null;
     const m = await res.json();
     if (!m?.passwordHash || !m?.salt) return null;
@@ -146,43 +120,26 @@ export async function applyRemoteUsers(remote) {
 }
 
 /**
- * GitHub pull 후 로컬과 병합 (동시 호출은 1회로 합침, 전체 상한 타임아웃)
+ * GitHub pull 후 로컬과 병합
  * @returns {Promise<{ merged: number, remoteCount: number, localOnly: number } | false>}
  */
 export async function syncUsersFromGithub() {
-  if (syncInFlight) return syncInFlight;
+  const remote = await fetchRemoteAuthCatalog();
+  const remoteCount = remote?.users?.length || 0;
+  if (!remoteCount) return false;
 
-  syncInFlight = (async () => {
-    try {
-      const remote = await withTimeout(
-        fetchRemoteAuthCatalog(),
-        AUTH_FETCH_TIMEOUT_MS * 2 + 500,
-        'auth-catalog-timeout'
-      );
-      const remoteCount = remote?.users?.length || 0;
-      if (!remoteCount) return false;
+  const before = await storage.getAll('users');
+  const merged = await applyRemoteUsers(remote);
+  const after = await storage.getAll('users');
+  const remoteIds = new Set((remote.users || []).map((u) => u.id));
+  const localOnly = after.filter((u) => !remoteIds.has(u.id)).length;
 
-      const before = await storage.getAll('users');
-      const merged = await applyRemoteUsers(remote);
-      const after = await storage.getAll('users');
-      const remoteIds = new Set((remote.users || []).map((u) => u.id));
-      const localOnly = after.filter((u) => !remoteIds.has(u.id)).length;
-
-      return {
-        merged,
-        remoteCount,
-        localBefore: before.length,
-        localOnly,
-      };
-    } catch (err) {
-      console.warn('[auth-sync] syncUsersFromGithub:', err?.message || err);
-      return false;
-    } finally {
-      syncInFlight = null;
-    }
-  })();
-
-  return syncInFlight;
+  return {
+    merged,
+    remoteCount,
+    localBefore: before.length,
+    localOnly,
+  };
 }
 
 /**
@@ -309,13 +266,8 @@ export async function refreshMergedUserCatalog() {
 }
 
 export async function getAuthCatalogStatus() {
+  const remote = await fetchRemoteAuthCatalog();
   const local = await storage.getAll('users');
-  let remote = null;
-  try {
-    remote = await withTimeout(fetchRemoteAuthCatalog(), AUTH_FETCH_TIMEOUT_MS, 'status-timeout');
-  } catch {
-    remote = null;
-  }
   const masterRemote = remote?.users?.find((u) => u.role === MASTER_ROLE);
   const masterLocal = local.find((u) => u.role === MASTER_ROLE);
 
