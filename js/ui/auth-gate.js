@@ -95,17 +95,29 @@ export function initAuthGate() {
     const fd = new FormData(e.target);
     const errEl = root.querySelector('#auth-login-error');
     const btn = e.target.querySelector('[type="submit"]');
+    const prevLabel = btn?.textContent || '로그인';
     try {
-      errEl.hidden = true;
-      if (btn) btn.disabled = true;
+      if (errEl) {
+        errEl.hidden = true;
+        errEl.textContent = '';
+      }
+      if (btn) {
+        btn.disabled = true;
+        btn.textContent = '로그인 중…';
+      }
       await login(fd.get('username'), fd.get('password'));
       hideAuthGate();
       resolveAuthenticated(getCurrentUser());
     } catch (err) {
-      errEl.textContent = err.message || '로그인 실패';
-      errEl.hidden = false;
+      if (errEl) {
+        errEl.textContent = err.message || '로그인 실패';
+        errEl.hidden = false;
+      }
     } finally {
-      if (btn) btn.disabled = false;
+      if (btn) {
+        btn.disabled = false;
+        btn.textContent = prevLabel;
+      }
     }
   });
 
@@ -114,27 +126,43 @@ export function initAuthGate() {
     const fd = new FormData(e.target);
     const errEl = root.querySelector('#auth-signup-error');
     const btn = e.target.querySelector('[type="submit"]');
+    const prevLabel = btn?.textContent || '회원가입';
     try {
-      errEl.hidden = true;
-      if (btn) btn.disabled = true;
+      if (errEl) {
+        errEl.hidden = true;
+        errEl.textContent = '';
+      }
+      if (btn) {
+        btn.disabled = true;
+        btn.textContent = '가입 중…';
+      }
       await signup(fd.get('username'), fd.get('password'));
       await login(fd.get('username'), fd.get('password'));
       hideAuthGate();
       resolveAuthenticated(getCurrentUser());
     } catch (err) {
-      errEl.textContent = err.message || '회원가입 실패';
-      errEl.hidden = false;
+      if (errEl) {
+        errEl.textContent = err.message || '회원가입 실패';
+        errEl.hidden = false;
+      }
     } finally {
-      if (btn) btn.disabled = false;
+      if (btn) {
+        btn.disabled = false;
+        btn.textContent = prevLabel;
+      }
     }
   });
 }
 
+let hintRefreshToken = 0;
+
 async function refreshAuthHint(root) {
   const hint = root.querySelector('#auth-catalog-hint');
   if (!hint) return;
+  const token = ++hintRefreshToken;
   try {
     await syncUsersFromGithub();
+    if (token !== hintRefreshToken) return;
     const status = await getAuthCatalogStatus();
     if (status.remoteAvailable || status.localUserCount) {
       hint.textContent = `로컬 ${status.localUserCount}명 · GitHub ${status.remoteUserCount}명. 등록된 비밀번호로 로그인하세요.`;
@@ -142,6 +170,7 @@ async function refreshAuthHint(root) {
       hint.textContent = `최초 설정: ${MASTER_USERNAME} / ${MASTER_USERNAME} (로그인 후 설정·PAT로 GitHub에 게시)`;
     }
   } catch {
+    if (token !== hintRefreshToken) return;
     hint.textContent = '아이디·비밀번호를 입력하세요. (오프라인 시 브라우저 캐시만 사용)';
   }
 }
@@ -151,8 +180,10 @@ export function showAuthGate() {
   const app = document.getElementById('app');
   armReadyWait();
   if (root) {
+    const wasHidden = root.hidden;
     root.hidden = false;
-    refreshAuthHint(root);
+    // 이미 보이는 상태에서 반복 호출되면 힌트만 갱신(폼/포커스 유지)
+    if (wasHidden) refreshAuthHint(root);
   }
   if (app) app.setAttribute('aria-hidden', 'true');
   document.body.classList.add('auth-locked');

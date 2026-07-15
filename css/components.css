@@ -2056,10 +2056,18 @@
   inset: 0;
   z-index: 10100;
   display: flex;
-  align-items: center;
+  align-items: flex-start;
   justify-content: center;
   background: radial-gradient(ellipse at 30% 20%, #0c4a6e 0%, #020617 55%);
-  padding: 24px;
+  padding: max(16px, env(safe-area-inset-top, 0px)) 16px max(24px, env(safe-area-inset-bottom, 0px));
+  overflow-x: hidden;
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+  overscroll-behavior: contain;
+  box-sizing: border-box;
+  min-height: 100%;
+  min-height: 100dvh;
+  pointer-events: auto;
 }
 
 .auth-gate[hidden] {
@@ -2078,6 +2086,9 @@ body.auth-locked .pwa-install-banner {
 
 .auth-card {
   width: min(420px, 100%);
+  margin-top: clamp(20px, 6vh, 56px);
+  margin-bottom: 32px;
+  flex-shrink: 0;
   padding: 28px 24px 24px;
   border-radius: 12px;
   border: 1px solid #334155;
@@ -2183,7 +2194,12 @@ body.auth-locked .pwa-install-banner {
   cursor: pointer;
 }
 
-.auth-submit:hover {
+.auth-submit:disabled {
+  opacity: 0.7;
+  cursor: wait;
+}
+
+.auth-submit:hover:not(:disabled) {
   background: #0369a1;
 }
 

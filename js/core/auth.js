@@ -314,49 +314,40 @@ export async function signup(username, password) {
 }
 
 /**
- * 로그인: 로컬 조회 → 없으면 GitHub pull → 재조회 → 비밀번호 검증
+ * 로그인: 로컬 비밀번호 먼저 검증(네트워크에 막히지 않음)
+ * → 실패/계정 없을 때만 GitHub pull 후 재시도
  */
 export async function login(username, password) {
   const id = String(username || '').trim().toLowerCase();
+  const pw = String(password || '');
 
   let user = await findUserByUsername(id);
-  if (!user) {
-    try {
-      await syncUsersFromGithub();
-    } catch (err) {
-      console.warn('[auth] 로그인 전 GitHub pull 실패:', err);
-    }
-    user = await findUserByUsername(id);
-  } else {
-    try {
-      await syncUsersFromGithub();
-      user = (await findUserByUsername(id)) || user;
-    } catch {
-      /* 오프라인 등 — 로컬로 계속 */
+
+  // 로컬에 계정이 있으면 즉시 검증 — GitHub 대기로 버튼이 멈추지 않게
+  if (user && !user.disabled) {
+    const ok = await verifyPassword(pw, user.salt, user.passwordHash);
+    if (ok) {
+      currentUser = await toPublicUser(user);
+      writeSession(currentUser);
+      emit('auth:changed', currentUser);
+      syncUsersFromGithub().catch(() => {});
+      return currentUser;
     }
   }
+
+  try {
+    await syncUsersFromGithub();
+  } catch (err) {
+    console.warn('[auth] 로그인 전 GitHub pull 실패:', err);
+  }
+  user = await findUserByUsername(id);
 
   if (!user || user.disabled) {
     throw new Error('아이디 또는 비밀번호가 올바르지 않습니다.');
   }
 
-  const ok = await verifyPassword(password, user.salt, user.passwordHash);
+  const ok = await verifyPassword(pw, user.salt, user.passwordHash);
   if (!ok) {
-    try {
-      await syncUsersFromGithub();
-      user = await findUserByUsername(id);
-      if (user && !user.disabled) {
-        const ok2 = await verifyPassword(password, user.salt, user.passwordHash);
-        if (ok2) {
-          currentUser = await toPublicUser(user);
-          writeSession(currentUser);
-          emit('auth:changed', currentUser);
-          return currentUser;
-        }
-      }
-    } catch {
-      /* ignore */
-    }
     throw new Error('아이디 또는 비밀번호가 올바르지 않습니다.');
   }
 

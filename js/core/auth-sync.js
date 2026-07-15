@@ -14,6 +14,17 @@ import { nowIso } from './utils.js';
 const USERS_FORMAT = 'novel-explor-users/v1';
 const MASTER_ROLE = 'admin_master';
 export const MASTER_USERNAME = 'master';
+const AUTH_FETCH_TIMEOUT_MS = 8000;
+
+async function fetchWithTimeout(url, ms = AUTH_FETCH_TIMEOUT_MS) {
+  const ctrl = new AbortController();
+  const timer = setTimeout(() => ctrl.abort(), ms);
+  try {
+    return await fetch(url, { cache: 'no-store', signal: ctrl.signal });
+  } finally {
+    clearTimeout(timer);
+  }
+}
 
 export function usersAuthPath(cfg = getGithubConfig()) {
   return `${cfg.workspaceRoot}/auth/users.json`;
@@ -61,7 +72,7 @@ export function mergeUserRecords(localUsers = [], remoteUsers = []) {
 export async function fetchRemoteUsers() {
   try {
     const url = rawGithubUrl(usersAuthPath());
-    const res = await fetch(`${url}?t=${Date.now()}`, { cache: 'no-store' });
+    const res = await fetchWithTimeout(`${url}?t=${Date.now()}`);
     if (!res.ok) return null;
     const data = await res.json();
     if (!Array.isArray(data?.users) || !data.users.length) return null;
@@ -74,7 +85,7 @@ export async function fetchRemoteUsers() {
 async function fetchLegacyMasterAsUsers() {
   try {
     const url = rawGithubUrl(masterAuthPath());
-    const res = await fetch(`${url}?t=${Date.now()}`, { cache: 'no-store' });
+    const res = await fetchWithTimeout(`${url}?t=${Date.now()}`);
     if (!res.ok) return null;
     const m = await res.json();
     if (!m?.passwordHash || !m?.salt) return null;
