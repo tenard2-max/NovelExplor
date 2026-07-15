@@ -3,7 +3,7 @@
 import { on } from '../core/events.js';
 import * as project from '../core/project.js';
 import { getCurrentStoryMarkdownSync, tagReaderBlocksForTts } from './reader.js';
-import { setTtsWallpaper } from './canvas-wallpaper.js';
+import { setTtsWallpaper, clearTtsWallpaper } from './canvas-wallpaper.js';
 import {
   initTtsVoices,
   applySelectedVoice,
@@ -327,6 +327,7 @@ function stopPreviousPlayback() {
   paused = false;
   currentUtterance = null;
   activeSceneCut = null;
+  clearTtsWallpaper();
   clearHighlight();
 }
 
@@ -388,25 +389,46 @@ function speakChunk(chunk) {
 
 function onChunkStart(chunk) {
   highlightChunk(chunk.paraIndex);
-  const sceneCut = findSceneCutForTags(chunk.bracketTags);
-  const sceneCutImage = sceneCutWallpaperUrl(sceneCut);
-  if (sceneCutImage) {
+
+  // 대괄호 제어는 원문 등장 순서로 적용한다.
+  // 예: [폐허] … [ ] → 마지막이 해제면 장면컷 고정을 끈다.
+  // (리더 HTML은 빈 줄 없는 연속 줄을 한 <p>로 합치므로 같은 청크에 둘 다 올 수 있다.)
+  const controls = Array.isArray(chunk.bracketControls) ? chunk.bracketControls : [];
+  let didReset = false;
+  for (const control of controls) {
+    if (control?.type === 'reset') {
+      activeSceneCut = null;
+      didReset = true;
+      continue;
+    }
+    if (control?.type !== 'scene' || !control.name) continue;
+    const sceneCut = project.findSceneCutByName(control.name);
+    const sceneCutImage = sceneCutWallpaperUrl(sceneCut);
+    if (!sceneCutImage) continue;
     activeSceneCut = sceneCut;
+    didReset = false;
     setTtsWallpaper(sceneCutImage);
-    return;
   }
 
-  // 한 번 선택된 장면컷은 다음 장면컷 태그가 나올 때까지 인물 사진보다 우선한다.
+  // 한 번 선택된 장면컷은 다음 장면컷/[ ] 해제까지 인물 사진보다 우선한다.
   if (activeSceneCut) {
     const activeImage = sceneCutWallpaperUrl(activeSceneCut);
     if (activeImage) setTtsWallpaper(activeImage);
     return;
   }
 
-  const match = findCharacterInText(chunk.text, nameEntries);
+  // [ ] 이후 구간만 인물 검색 (해제 앞 인물명에 가로채이지 않게)
+  const searchText = (chunk.spokenAfterReset != null)
+    ? chunk.spokenAfterReset
+    : chunk.text;
+  const match = findCharacterInText(searchText, nameEntries);
   if (match?.avatar) {
     setTtsWallpaper(match.avatar);
+    return;
   }
+
+  // [ ] 해제 직후 인물도 없으면 장면컷 잔상 제거(기본 월페이퍼로 복귀)
+  if (didReset) clearTtsWallpaper();
 }
 
 function highlightChunk(paraIndex) {
@@ -668,30 +690,74 @@ export function chunkSpeakableText(text) {
 
 /**
  * 모든 [내용]을 음성 텍스트에서 제거하면서 장면컷 조회용 태그를 보존한다.
+ * [ ] / [] / 공백만 있는 대괄호는 장면컷 고정 해제 제어다.
  * 닫히지 않은 '['는 일반 텍스트로 유지한다.
  */
 export function parseBracketControls(source) {
   const text = String(source || '');
+  const bracketControls = [];
   const bracketTags = [];
   let spokenText = '';
+  // null: 아직 [ ] 없음. 문자열: 마지막 [ ] 이후 음성 텍스트 누적
+  let spokenAfterReset = null;
   let cursor = 0;
 
   for (const match of text.matchAll(/\[([^\]]*)\]/g)) {
-    spokenText += text.slice(cursor, match.index);
-    const tag = String(match[1] || '').replace(/\s+/g, ' ').trim();
-    if (tag) bracketTags.push(tag);
+    const before = text.slice(cursor, match.index);
+    spokenText += before;
+    if (spokenAfterReset !== null) spokenAfterReset += before;
+
+    const rawTag = String(match[1] || '');
+    // 공백만/[ ]/[] → 장면컷 해제. 일반 장면컷 이름과 구분한다.
+    if (!rawTag.trim()) {
+      bracketControls.push({ type: 'reset' });
+      spokenAfterReset = '';
+    } else {
+      const tag = rawTag.replace(/\s+/g, ' ').trim();
+      if (tag) {
+        bracketControls.push({ type: 'scene', name: tag });
+        bracketTags.push(tag);
+      }
+    }
     cursor = Number(match.index) + match[0].length;
   }
-  spokenText += text.slice(cursor);
-  spokenText = spokenText.replace(/\s+/g, ' ').trim();
+  const tail = text.slice(cursor);
+  spokenText += tail;
+  if (spokenAfterReset !== null) spokenAfterReset += tail;
 
-  return { spokenText, bracketTags };
+  spokenText = spokenText.replace(/\s+/g, ' ').trim();
+  if (spokenAfterReset !== null) {
+    spokenAfterReset = spokenAfterReset.replace(/\s+/g, ' ').trim();
+  }
+
+  return {
+    spokenText,
+    spokenAfterReset,
+    bracketTags,
+    bracketControls,
+    resetSceneCut: bracketControls.some((c) => c.type === 'reset'),
+  };
 }
 
 function buildParagraphChunks(sourceText, paraIndex) {
-  const { spokenText, bracketTags } = parseBracketControls(sourceText);
+  const {
+    spokenText,
+    spokenAfterReset,
+    bracketTags,
+    bracketControls,
+    resetSceneCut,
+  } = parseBracketControls(sourceText);
   if (!spokenText) {
-    return bracketTags.length ? [{ text: '', paraIndex, bracketTags }] : [];
+    return (bracketControls.length)
+      ? [{
+        text: '',
+        paraIndex,
+        bracketTags,
+        bracketControls,
+        resetSceneCut,
+        spokenAfterReset: spokenAfterReset ?? '',
+      }]
+      : [];
   }
 
   const pieces = splitLongSpeakableText(spokenText, TTS_MAX_CHUNK);
@@ -699,6 +765,10 @@ function buildParagraphChunks(sourceText, paraIndex) {
     text: piece,
     paraIndex,
     bracketTags: index === 0 ? bracketTags : [],
+    bracketControls: index === 0 ? bracketControls : [],
+    resetSceneCut: index === 0 && resetSceneCut,
+    // 첫 조각만 해제 이후 검색 구간을 들고 간다(이후 조각은 이미 해제 상태).
+    spokenAfterReset: index === 0 ? spokenAfterReset : null,
   }));
 }
 

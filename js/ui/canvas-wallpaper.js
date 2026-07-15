@@ -131,6 +131,12 @@ export function setTtsWallpaper(dataUrl) {
   requestAnimationFrame(() => applyWallpaper());
 }
 
+/** TTS 일시 배경 해제 — 장면컷/[ ] 해제 후 기본 월페이퍼로 복귀 */
+export function clearTtsWallpaper() {
+  ttsOverrideUrl = '';
+  applyWallpaper();
+}
+
 function getActiveWallpaperUrl() {
   return ttsOverrideUrl || state.dataUrl;
 }
