@@ -213,6 +213,12 @@ export async function showStory(num, contentEl, selectEl) {
     const markdown = await resolveStoryContent(entry);
     contentEl.innerHTML = `<div class="reader-inner">${simpleMarkdownToHtml(markdown)}</div>`;
     tagReaderBlocksForTts(contentEl.querySelector('.reader-inner'));
+    // 렌더 완료 후 현재 화에 필요한 인물·장면컷을 백그라운드 캐시 최우선으로 전달
+    emit('reader:content-ready', {
+      number: num,
+      storyId: entry.id,
+      markdown,
+    });
   } catch (err) {
     contentEl.innerHTML = `<p class="inspector-empty">로드 실패: ${escapeHtml(err.message)}</p>`;
   }

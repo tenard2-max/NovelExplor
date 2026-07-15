@@ -44,6 +44,7 @@ import { initAuthGate, showAuthGate, hideAuthGate, whenAuthenticated } from './u
 import { initSettings, updateUserBadge } from './ui/settings-panel.js';
 import { initPermissions, applyUploadPermissions } from './ui/permissions.js';
 import { initPwaInstall } from './ui/pwa-install.js';
+import { initBackgroundAssets } from './core/background-assets.js';
 
 async function boot() {
   initPwaInstall();
@@ -70,6 +71,7 @@ async function boot() {
   initPermissions();
   initActions();
   initBackup();
+  initBackgroundAssets();
   initGithubSync();
   initGithubPanel();
   initSearch();

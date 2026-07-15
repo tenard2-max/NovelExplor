@@ -1,5 +1,6 @@
 /* NovelExplor PWA service worker — app shell cache */
-const CACHE_VERSION = 'ne-pwa-v2-20260715b';
+const CACHE_VERSION = 'ne-pwa-v2-20260715c';
+const PROJECT_ASSET_CACHE = 'ne-project-assets-v1';
 const APP_SHELL = [
   './',
   './index.html',
@@ -22,7 +23,11 @@ self.addEventListener('install', (event) => {
 self.addEventListener('activate', (event) => {
   event.waitUntil(
     caches.keys().then((keys) =>
-      Promise.all(keys.filter((k) => k !== CACHE_VERSION).map((k) => caches.delete(k)))
+      Promise.all(
+        keys
+          .filter((k) => k !== CACHE_VERSION && k !== PROJECT_ASSET_CACHE)
+          .map((k) => caches.delete(k))
+      )
     ).then(() => self.clients.claim())
   );
 });
@@ -32,6 +37,24 @@ self.addEventListener('fetch', (event) => {
   if (req.method !== 'GET') return;
 
   const url = new URL(req.url);
+
+  // GitHub raw 프로젝트 자산: 백그라운드 큐와 공유하는 영속 캐시 우선.
+  // 실패 시 원 응답을 반환해 앱 열기·읽기 흐름을 막지 않는다.
+  if (url.hostname === 'raw.githubusercontent.com') {
+    event.respondWith(
+      caches.open(PROJECT_ASSET_CACHE).then(async (cache) => {
+        const cached = await cache.match(req);
+        if (cached) return cached;
+        const response = await fetch(req);
+        if (response?.ok) {
+          cache.put(req, response.clone()).catch(() => {});
+        }
+        return response;
+      })
+    );
+    return;
+  }
+
   if (url.origin !== self.location.origin) return;
 
   // HTML / JS / CSS / JSON / XML: network first — 배포 직후 옛 캐시로 UI가 깨지지 않게
