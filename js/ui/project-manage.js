@@ -1,13 +1,10 @@
 /** 마스터 프로젝트 관리
  * 상단: 쓰기 권한을 줄 관리자(소설가·개발자) 1명 선택
- * 하단: 로컬 IDB · GitHub 스냅샷을 각각 전부 나열 후 체크 → 권한 적용
+ * 하단: GitHub 스냅샷만 나열 후 체크 → 권한 적용 / 삭제 / 고아 정리
  */
 
 import { listUsers, canBeProjectWriter, normalizeWriters, normalizeWriterNames, isMaster, getCurrentUser, ROLE_LABELS } from '../core/auth.js';
 import {
-  listProjects,
-  applyAdminWriteAccess,
-  loadProject,
   getCurrentProject,
   setCurrentProjectTitle,
 } from '../core/project.js';
@@ -51,7 +48,6 @@ import {
   readBackupFile,
   writeBackupToSyncFolder,
 } from '../core/sync-folder.js';
-import { exportTimestampedBackup } from '../core/backup.js';
 import { flushSave } from '../core/autosave.js';
 import { applyRolePermissions } from './permissions.js';
 
@@ -107,9 +103,8 @@ export async function showProjectManageDialog() {
           <button type="button" class="btn-sm" id="proj-refresh">새로고침</button>
         </div>
         <p class="proj-manage-hint">
-          체크 = 위 관리자에게 쓰기 권한.
-          <strong>로컬</strong> DB · <strong>폴더</strong> JSON · <strong>GitHub</strong> 스냅샷(PAT)에 바로 반영합니다.
-          다운로드만 한 JSON은 목록에 없습니다.
+          체크 = 위 관리자에게 <strong>GitHub 스냅샷</strong> 쓰기 권한.
+          목록은 GitHub 항목만 표시합니다(로컬·폴더는 표시하지 않음 · PAT 필요).
           굵은 글씨 = 프로젝트 제목 · 코드 = 파일명(테마). 제목 수정은 파일명을 바꾸지 않습니다.
         </p>
         <p id="proj-status" class="proj-manage-gh-status">불러오는 중…</p>
@@ -218,8 +213,6 @@ export async function showProjectManageDialog() {
 
     listEl.innerHTML = catalog.map((item) => {
       const badges = [];
-      if (item.localId) badges.push('로컬');
-      if (item.folderName) badges.push('폴더');
       if (item.ghSnapshotId) badges.push(item.isDefault ? 'GitHub·기본' : 'GitHub');
       const meta = [
         item.author ? `작성 ${item.author}` : '',
@@ -234,7 +227,7 @@ export async function showProjectManageDialog() {
         <div class="proj-manage-card" role="listitem">
           <label class="proj-manage-card-check">
             <input type="checkbox" name="proj-item" value="${esc(item.key)}"
-              data-local-id="${esc(item.localId || '')}"
+              data-local-id=""
               data-gh-id="${esc(item.ghSnapshotId || '')}">
           </label>
           <span class="proj-manage-card-body">
@@ -415,11 +408,8 @@ export async function showProjectManageDialog() {
     try {
       const built = await buildProjectCatalog();
       catalog = built.items;
-      const nLocal = catalog.filter((c) => c.localId).length;
       const nGh = catalog.filter((c) => c.ghSnapshotId).length;
-      const nFolder = catalog.filter((c) => c.folderName && !c.localId && !c.ghSnapshotId).length;
-      let line = `표시 ${catalog.length}개 · 로컬 ${nLocal} · GitHub ${nGh}`;
-      if (nFolder) line += ` · 폴더만 ${nFolder}`;
+      let line = `GitHub 스냅샷 ${nGh}개`;
       if (built.githubError) line += ` · GitHub오류: ${built.githubError}`;
       if (!hasGithubToken()) line += ' · PAT 미연결(한도 60/시)';
       statusEl.textContent = line;
@@ -903,41 +893,26 @@ export async function showProjectManageDialog() {
       }
 
       const checked = [...listEl.querySelectorAll('input[name="proj-item"]:checked')];
-      const grantLocal = [];
-      /** @type {string[]} 폴더 JSON 파일명 */
-      const grantFolderFiles = [];
       /** @type {{ snapshotId: string, name: string }[]} */
       const grantGithub = [];
 
       for (const el of checked) {
         const item = catalog.find((c) => c.key === el.value);
-        const localId = item?.localId || el.getAttribute('data-local-id') || el.dataset.localId || '';
         const ghId = item?.ghSnapshotId || el.dataset.ghId || '';
-        const folderFile = item?.folderName || '';
-        if (localId) {
-          grantLocal.push(localId);
-        }
         if (ghId) {
           grantGithub.push({
             snapshotId: ghId,
             name: item?.fileHint || `${ghId}.json`,
           });
-        } else if (folderFile) {
-          grantFolderFiles.push(folderFile);
         }
       }
 
-      // 로컬: 체크된 것만 grant, 나머지 로컬은 revoke
-      const allLocalIds = catalog.map((c) => c.localId).filter(Boolean);
-      const grantSet = new Set(grantLocal);
-      const revokeLocal = allLocalIds.filter((id) => !grantSet.has(id));
-
-      if (!grantLocal.length && !grantFolderFiles.length && !grantGithub.length && !revokeLocal.length) {
-        alert('적용할 항목이 없습니다. 로컬·폴더·GitHub 항목을 체크하세요.');
+      if (!grantGithub.length) {
+        alert('적용할 GitHub 스냅샷을 체크하세요.');
         return;
       }
 
-      if (grantGithub.length && !hasGithubToken()) {
+      if (!hasGithubToken()) {
         alert(
           'GitHub 스냅샷에 권한을 쓰려면 우측 패널에 PAT가 필요합니다.\n'
           + '토큰을 저장한 뒤 다시 「권한 적용」하세요.'
@@ -946,68 +921,28 @@ export async function showProjectManageDialog() {
       }
 
       confirmBtn.disabled = true;
-      statusEl.textContent = '권한 저장 중…';
+      statusEl.textContent = 'GitHub 스냅샷 권한 저장 중…';
       try {
-        let granted = 0;
-        let revoked = 0;
-        let changed = 0;
-        /** @type {string[]} */
-        let projectIds = [];
         /** @type {string[]} */
         let errors = [];
+        const ghResult = await patchGithubWriters(grantGithub, admin, true);
+        const githubPatched = ghResult.patched;
+        errors.push(...ghResult.errors);
 
-        if (grantLocal.length || revokeLocal.length) {
-          const result = await applyAdminWriteAccess(adminId, grantLocal, revokeLocal);
-          granted += result.granted || 0;
-          revoked += result.revoked || 0;
-          changed += result.changed || 0;
-          projectIds = result.projectIds || [];
-          errors = [...(result.errors || [])];
-        }
-
-        let folderPatched = 0;
-        if (grantFolderFiles.length) {
-          statusEl.textContent = '폴더 JSON 권한 저장 중…';
-          const folderResult = await patchFolderWriters(grantFolderFiles, admin, true);
-          folderPatched = folderResult.patched;
-          errors.push(...folderResult.errors);
-        }
-
-        let githubPatched = 0;
-        if (grantGithub.length) {
-          statusEl.textContent = 'GitHub 스냅샷 권한 저장 중…';
-          const ghResult = await patchGithubWriters(grantGithub, admin, true);
-          githubPatched = ghResult.patched;
-          errors.push(...ghResult.errors);
-        }
-
-        const cur = getCurrentProject();
-        const curId = cur?.id || cur?.projectId;
-        if (curId && (projectIds.includes(curId) || grantLocal.includes(curId))) {
-          await loadProject(curId);
-          await flushSave(true);
-          try {
-            await exportTimestampedBackup({ notify: false });
-          } catch (err) {
-            console.warn('[project-manage] 권한 반영 후 동기화 저장 실패:', err);
-          }
-        }
         applyRolePermissions();
 
         const errLine = errors.length
           ? `\n\n오류 ${errors.length}건:\n${errors.slice(0, 5).join('\n')}`
           : '';
         alert(
-          `${admin.username || '관리자'} 쓰기 권한 반영\n`
-          + `로컬 부여 ${granted} · 로컬 해제 ${revoked} · 로컬 변경 ${changed}\n`
-          + `폴더 ${folderPatched} · GitHub ${githubPatched}\n`
-          + `체크(로컬 ${grantLocal.length} · 폴더 ${grantFolderFiles.length} · GitHub ${grantGithub.length})`
+          `${admin.username || '관리자'} GitHub 쓰기 권한 반영\n`
+          + `GitHub ${githubPatched}개\n`
+          + `체크 ${grantGithub.length}개`
           + errLine
           + `\n\n같은 브라우저에서 해당 계정으로 다시 로그인하세요.`
         );
 
-        const anyTarget = grantLocal.length || grantFolderFiles.length || grantGithub.length;
-        if (!granted && !folderPatched && !githubPatched && anyTarget && errors.length) {
+        if (!githubPatched && grantGithub.length && errors.length) {
           statusEl.textContent = `권한 저장 실패: ${errors[0]}`;
           confirmBtn.disabled = false;
           return;
@@ -1046,7 +981,7 @@ export async function showProjectManageDialog() {
  * }} ProjectCatalogItem
  */
 
-/** 로컬 IDB · GitHub 스냅샷 · 폴더를 각각 별도 행으로 나열 (제목 병합 없음)
+/** GitHub 스냅샷만 나열 (로컬·폴더는 프로젝트 관리 목록에서 제외)
  * @returns {Promise<{ items: ProjectCatalogItem[], githubError: string, githubListed: number }>}
  */
 async function buildProjectCatalog() {
@@ -1055,30 +990,6 @@ async function buildProjectCatalog() {
   let githubError = '';
   let githubListed = 0;
 
-  // 1) 로컬 IndexedDB — id마다 한 행
-  const locals = await listProjects();
-  for (const p of locals) {
-    const id = p.id || p.projectId;
-    if (!id) continue;
-    items.push({
-      key: `local:${id}`,
-      title: p.title || '(제목 없음)',
-      author: p.author || '',
-      writers: normalizeWriters(p.writers),
-      writerUsernames: normalizeWriterNames(p.writerUsernames),
-      localId: id,
-      ghSnapshotId: '',
-      folderName: '',
-      fileHint: '',
-      latestLabel: p.updatedAt
-        ? `갱신 ${String(p.updatedAt).slice(0, 19).replace('T', ' ')}`
-        : '',
-      latestStamp: stampFromIso(p.updatedAt),
-      isDefault: false,
-    });
-  }
-
-  // 2) GitHub — 스냅샷 파일마다 한 행 (합치지 않음)
   let defaultId = '';
   try {
     const def = await fetchGithubDefaultMeta();
@@ -1126,61 +1037,6 @@ async function buildProjectCatalog() {
     console.warn('[project-manage] GitHub 목록 실패:', err);
     githubError = err?.message || String(err);
     githubListed = 0;
-  }
-
-  // 3) 동기화 폴더 — 로컬/GitHub에 없는 파일만 추가 (배지 보강은 파일명 일치 시)
-  await initSyncFolder();
-  if (hasSyncDir()) {
-    try {
-      const files = await listTimestampBackups();
-      const knownFiles = new Set(
-        items.map((c) => c.fileHint || c.folderName).filter(Boolean)
-      );
-      for (const f of files.slice(0, 60)) {
-        // 이미 GitHub/다른 행에 같은 파일명이 있으면 폴더 배지만
-        const existing = items.find(
-          (c) => c.fileHint === f.name || c.folderName === f.name
-          || c.ghSnapshotId && `${c.ghSnapshotId}.json` === f.name
-        );
-        if (existing) {
-          existing.folderName = f.name;
-          if (!existing.fileHint) existing.fileHint = f.name;
-          continue;
-        }
-        if (knownFiles.has(f.name)) continue;
-
-        let title = f.name;
-        let author = '';
-        let writers = [];
-        let writerUsernames = [];
-        try {
-          const file = await readBackupFile(f.handle);
-          const data = JSON.parse(await file.text());
-          title = data?.project?.title || f.name;
-          author = data?.project?.author || '';
-          writers = normalizeWriters(data?.project?.writers);
-          writerUsernames = normalizeWriterNames(data?.project?.writerUsernames);
-        } catch { /* filename only */ }
-
-        items.push({
-          key: `folder:${f.name}`,
-          title: title || f.name,
-          author,
-          writers,
-          writerUsernames,
-          localId: '',
-          ghSnapshotId: '',
-          folderName: f.name,
-          fileHint: f.name,
-          latestLabel: f.label,
-          latestStamp: f.stamp,
-          isDefault: false,
-        });
-        knownFiles.add(f.name);
-      }
-    } catch (err) {
-      console.warn('[project-manage] 폴더 목록 실패:', err);
-    }
   }
 
   items.sort((a, b) =>
