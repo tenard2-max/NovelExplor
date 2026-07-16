@@ -3,7 +3,7 @@
  * 하단: 로컬 IDB · GitHub 스냅샷을 각각 전부 나열 후 체크 → 권한 적용
  */
 
-import { listUsers, canBeProjectWriter, normalizeWriters, normalizeWriterNames, isMaster, ROLE_LABELS } from '../core/auth.js';
+import { listUsers, canBeProjectWriter, normalizeWriters, normalizeWriterNames, isMaster, getCurrentUser, ROLE_LABELS } from '../core/auth.js';
 import { listProjects, applyAdminWriteAccess, loadProject, getCurrentProject } from '../core/project.js';
 import {
   listGithubProjectsDetailed,
@@ -12,6 +12,21 @@ import {
   fetchGithubDefaultMeta,
   isGithubRateLimitError,
 } from '../core/default-project.js';
+import {
+  analyzeOrphanGithubAssets,
+  deleteOrphanGithubAssets,
+  formatBytes as formatOrphanBytes,
+  ORPHAN_FILTERS,
+} from '../core/orphan-assets.js';
+import {
+  listOrphanCleanupHistory,
+  formatCleanupHistoryTime,
+  appendOrphanCleanupHistory,
+} from '../core/orphan-cleanup-history.js';
+import {
+  offerOrphanCleanupOnProjectDelete,
+  finalizeOrphanCleanupAfterSnapshotDelete,
+} from './project-delete-orphan-flow.js';
 import { hasGithubToken, getGithubConfig, snapshotsDir } from '../core/github-config.js';
 import { getRepoFileJson, commitRepoFiles } from '../core/github-api.js';
 import {
@@ -86,7 +101,33 @@ export async function showProjectManageDialog() {
         <div class="proj-manage-gh-actions">
           <button type="button" class="btn-sm" id="proj-select-all" disabled>전체 선택</button>
           <button type="button" class="btn-sm char-btn-danger" id="proj-gh-delete" disabled>GitHub 선택 삭제</button>
+          <button type="button" class="btn-sm" id="proj-orphan-analyze" title="고아 후보 분석 후 선택 삭제">고아 자산 분석</button>
         </div>
+        <section id="proj-orphan-panel" class="proj-orphan-panel" hidden>
+          <div class="proj-orphan-head">
+            <h4 class="proj-orphan-title">고아 자산 정리</h4>
+            <p class="proj-orphan-note">
+              기본값은 미선택입니다. 원하는 파일만 체크한 뒤 삭제하세요.
+              삭제 전 최신 참조를 다시 검사하며, 한 커밋으로 묶여 반영됩니다.
+            </p>
+          </div>
+          <p id="proj-orphan-status" class="proj-manage-gh-status"></p>
+          <div id="proj-orphan-summary" class="proj-orphan-summary"></div>
+          <div id="proj-orphan-toolbar" class="proj-orphan-toolbar" hidden>
+            <div id="proj-orphan-filters" class="proj-orphan-filters" role="group" aria-label="고아 자산 필터"></div>
+            <div class="proj-orphan-actions">
+              <button type="button" class="btn-sm" id="proj-orphan-select-visible">보이는 항목 선택</button>
+              <button type="button" class="btn-sm" id="proj-orphan-clear">선택 해제</button>
+              <button type="button" class="btn-sm char-btn-danger" id="proj-orphan-delete" disabled>선택 삭제</button>
+            </div>
+          </div>
+          <div id="proj-orphan-list" class="proj-orphan-list" role="list" aria-label="고아 자산 후보"></div>
+        </section>
+        <section class="proj-orphan-history">
+          <h5 class="proj-orphan-history-title">정리 이력</h5>
+          <p class="proj-orphan-note">프로젝트 삭제 연동 분석·정리 기록(이 브라우저). 자동 삭제는 마스터만 가능합니다.</p>
+          <div id="proj-orphan-history-list" class="proj-orphan-history-list"></div>
+        </section>
       </section>
     </div>`;
 
@@ -95,9 +136,26 @@ export async function showProjectManageDialog() {
   const refreshBtn = bodyEl.querySelector('#proj-refresh');
   const selectAllBtn = bodyEl.querySelector('#proj-select-all');
   const deleteBtn = bodyEl.querySelector('#proj-gh-delete');
+  const orphanBtn = bodyEl.querySelector('#proj-orphan-analyze');
+  const orphanPanel = bodyEl.querySelector('#proj-orphan-panel');
+  const orphanStatusEl = bodyEl.querySelector('#proj-orphan-status');
+  const orphanSummaryEl = bodyEl.querySelector('#proj-orphan-summary');
+  const orphanListEl = bodyEl.querySelector('#proj-orphan-list');
+  const orphanToolbar = bodyEl.querySelector('#proj-orphan-toolbar');
+  const orphanFiltersEl = bodyEl.querySelector('#proj-orphan-filters');
+  const orphanSelectVisibleBtn = bodyEl.querySelector('#proj-orphan-select-visible');
+  const orphanClearBtn = bodyEl.querySelector('#proj-orphan-clear');
+  const orphanDeleteBtn = bodyEl.querySelector('#proj-orphan-delete');
+  const orphanHistoryListEl = bodyEl.querySelector('#proj-orphan-history-list');
 
   /** @type {ProjectCatalogItem[]} */
   let catalog = [];
+  /** @type {Awaited<ReturnType<typeof analyzeOrphanGithubAssets>> | null} */
+  let orphanResult = null;
+  let orphanFilterId = 'all';
+  /** @type {Set<string>} 선택 경로 — 기본 전체 미선택 */
+  let orphanSelected = new Set();
+  let orphanBusy = false;
 
   function selectedAdminId() {
     return bodyEl.querySelector('input[name="proj-admin"]:checked')?.value || '';
@@ -221,12 +279,73 @@ export async function showProjectManageDialog() {
     deleteBtn.disabled = true;
     statusEl.textContent = 'GitHub 삭제 중…';
     try {
+      let orphanOffer = {
+        analyzed: false,
+        autoDelete: false,
+        paths: [],
+        analysis: null,
+        restricted: false,
+      };
+      try {
+        orphanOffer = await offerOrphanCleanupOnProjectDelete(ids, {
+          labels: names,
+          onProgress: ({ label }) => {
+            if (label) statusEl.textContent = label;
+          },
+        });
+      } catch (orphanErr) {
+        const msg = String(orphanErr?.message || orphanErr);
+        if (!confirm(`고아 자산 분석에 실패했습니다.\n${msg}\n\n스냅샷 삭제만 계속할까요?`)) {
+          updateActionButtons();
+          return;
+        }
+      }
+
+      statusEl.textContent = 'GitHub 스냅샷 삭제 중…';
       const result = await deleteGithubProjectSnapshots(ids, {
         onProgress: ({ label }) => {
           if (label) statusEl.textContent = label;
         },
       });
+
+      let orphanCleanupNote = '';
+      if (orphanOffer.autoDelete && orphanOffer.paths.length) {
+        try {
+          statusEl.textContent = '고아 자산 정리 중…';
+          const cleaned = await finalizeOrphanCleanupAfterSnapshotDelete({
+            snapshotIds: ids,
+            labels: names,
+            offer: orphanOffer,
+            onProgress: ({ label }) => {
+              if (label) statusEl.textContent = label;
+            },
+          });
+          if (cleaned) {
+            const sha = cleaned.commitSha ? ` · ${String(cleaned.commitSha).slice(0, 7)}` : '';
+            orphanCleanupNote = cleaned.alreadyAbsent
+              ? `고아 ${cleaned.deletedCount}개 이미 없음`
+              : `고아 ${cleaned.deletedCount}개 정리${sha}`;
+          }
+        } catch (cleanErr) {
+          orphanCleanupNote = `고아 정리 실패: ${cleanErr?.message || cleanErr}`;
+        }
+      } else if (orphanOffer.analyzed) {
+        try {
+          await finalizeOrphanCleanupAfterSnapshotDelete({
+            snapshotIds: ids,
+            labels: names,
+            offer: orphanOffer,
+          });
+        } catch {
+          /* 이력만 */
+        }
+        if (orphanOffer.analysis?.projectOnlyCount && !orphanOffer.autoDelete) {
+          orphanCleanupNote = `고아 후보 ${orphanOffer.analysis.projectOnlyCount}개(삭제 안 함)`;
+        }
+      }
+
       await refreshCatalog();
+      await renderOrphanCleanupHistory();
       const details = [
         result.alreadyAbsent
           ? `GitHub ${result.deletedCount || result.deleted.length}개 이미 삭제됨`
@@ -238,6 +357,7 @@ export async function showProjectManageDialog() {
       if (result.defaultUpdated) {
         details.push(result.defaultTarget ? `기본 → ${result.defaultTarget}` : '기본 포인터 제거');
       }
+      if (orphanCleanupNote) details.push(orphanCleanupNote);
       statusEl.textContent = `${details.join(' · ')} · ${statusEl.textContent}`;
     } catch (err) {
       const message = String(err?.message || err);
@@ -255,8 +375,308 @@ export async function showProjectManageDialog() {
     }
   });
 
+  async function renderOrphanCleanupHistory() {
+    if (!orphanHistoryListEl) return;
+    try {
+      const entries = await listOrphanCleanupHistory();
+      if (!entries.length) {
+        orphanHistoryListEl.innerHTML = '<p class="proj-manage-empty">정리 이력이 없습니다.</p>';
+        return;
+      }
+      orphanHistoryListEl.innerHTML = entries.slice(0, 12).map((entry) => {
+        const who = entry.username || entry.userId || 'unknown';
+        const snap = (entry.snapshotLabels || entry.snapshotIds || []).slice(0, 2).join(', ')
+          || '(스냅샷)';
+        const more = (entry.snapshotIds || []).length > 2
+          ? ` 외 ${(entry.snapshotIds.length - 2)}개`
+          : '';
+        const action = entry.autoDelete
+          ? `삭제 ${entry.deletedCount}개`
+          : entry.restricted
+            ? '미리보기만'
+            : entry.analyzed
+              ? `분석 ${entry.projectOnlyCount}개`
+              : '기록';
+        const sha = entry.commitSha ? ` · ${String(entry.commitSha).slice(0, 7)}` : '';
+        const note = entry.note ? ` · ${entry.note}` : '';
+        return `
+          <div class="proj-orphan-history-row">
+            <span class="proj-orphan-history-time">${esc(formatCleanupHistoryTime(entry.at))}</span>
+            <span class="proj-orphan-history-body">
+              <strong>${esc(action)}</strong>${esc(sha)}
+              · ${esc(who)} · ${esc(snap)}${esc(more)}${esc(note)}
+            </span>
+          </div>`;
+      }).join('');
+    } catch (err) {
+      orphanHistoryListEl.innerHTML = `<p class="proj-manage-empty">이력 로드 실패: ${esc(err?.message || err)}</p>`;
+    }
+  }
+  function getOrphanFilter() {
+    return ORPHAN_FILTERS.find((f) => f.id === orphanFilterId) || ORPHAN_FILTERS[0];
+  }
+
+  function getVisibleOrphans() {
+    const orphans = orphanResult?.orphans || [];
+    const filter = getOrphanFilter();
+    if (!filter.kinds) return orphans;
+    const kindSet = new Set(filter.kinds);
+    return orphans.filter((item) => kindSet.has(item.kind));
+  }
+
+  function syncOrphanSelectionToResult() {
+    if (!orphanResult?.orphans?.length) {
+      orphanSelected = new Set();
+      return;
+    }
+    const valid = new Set(orphanResult.orphans.map((o) => o.path));
+    orphanSelected = new Set([...orphanSelected].filter((p) => valid.has(p)));
+  }
+
+  function updateOrphanDeleteButton() {
+    if (!orphanDeleteBtn) return;
+    const n = orphanSelected.size;
+    orphanDeleteBtn.disabled = orphanBusy || n === 0;
+    orphanDeleteBtn.textContent = n ? `선택 삭제 (${n})` : '선택 삭제';
+  }
+
+  function setOrphanBusy(busy) {
+    orphanBusy = busy;
+    if (orphanBtn) orphanBtn.disabled = busy;
+    if (orphanSelectVisibleBtn) orphanSelectVisibleBtn.disabled = busy || !getVisibleOrphans().length;
+    if (orphanClearBtn) orphanClearBtn.disabled = busy || orphanSelected.size === 0;
+    updateOrphanDeleteButton();
+    orphanFiltersEl?.querySelectorAll('button[data-orphan-filter]').forEach((btn) => {
+      btn.disabled = busy;
+    });
+    orphanListEl?.querySelectorAll('input[type="checkbox"]').forEach((input) => {
+      input.disabled = busy;
+    });
+  }
+
+  function renderOrphanFilters() {
+    if (!orphanFiltersEl) return;
+    orphanFiltersEl.innerHTML = ORPHAN_FILTERS.map((f) => {
+      const count = f.kinds
+        ? (orphanResult?.orphans || []).filter((o) => f.kinds.includes(o.kind)).length
+        : (orphanResult?.orphanCount || 0);
+      const active = f.id === orphanFilterId ? ' is-active' : '';
+      return `<button type="button" class="btn-sm proj-orphan-filter${active}" data-orphan-filter="${esc(f.id)}">${esc(f.label)} (${count})</button>`;
+    }).join('');
+  }
+
+  function renderOrphanList() {
+    if (!orphanListEl) return;
+    const visible = getVisibleOrphans();
+    if (!orphanResult?.orphans?.length) {
+      orphanListEl.innerHTML = '<p class="proj-manage-empty">고아 후보가 없습니다. 모든 오버레이 파일이 최소 하나의 스냅샷에서 참조됩니다.</p>';
+      if (orphanToolbar) orphanToolbar.hidden = true;
+      updateOrphanDeleteButton();
+      return;
+    }
+    if (orphanToolbar) orphanToolbar.hidden = false;
+    if (!visible.length) {
+      orphanListEl.innerHTML = '<p class="proj-manage-empty">이 필터에 해당하는 고아 후보가 없습니다.</p>';
+      updateOrphanDeleteButton();
+      return;
+    }
+    orphanListEl.innerHTML = visible.map((item) => {
+      const checked = orphanSelected.has(item.path) ? ' checked' : '';
+      return `
+      <label class="proj-orphan-row" role="listitem">
+        <input type="checkbox" class="proj-orphan-check" data-orphan-path="${esc(item.path)}"${checked}${orphanBusy ? ' disabled' : ''}>
+        <span class="proj-orphan-kind-badge">${esc(item.kindLabel)}</span>
+        <code class="proj-orphan-path">${esc(item.path)}</code>
+        <span class="proj-orphan-size">${esc(formatOrphanBytes(item.size))}</span>
+      </label>`;
+    }).join('');
+    updateOrphanDeleteButton();
+  }
+
+  function renderOrphanAnalysis(result, { resetSelection = true } = {}) {
+    if (!orphanPanel || !orphanSummaryEl || !orphanListEl) return;
+    orphanPanel.hidden = false;
+    orphanResult = result;
+    if (resetSelection) orphanSelected = new Set();
+    else syncOrphanSelectionToResult();
+
+    const kindRows = Object.entries(result.byKind || {})
+      .filter(([, v]) => v.count > 0)
+      .map(([key, v]) => `
+        <div class="proj-orphan-kind">
+          <strong>${esc(v.label || key)}</strong>
+          <span>${v.count}개 · ${esc(formatOrphanBytes(v.bytes))}</span>
+        </div>`)
+      .join('');
+
+    orphanSummaryEl.innerHTML = `
+      <div class="proj-orphan-stats">
+        <span>스냅샷 ${result.snapshotCount}개</span>
+        <span>참조 경로 ${result.referencedCount}개</span>
+        <span>검사 파일 ${result.inventoryCount}개</span>
+        <span class="proj-orphan-stat-warn">고아 후보 ${result.orphanCount}개 · ${esc(formatOrphanBytes(result.orphanBytes))}</span>
+      </div>
+      <div class="proj-orphan-kinds">${kindRows || '<p class="proj-manage-empty">종류별 후보 없음</p>'}</div>
+      ${result.errors?.length
+    ? `<p class="proj-orphan-errors">경고 ${result.errors.length}건: ${esc(result.errors.slice(0, 3).join(' · '))}${result.errors.length > 3 ? ' …' : ''}</p>`
+    : ''}`;
+
+    renderOrphanFilters();
+    renderOrphanList();
+    setOrphanBusy(orphanBusy);
+  }
+
+  async function runOrphanAnalysis({ resetSelection = true, statusPrefix = '고아 자산 분석' } = {}) {
+    if (orphanPanel) orphanPanel.hidden = false;
+    if (orphanStatusEl) orphanStatusEl.textContent = `${statusPrefix} 중…`;
+    if (orphanSummaryEl && resetSelection) orphanSummaryEl.innerHTML = '';
+    if (orphanListEl && resetSelection) orphanListEl.innerHTML = '';
+    if (orphanToolbar && resetSelection) orphanToolbar.hidden = true;
+    statusEl.textContent = `${statusPrefix} 중…`;
+    const result = await analyzeOrphanGithubAssets({
+      onProgress: ({ label }) => {
+        if (orphanStatusEl && label) orphanStatusEl.textContent = label;
+        if (label) statusEl.textContent = label;
+      },
+    });
+    renderOrphanAnalysis(result, { resetSelection });
+    const doneMsg = result.orphanCount
+      ? `${statusPrefix} 완료 · 고아 후보 ${result.orphanCount}개 (기본 미선택)`
+      : `${statusPrefix} 완료 · 고아 후보 없음`;
+    if (orphanStatusEl) orphanStatusEl.textContent = doneMsg;
+    statusEl.textContent = doneMsg;
+    return result;
+  }
+
+  orphanFiltersEl?.addEventListener('click', (e) => {
+    const btn = e.target.closest('button[data-orphan-filter]');
+    if (!btn || orphanBusy) return;
+    orphanFilterId = btn.getAttribute('data-orphan-filter') || 'all';
+    renderOrphanFilters();
+    renderOrphanList();
+    setOrphanBusy(false);
+  });
+
+  orphanListEl?.addEventListener('change', (e) => {
+    const input = e.target.closest('input.proj-orphan-check');
+    if (!input) return;
+    const path = input.getAttribute('data-orphan-path');
+    if (!path) return;
+    if (input.checked) orphanSelected.add(path);
+    else orphanSelected.delete(path);
+    updateOrphanDeleteButton();
+    if (orphanClearBtn) orphanClearBtn.disabled = orphanBusy || orphanSelected.size === 0;
+  });
+
+  orphanSelectVisibleBtn?.addEventListener('click', () => {
+    if (orphanBusy) return;
+    for (const item of getVisibleOrphans()) orphanSelected.add(item.path);
+    renderOrphanList();
+    setOrphanBusy(false);
+  });
+
+  orphanClearBtn?.addEventListener('click', () => {
+    if (orphanBusy) return;
+    orphanSelected = new Set();
+    renderOrphanList();
+    setOrphanBusy(false);
+  });
+
+  orphanDeleteBtn?.addEventListener('click', async () => {
+    if (orphanBusy || !orphanSelected.size) return;
+    const paths = [...orphanSelected];
+    const preview = paths.slice(0, 12).map((p) => `· ${p}`).join('\n');
+    const more = paths.length > 12 ? `\n… 외 ${paths.length - 12}개` : '';
+    if (!confirm(
+      `선택한 고아 자산 ${paths.length}개를 GitHub에서 삭제할까요?\n\n`
+      + '삭제 전 최신 참조를 다시 검사하며, 한 커밋으로 반영됩니다.\n\n'
+      + `${preview}${more}`
+    )) return;
+
+    setOrphanBusy(true);
+    if (orphanStatusEl) orphanStatusEl.textContent = '고아 자산 삭제 중…';
+    statusEl.textContent = '고아 자산 삭제 중…';
+    try {
+      const deleted = await deleteOrphanGithubAssets(paths, {
+        onProgress: ({ label }) => {
+          if (orphanStatusEl && label) orphanStatusEl.textContent = label;
+          if (label) statusEl.textContent = label;
+        },
+      });
+      const shaHint = deleted.commitSha ? ` · ${String(deleted.commitSha).slice(0, 7)}` : '';
+      if (orphanStatusEl) {
+        orphanStatusEl.textContent = deleted.alreadyAbsent
+          ? `이미 없는 파일 ${deleted.deletedCount}개 · 목록 갱신 중…`
+          : `삭제 완료 ${deleted.deletedCount}개${shaHint} · 목록 갱신 중…`;
+      }
+      statusEl.textContent = orphanStatusEl?.textContent || '고아 자산 삭제 완료';
+      orphanSelected = new Set();
+      const user = getCurrentUser();
+      try {
+        await appendOrphanCleanupHistory({
+          userId: user?.id || '',
+          username: user?.username || '',
+          role: user?.role || '',
+          trigger: 'manual-orphan-delete',
+          snapshotIds: [],
+          snapshotLabels: [],
+          analyzed: true,
+          projectOnlyCount: paths.length,
+          deletedCount: deleted.deletedCount,
+          deletedPaths: deleted.deleted || paths,
+          commitSha: deleted.commitSha || '',
+          autoDelete: true,
+          restricted: false,
+          note: deleted.alreadyAbsent ? '수동 정리 · 이미 없음' : '수동 고아 정리',
+        });
+      } catch {
+        /* 이력 실패는 무시 */
+      }
+      await runOrphanAnalysis({ resetSelection: true, statusPrefix: '삭제 후 재분석' });
+      if (orphanStatusEl) {
+        const remain = orphanResult?.orphanCount || 0;
+        orphanStatusEl.textContent = deleted.alreadyAbsent
+          ? `대상이 이미 없었습니다 · 남은 고아 ${remain}개`
+          : `삭제 ${deleted.deletedCount}개 완료${shaHint} · 남은 고아 ${remain}개`;
+      }
+      statusEl.textContent = orphanStatusEl?.textContent || '고아 자산 정리 완료';
+      await renderOrphanCleanupHistory();
+    } catch (err) {
+      const message = String(err?.message || err);
+      alert(`고아 자산 삭제 실패: ${message}`);
+      if (orphanStatusEl) orphanStatusEl.textContent = `삭제 실패: ${message}`;
+      statusEl.textContent = `고아 자산 삭제 실패: ${message}`;
+      try {
+        await runOrphanAnalysis({ resetSelection: false, statusPrefix: '삭제 실패 후 재분석' });
+      } catch {
+        /* 재분석 실패는 무시 — 삭제 오류가 우선 */
+      }
+    } finally {
+      setOrphanBusy(false);
+      updateActionButtons();
+    }
+  });
+
+  orphanBtn?.addEventListener('click', async () => {
+    if (orphanBusy) return;
+    setOrphanBusy(true);
+    try {
+      await runOrphanAnalysis({ resetSelection: true, statusPrefix: '고아 자산 분석' });
+      await renderOrphanCleanupHistory();
+    } catch (err) {
+      const message = String(err?.message || err);
+      alert(`고아 자산 분석 실패: ${message}`);
+      if (orphanStatusEl) orphanStatusEl.textContent = `분석 실패: ${message}`;
+      statusEl.textContent = `고아 자산 분석 실패: ${message}`;
+    } finally {
+      setOrphanBusy(false);
+      updateActionButtons();
+    }
+  });
+
   updateActionButtons();
   refreshCatalog();
+  renderOrphanCleanupHistory();
 
   return new Promise((resolve) => {
     let settled = false;

@@ -18,6 +18,10 @@ import {
 } from '../core/default-project.js';
 import { hasGithubToken } from '../core/github-config.js';
 import { isMaster } from '../core/auth.js';
+import {
+  offerOrphanCleanupOnProjectDelete,
+  finalizeOrphanCleanupAfterSnapshotDelete,
+} from './project-delete-orphan-flow.js';
 
 /**
  * @returns {Promise<
@@ -420,11 +424,73 @@ async function showGithubOpenProjectDialog() {
           btn.textContent = '삭제 중…';
           countEl.textContent = `${item.name} 삭제 중…`;
           try {
+            let orphanOffer = {
+              analyzed: false,
+              autoDelete: false,
+              paths: [],
+              analysis: null,
+              restricted: false,
+            };
+            try {
+              orphanOffer = await offerOrphanCleanupOnProjectDelete([snapshotId], {
+                labels: [`${item.title || item.name} (${item.name})`],
+                onProgress: ({ label }) => {
+                  if (label) countEl.textContent = `${item.name} · ${label}`;
+                },
+              });
+            } catch (orphanErr) {
+              const msg = String(orphanErr?.message || orphanErr);
+              if (!confirm(`고아 자산 분석에 실패했습니다.\n${msg}\n\n스냅샷 삭제만 계속할까요?`)) {
+                renderGithubSnapshots();
+                return;
+              }
+            }
+
+            countEl.textContent = `${item.name} 삭제 중…`;
             const result = await deleteGithubProjectSnapshots([snapshotId], {
               onProgress: ({ label }) => {
                 if (label) countEl.textContent = `${item.name} · ${label}`;
               },
             });
+
+            let orphanCleanupNote = '';
+            if (orphanOffer.autoDelete && orphanOffer.paths.length) {
+              try {
+                countEl.textContent = `${item.name} · 고아 자산 정리 중…`;
+                const cleaned = await finalizeOrphanCleanupAfterSnapshotDelete({
+                  snapshotIds: [snapshotId],
+                  labels: [`${item.title || item.name} (${item.name})`],
+                  offer: orphanOffer,
+                  onProgress: ({ label }) => {
+                    if (label) countEl.textContent = `${item.name} · ${label}`;
+                  },
+                });
+                if (cleaned) {
+                  const sha = cleaned.commitSha ? ` · ${String(cleaned.commitSha).slice(0, 7)}` : '';
+                  orphanCleanupNote = cleaned.alreadyAbsent
+                    ? ` · 고아 ${cleaned.deletedCount}개 이미 없음`
+                    : ` · 고아 ${cleaned.deletedCount}개 정리${sha}`;
+                }
+              } catch (cleanErr) {
+                orphanCleanupNote = ` · 고아 정리 실패: ${cleanErr?.message || cleanErr}`;
+              }
+            } else if (orphanOffer.analyzed && !orphanOffer.autoDelete) {
+              try {
+                await finalizeOrphanCleanupAfterSnapshotDelete({
+                  snapshotIds: [snapshotId],
+                  labels: [`${item.title || item.name} (${item.name})`],
+                  offer: orphanOffer,
+                });
+              } catch {
+                /* 이력만 — 실패 무시 */
+              }
+              if (orphanOffer.restricted) {
+                orphanCleanupNote = ' · 고아 미리보기만(자동 삭제 제한)';
+              } else if (orphanOffer.analysis?.projectOnlyCount) {
+                orphanCleanupNote = ` · 고아 후보 ${orphanOffer.analysis.projectOnlyCount}개(삭제 안 함)`;
+              }
+            }
+
             if (selection?.type === 'github' && selection.snapshotId === snapshotId) {
               selection = null;
               previewEl.hidden = true;
@@ -459,6 +525,7 @@ async function showGithubOpenProjectDialog() {
                 ? `기본 → ${result.defaultTarget}`
                 : '기본 포인터 제거');
             }
+            if (orphanCleanupNote) details.push(orphanCleanupNote.replace(/^\s·\s*/, ''));
             renderGithubSnapshots(`${details.join(' · ')} · 원격 ${snaps.length}개`);
           } catch (err) {
             const message = String(err?.message || err);
