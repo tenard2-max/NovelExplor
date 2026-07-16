@@ -197,72 +197,77 @@ function initActions() {
   });
 
   bindAction('open-project', async () => {
-    const openMetrics = beginGithubOperation('project-open');
     try {
+      // 목록 탐색·삭제 UI는 계측에서 제외한다.
+      // 대화상자 전체를 project-open으로 잡으면 삭제 재시도 API가
+      // "열기 중 10회 호출" 경고로 잘못 표시된다.
       const picked = await showOpenProjectDialog();
       if (!picked) return;
 
-      if (picked.type === 'file') {
-        const ok = await openBackupJsonFile(picked.file, { skipConfirm: true });
-        if (!ok) return;
-        await flushPendingSave();
-        await autosave.flushSave(true);
-        let filename = picked.name || '';
-        const canWrite = canManageProjectContent(project.getCurrentProject());
-        if (canWrite) {
-          filename = await exportTimestampedBackup({ notify: false, skipGithub: true });
+      const openMetrics = beginGithubOperation('project-open');
+      try {
+        if (picked.type === 'file') {
+          const ok = await openBackupJsonFile(picked.file, { skipConfirm: true });
+          if (!ok) return;
+          await flushPendingSave();
+          await autosave.flushSave(true);
+          let filename = picked.name || '';
+          const canWrite = canManageProjectContent(project.getCurrentProject());
+          if (canWrite) {
+            filename = await exportTimestampedBackup({ notify: false, skipGithub: true });
+          }
+          switchView('character');
+          await showAlert(
+            '프로젝트 열기',
+            canWrite
+              ? `동기화 파일을 적용했습니다.<br><code>${picked.name || filename}</code>`
+              : `프로젝트를 불러왔습니다. <span style="color:#ef4444">(열람만가능)</span><br><code>${picked.name || filename}</code>`
+          );
+          return;
         }
-        switchView('character');
-        await showAlert(
-          '프로젝트 열기',
-          canWrite
-            ? `동기화 파일을 적용했습니다.<br><code>${picked.name || filename}</code>`
-            : `프로젝트를 불러왔습니다. <span style="color:#ef4444">(열람만가능)</span><br><code>${picked.name || filename}</code>`
-        );
-        return;
-      }
 
-      if (picked.type === 'local-db') {
-        await project.loadProject(picked.projectId);
-        switchView('character');
-        const ro = !canManageProjectContent(project.getCurrentProject());
-        await showAlert(
-          '프로젝트 열기',
-          `브라우저 프로젝트를 열었습니다.${ro ? ' <span style="color:#ef4444">(열람만가능)</span>' : ''}<br>`
-          + `<strong>${picked.name || picked.projectId}</strong>`
-        );
-        return;
-      }
+        if (picked.type === 'local-db') {
+          await project.loadProject(picked.projectId);
+          switchView('character');
+          const ro = !canManageProjectContent(project.getCurrentProject());
+          await showAlert(
+            '프로젝트 열기',
+            `브라우저 프로젝트를 열었습니다.${ro ? ' <span style="color:#ef4444">(열람만가능)</span>' : ''}<br>`
+            + `<strong>${picked.name || picked.projectId}</strong>`
+          );
+          return;
+        }
 
-      if (picked.type === 'default') {
-        const id = await loadDefaultProject({ skipConfirm: true });
-        if (!id) return;
-        switchView('character');
-        const ro = !canManageProjectContent(project.getCurrentProject());
-        await showAlert(
-          '기본 프로젝트',
-          `기본 프로젝트를 불러왔습니다.${ro ? ' <span style="color:#ef4444">(열람만가능)</span>' : ''}<br><code>${id}.json</code>`
-        );
-        return;
-      }
+        if (picked.type === 'default') {
+          const id = await loadDefaultProject({ skipConfirm: true });
+          if (!id) return;
+          switchView('character');
+          const ro = !canManageProjectContent(project.getCurrentProject());
+          await showAlert(
+            '기본 프로젝트',
+            `기본 프로젝트를 불러왔습니다.${ro ? ' <span style="color:#ef4444">(열람만가능)</span>' : ''}<br><code>${id}.json</code>`
+          );
+          return;
+        }
 
-      if (picked.type === 'github') {
-        const id = await pullProjectFromGithub({
-          snapshotId: picked.snapshotId,
-          skipConfirm: true,
-        });
-        if (!id) return;
-        switchView('character');
-        const ro = !canManageProjectContent(project.getCurrentProject());
-        await showAlert(
-          'GitHub 프로젝트',
-          `GitHub 스냅샷을 불러왔습니다.${ro ? ' <span style="color:#ef4444">(열람만가능)</span>' : ''}<br><code>${picked.name || `${id}.json`}</code>`
-        );
+        if (picked.type === 'github') {
+          const id = await pullProjectFromGithub({
+            snapshotId: picked.snapshotId,
+            skipConfirm: true,
+          });
+          if (!id) return;
+          switchView('character');
+          const ro = !canManageProjectContent(project.getCurrentProject());
+          await showAlert(
+            'GitHub 프로젝트',
+            `GitHub 스냅샷을 불러왔습니다.${ro ? ' <span style="color:#ef4444">(열람만가능)</span>' : ''}<br><code>${picked.name || `${id}.json`}</code>`
+          );
+        }
+      } finally {
+        endGithubOperation(openMetrics);
       }
     } catch (err) {
       alert(`프로젝트 열기 실패: ${err.message}`);
-    } finally {
-      endGithubOperation(openMetrics);
     }
   });
 

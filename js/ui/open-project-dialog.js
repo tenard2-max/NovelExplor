@@ -440,7 +440,11 @@ async function showGithubOpenProjectDialog() {
               || ''
             ).replace(/\.json$/i, '');
 
-            const details = [`${result.deletedCount || result.deleted.length}개 삭제 완료`];
+            const details = [
+              result.alreadyAbsent
+                ? `${result.deletedCount || result.deleted.length}개 이미 삭제됨`
+                : `${result.deletedCount || result.deleted.length}개 삭제 완료`,
+            ];
             if (result.latestUpdated) {
               details.push(result.latestTarget
                 ? `latest → ${result.latestTarget}`
@@ -455,7 +459,8 @@ async function showGithubOpenProjectDialog() {
           } catch (err) {
             const message = String(err?.message || err);
             const guidance = /동기화 충돌|fast.?forward|먼저 갱신/i.test(message)
-              ? '\n\n다른 저장 작업과 충돌했습니다. 목록을 새로 불러온 뒤 다시 시도해 주세요.'
+              ? '\n\n같은 GitHub main에 앱 코드 푸시·다른 저장/삭제가 겹쳤습니다.\n'
+                + '목록을 새로 불러온 뒤 다시 시도해 주세요.'
               : /권한|마스터|일반 사용자/i.test(message)
                 ? '\n\nGitHub 최신 메타 기준으로 삭제 권한이 거부되었습니다.'
                 : /한도 초과|rate limit/i.test(message)

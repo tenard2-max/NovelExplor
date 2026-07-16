@@ -17,6 +17,8 @@ import {
   commitRepoFiles,
   invalidateRepoDirCache,
   isGithubRateLimitError,
+  isGithubSyncConflictError,
+  repoPathExists,
 } from './github-api.js';
 import { pullProjectFromGithub } from './github-pull.js';
 import {
@@ -28,7 +30,11 @@ import { exportTimestampedBackup, buildBackupJson, restoreFromBackup } from './b
 import { getCurrentProject } from './project.js';
 import { flushSave } from './autosave.js';
 import { emit } from './events.js';
-import { trackedRawFetch } from './github-metrics.js';
+import {
+  beginGithubOperation,
+  endGithubOperation,
+  trackedRawFetch,
+} from './github-metrics.js';
 
 const SETTINGS_KEY = 'app-default-project';
 const BACKUP_KEY = 'app-default-project-backup';
@@ -310,92 +316,135 @@ async function validateGithubSnapshotDelete(snapshotIds, user = getCurrentUser()
  * }>}
  */
 export async function deleteGithubProjectSnapshots(snapshotIds) {
-  return runWithGithubSyncLock('snapshot-delete', async () => {
-    const user = getCurrentUser();
-    const {
-      toDelete,
-      before,
-      defaultMeta,
-      defaultSnapshotId,
-      latestMeta,
-    } = await validateGithubSnapshotDelete(snapshotIds, user);
+  const metrics = beginGithubOperation('snapshot-delete');
+  try {
+    return await runWithGithubSyncLock('snapshot-delete', async () => {
+      const user = getCurrentUser();
+      const {
+        toDelete,
+        before,
+        defaultMeta,
+        defaultSnapshotId,
+        latestMeta,
+      } = await validateGithubSnapshotDelete(snapshotIds, user);
 
-    const cfg = getGithubConfig();
-    const snapDir = snapshotsDir(cfg);
+      const cfg = getGithubConfig();
+      const snapDir = snapshotsDir(cfg);
 
-    const deletePaths = toDelete.map((s) => `${snapDir}/${s.name}`);
-    const deletedIds = new Set(toDelete.map((s) => s.snapshotId));
-    const remaining = before.filter((s) => !deletedIds.has(s.snapshotId));
-    const nextLatest = remaining[0] || null;
-    const nextLatestMeta = nextLatest
-      ? await fetchGithubSnapshotMetaFresh(nextLatest, snapDir)
-      : null;
+      const deletePaths = toDelete.map((s) => `${snapDir}/${s.name}`);
+      const deletedIds = new Set(toDelete.map((s) => s.snapshotId));
+      const remaining = before.filter((s) => !deletedIds.has(s.snapshotId));
+      const nextLatest = remaining[0] || null;
+      const nextLatestMeta = nextLatest
+        ? await fetchGithubSnapshotMetaFresh(nextLatest, snapDir)
+        : null;
 
-    const pointerWrites = [];
-    let latestUpdated = false;
-    let defaultUpdated = false;
-    let latestTarget = '';
-    let defaultTarget = '';
+      const pointerWrites = [];
+      let latestUpdated = false;
+      let defaultUpdated = false;
+      let latestTarget = '';
+      let defaultTarget = '';
 
-    const latestPointsDeleted = latestMeta
-      && deletedIds.has(String(latestMeta.snapshotId || '').replace(/\.json$/i, ''));
-    if (latestPointsDeleted) {
-      latestUpdated = true;
-      latestTarget = nextLatest?.snapshotId || '';
-      if (nextLatest) {
-        pointerWrites.push({
-          repoPath: `${snapDir}/latest.json`,
-          content: JSON.stringify({
-            snapshotId: nextLatest.snapshotId,
-            filename: nextLatest.name,
-            updatedAt: nowIso(),
-            reason: 'delete-repoint',
-          }, null, 2),
-        });
-      } else {
-        deletePaths.push(`${snapDir}/latest.json`);
+      const latestPointsDeleted = latestMeta
+        && deletedIds.has(String(latestMeta.snapshotId || '').replace(/\.json$/i, ''));
+      if (latestPointsDeleted) {
+        latestUpdated = true;
+        latestTarget = nextLatest?.snapshotId || '';
+        if (nextLatest) {
+          pointerWrites.push({
+            repoPath: `${snapDir}/latest.json`,
+            content: JSON.stringify({
+              snapshotId: nextLatest.snapshotId,
+              filename: nextLatest.name,
+              updatedAt: nowIso(),
+              reason: 'delete-repoint',
+            }, null, 2),
+          });
+        } else {
+          deletePaths.push(`${snapDir}/latest.json`);
+        }
       }
-    }
 
-    if (defaultMeta && defaultSnapshotId && deletedIds.has(defaultSnapshotId)) {
-      defaultUpdated = true;
-      defaultTarget = nextLatest?.snapshotId || '';
-      if (nextLatest) {
-        pointerWrites.push({
-          repoPath: `${snapDir}/default.json`,
-          content: JSON.stringify({
-            snapshotId: nextLatest.snapshotId,
-            filename: nextLatest.name,
-            title: nextLatestMeta?.title || nextLatest.label || '기본 프로젝트',
-            updatedAt: nowIso(),
-            reason: 'delete-repoint',
-          }, null, 2),
-        });
-      } else {
-        deletePaths.push(`${snapDir}/default.json`);
+      if (defaultMeta && defaultSnapshotId && deletedIds.has(defaultSnapshotId)) {
+        defaultUpdated = true;
+        defaultTarget = nextLatest?.snapshotId || '';
+        if (nextLatest) {
+          pointerWrites.push({
+            repoPath: `${snapDir}/default.json`,
+            content: JSON.stringify({
+              snapshotId: nextLatest.snapshotId,
+              filename: nextLatest.name,
+              title: nextLatestMeta?.title || nextLatest.label || '기본 프로젝트',
+              updatedAt: nowIso(),
+              reason: 'delete-repoint',
+            }, null, 2),
+          });
+        } else {
+          deletePaths.push(`${snapDir}/default.json`);
+        }
       }
-    }
 
-    const names = toDelete.map((s) => s.name).join(', ');
-    const commit = await commitRepoChanges(
-      pointerWrites,
-      deletePaths,
-      `NovelExplor: delete snapshot(s) ${names}`
-    );
+      const names = toDelete.map((s) => s.name).join(', ');
+      let commit;
+      try {
+        commit = await commitRepoChanges(
+          pointerWrites,
+          deletePaths,
+          `NovelExplor: delete snapshot(s) ${names}`,
+          { maxRetries: 8 }
+        );
+      } catch (err) {
+        if (!isGithubSyncConflictError(err)) throw err;
 
-    invalidateRepoDirCache(snapDir);
-    const result = {
-      deleted: toDelete.map((s) => s.name),
-      deletedCount: toDelete.length,
-      latestUpdated,
-      latestTarget,
-      defaultUpdated,
-      defaultTarget,
-      commitSha: commit.commitSha,
-    };
-    emit('github:snapshots-changed', result);
-    return result;
-  });
+        // 다른 커밋이 같은 파일을 이미 지웠으면 성공으로 본다.
+        invalidateRepoDirCache(snapDir);
+        const stillPresent = [];
+        for (const snapshot of toDelete) {
+          const exists = await repoPathExists(`${snapDir}/${snapshot.name}`);
+          if (exists) stillPresent.push(snapshot);
+        }
+
+        if (!stillPresent.length) {
+          const result = {
+            deleted: toDelete.map((s) => s.name),
+            deletedCount: toDelete.length,
+            latestUpdated,
+            latestTarget,
+            defaultUpdated,
+            defaultTarget,
+            commitSha: '',
+            alreadyAbsent: true,
+          };
+          emit('github:snapshots-changed', result);
+          return result;
+        }
+
+        // 아직 남아 있으면 한 번 더 최신 tip 기준으로 삭제 재시도
+        await new Promise((r) => setTimeout(r, 1200));
+        commit = await commitRepoChanges(
+          pointerWrites,
+          stillPresent.map((s) => `${snapDir}/${s.name}`),
+          `NovelExplor: delete snapshot(s) retry ${stillPresent.map((s) => s.name).join(', ')}`,
+          { maxRetries: 8 }
+        );
+      }
+
+      invalidateRepoDirCache(snapDir);
+      const result = {
+        deleted: toDelete.map((s) => s.name),
+        deletedCount: toDelete.length,
+        latestUpdated,
+        latestTarget,
+        defaultUpdated,
+        defaultTarget,
+        commitSha: commit.commitSha,
+      };
+      emit('github:snapshots-changed', result);
+      return result;
+    });
+  } finally {
+    endGithubOperation(metrics);
+  }
 }
 
 /**

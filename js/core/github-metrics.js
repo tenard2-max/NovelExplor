@@ -48,8 +48,21 @@ export function endGithubOperation(token) {
   if (!operation) return null;
   operations.delete(token);
   state.lastOperation = { ...operation };
+  // 열기 계측이 끝나면 해당 경고는 세션에 남겨두지 않는다.
+  if (
+    operation.label === 'project-open'
+    && state.warning.startsWith('프로젝트 열기 중 GitHub API')
+  ) {
+    state.warning = '';
+  }
   emitMetrics();
   return { ...operation };
+}
+
+/** UI에서 수동으로 경고를 지울 때 사용 */
+export function clearGithubMetricsWarning() {
+  state.warning = '';
+  emitMetrics();
 }
 
 /** 실제 fetch 시도 1회마다 호출한다. 재시도도 GitHub 한도를 소모하므로 별도 집계한다. */

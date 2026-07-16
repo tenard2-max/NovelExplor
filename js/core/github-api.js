@@ -16,6 +16,8 @@ const BLOB_TIMEOUT_MS = 90000;
 const MAX_RETRIES = 2;
 const BLOB_BATCH = 4;
 const REF_FAST_FORWARD_RETRIES = 5;
+/** 스냅샷 삭제처럼 같은 main에 코드 푸시와 겹칠 때 쓰는 강화 재시도 */
+const REF_FAST_FORWARD_RETRIES_STRONG = 8;
 const DIR_CACHE_TTL_MS = 5 * 60 * 1000;
 const DIR_CACHE_PREFIX = 'ne-gh-dir:';
 
@@ -85,7 +87,9 @@ export function isGithubNonFastForwardError(err) {
 }
 
 const GITHUB_SYNC_CONFLICT_MESSAGE =
-  '동기화 충돌: 원격 브랜치에 다른 커밋이 반영되어 자동 재시도 후에도 실패했습니다. 잠시 후 다시 시도하거나 GitHub에서 브랜치 상태를 확인해 주세요.';
+  '동기화 충돌: 원격 main에 다른 커밋이 들어와 자동 재시도 후에도 실패했습니다. '
+  + '앱 코드 푸시·다른 브라우저 저장·다른 스냅샷 삭제와 같은 저장소를 공유합니다. '
+  + '잠시 후 목록을 새로고침한 뒤 다시 시도해 주세요.';
 
 async function getBranchTip(owner, repo, branch) {
   const ref = await githubRequest(`/repos/${owner}/${repo}/git/ref/heads/${encodeURIComponent(branch)}`);
@@ -125,21 +129,23 @@ async function commitTreeWithRetry(owner, repo, branch, {
   treeItems,
   onProgress,
   progressTotal,
+  maxRetries = REF_FAST_FORWARD_RETRIES,
 }) {
   let lastError;
+  const retries = Math.max(0, Number(maxRetries) || REF_FAST_FORWARD_RETRIES);
 
-  for (let attempt = 0; attempt <= REF_FAST_FORWARD_RETRIES; attempt++) {
+  for (let attempt = 0; attempt <= retries; attempt++) {
     if (attempt > 0) {
       reportProgress(onProgress, {
         phase: 'ref-retry',
         done: progressTotal,
         total: progressTotal,
-        label: `브랜치 충돌 — 재시도 ${attempt}/${REF_FAST_FORWARD_RETRIES}…`,
+        label: `브랜치 충돌 — 재시도 ${attempt}/${retries}…`,
       });
       // 동시에 여러 브라우저가 main을 갱신할 때 같은 간격으로 다시 충돌하지 않도록
       // 지수형 backoff에 작은 jitter를 더한다.
-      const retryDelay = Math.min(4000, 300 * (2 ** (attempt - 1)));
-      await sleep(retryDelay + Math.floor(Math.random() * 250));
+      const retryDelay = Math.min(5000, 250 * (2 ** (attempt - 1)));
+      await sleep(retryDelay + Math.floor(Math.random() * 400));
     }
 
     const { parentSha, baseTreeSha } = await getBranchTip(owner, repo, branch);
@@ -170,7 +176,7 @@ async function commitTreeWithRetry(owner, repo, branch, {
       });
     } catch (err) {
       lastError = err;
-      if (isGithubNonFastForwardError(err) && attempt < REF_FAST_FORWARD_RETRIES) continue;
+      if (isGithubNonFastForwardError(err) && attempt < retries) continue;
       throw err;
     }
 
@@ -186,7 +192,7 @@ async function commitTreeWithRetry(owner, repo, branch, {
       return commit;
     } catch (err) {
       lastError = err;
-      if (isGithubNonFastForwardError(err) && attempt < REF_FAST_FORWARD_RETRIES) continue;
+      if (isGithubNonFastForwardError(err) && attempt < retries) continue;
       if (isGithubNonFastForwardError(err)) {
         throw new Error(GITHUB_SYNC_CONFLICT_MESSAGE);
       }
@@ -541,6 +547,7 @@ export async function commitRepoChanges(
     treeItems,
     onProgress,
     progressTotal: total,
+    maxRetries: options.maxRetries,
   });
 
   reportProgress(onProgress, {
@@ -566,7 +573,25 @@ export async function commitRepoChanges(
 export async function deleteRepoPaths(repoPaths, message = 'NovelExplor: delete files') {
   const paths = [...new Set((repoPaths || []).map((p) => String(p || '').trim()).filter(Boolean))];
   if (!paths.length) throw new Error('삭제할 파일이 없습니다.');
-  return commitRepoChanges([], paths, message);
+  return commitRepoChanges([], paths, message, {
+    maxRetries: REF_FAST_FORWARD_RETRIES_STRONG,
+  });
+}
+
+/** Contents API로 경로 존재 여부 확인 (404면 false) */
+export async function repoPathExists(repoPath) {
+  const { owner, repo, branch } = getGithubConfig();
+  const data = await githubRequest(
+    `/repos/${owner}/${repo}/contents/${encodeRepoPath(repoPath)}?ref=${encodeURIComponent(branch)}`,
+    { allow404: true, allowPublic: true }
+  );
+  return Boolean(data);
+}
+
+export function isGithubSyncConflictError(err) {
+  const msg = String(err?.message || err || '');
+  return /동기화 충돌|fast.?forward|먼저 갱신/i.test(msg)
+    || isGithubNonFastForwardError(err);
 }
 
 /** @deprecated commitRepoFiles 사용 */
