@@ -93,7 +93,7 @@ export function sanitizeThemeTag(theme) {
 
 /**
  * 프로젝트 동기화 스냅샷: 저장 폴더 기록(가능 시) + JSON 다운로드 + 로컬 백업
- * @param {{ notify?: boolean, asDefault?: boolean, defaultTitle?: string, skipGithub?: boolean, skipRateLimitCheck?: boolean, theme?: string }} [options]
+ * @param {{ notify?: boolean, asDefault?: boolean, defaultTitle?: string, skipGithub?: boolean, skipRateLimitCheck?: boolean, theme?: string, saveToFolder?: boolean }} [options]
  */
 export async function exportTimestampedBackup({
   notify = false,
@@ -102,6 +102,7 @@ export async function exportTimestampedBackup({
   skipGithub = false,
   skipRateLimitCheck = false,
   theme = '',
+  saveToFolder = true,
 } = {}) {
   const json = await buildBackupJson();
   if (!json) throw new Error('열린 프로젝트가 없습니다.');
@@ -110,7 +111,7 @@ export async function exportTimestampedBackup({
   await initSyncFolder();
 
   let savedToFolder = false;
-  if (hasSyncDir()) {
+  if (saveToFolder && hasSyncDir()) {
     try {
       savedToFolder = await writeBackupToSyncFolder(filename, json);
     } catch (err) {
@@ -155,7 +156,9 @@ export async function exportTimestampedBackup({
   if (notify) {
     const where = savedToFolder
       ? '연결한 저장 폴더에 기록했습니다.'
-      : 'JSON 파일을 다운로드했습니다. (폴더 연결 시 폴더에 저장됩니다)';
+      : (saveToFolder
+        ? 'JSON 파일을 다운로드했습니다. (폴더 연결 시 폴더에 저장됩니다)'
+        : '폴더 저장 OFF · JSON을 다운로드했습니다.');
     await showAlert(
       '프로젝트 동기화',
       `DB를 저장했습니다.<br><code>${esc(filename)}</code><br>${where}${githubNote}`

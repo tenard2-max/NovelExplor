@@ -19,7 +19,12 @@ import { initSceneCuts } from './ui/scene-cuts.js';
 import { initBackup, offerLocalRecovery, exportTimestampedBackup, openBackupJsonFile, sanitizeThemeTag } from './core/backup.js';
 import { confirmGithubSyncIfLowQuota } from './core/github-sync.js';
 import { hasGithubToken } from './core/github-config.js';
-import { initSyncFolder } from './core/sync-folder.js';
+import {
+  initSyncFolder,
+  pickSyncDirectory,
+  hasSyncDir,
+  getSyncFolderLabel,
+} from './core/sync-folder.js';
 import { showOpenProjectDialog } from './ui/open-project-dialog.js';
 import { showProjectManageDialog } from './ui/project-manage.js';
 import { loadWorkspaceManifest } from './core/workspace-xml.js';
@@ -358,9 +363,11 @@ async function saveCurrentProject() {
       notify: true,
       theme: themeChoice,
       skipRateLimitCheck: true,
+      saveToFolder: saveChoice.saveToFolder,
     });
     console.info('[NovelExplor] 동기화 파일:', filename, {
       updateTitle: saveChoice.updateTitle,
+      saveToFolder: saveChoice.saveToFolder,
       title: project.getCurrentProject()?.title || '',
     });
   } catch (err) {
@@ -371,27 +378,58 @@ async function saveCurrentProject() {
 const SAVE_THEME_KEY = 'ne-save-theme';
 /** 제목 갱신 체크 기억 — 값이 없을 때(최초)는 OFF */
 const SAVE_UPDATE_TITLE_KEY = 'ne-save-update-title';
+/** 동기화 폴더 저장 체크 기억 — 값이 없을 때(최초)는 ON */
+const SAVE_TO_FOLDER_KEY = 'ne-save-to-folder';
 
 /**
- * 저장 파일명 테일 테마 입력 (+ 제목 갱신 옵션, 기본 OFF)
- * @returns {Promise<{ theme: string, updateTitle: boolean }|null>} 취소 시 null
+ * 저장 파일명 테일 테마 입력 (+ 제목 갱신·폴더 동기화 옵션)
+ * @returns {Promise<{ theme: string, updateTitle: boolean, saveToFolder: boolean }|null>} 취소 시 null
  */
 async function promptSaveTheme() {
+  await initSyncFolder();
+
   let theme = '';
   let updateTitle = false;
+  let saveToFolder = true;
   let last = '';
   let rememberUpdateTitle = false;
+  let rememberSaveToFolder = true;
   try {
     last = localStorage.getItem(SAVE_THEME_KEY) || '';
     rememberUpdateTitle = localStorage.getItem(SAVE_UPDATE_TITLE_KEY) === '1';
+    rememberSaveToFolder = localStorage.getItem(SAVE_TO_FOLDER_KEY) !== '0';
   } catch {
     last = '';
     rememberUpdateTitle = false;
+    rememberSaveToFolder = true;
   }
 
-  const confirmed = await showDialog({
-    title: '프로젝트 저장',
-    bodyHtml: `
+  const dialog = document.getElementById('dialog');
+  const titleEl = document.getElementById('dialog-title');
+  const bodyEl = document.getElementById('dialog-body');
+  const form = dialog.querySelector('.dialog-form');
+  const cancelBtn = document.getElementById('dialog-cancel');
+  const confirmBtn = document.getElementById('dialog-confirm');
+  const prevConfirmType = confirmBtn.type;
+  const prevConfirmText = confirmBtn.textContent;
+
+  titleEl.textContent = '프로젝트 저장';
+  bodyEl.innerHTML = `
+    <div class="save-proj">
+      <div class="open-proj-folder-row">
+        <div>
+          <strong>동기화 폴더</strong>
+          <p id="save-proj-folder-name" class="open-proj-folder-name">${escAttr(syncFolderLabelText())}</p>
+        </div>
+        <button type="button" class="btn-sm" id="save-proj-pick-folder">📂 폴더 연결</button>
+      </div>
+      <p class="open-proj-hint">
+        연결하면 저장 시 이 폴더에 JSON을 남깁니다. 미연결·폴더 저장 OFF면 브라우저 다운로드로 확보합니다.
+      </p>
+      <label class="save-theme-title-option">
+        <input type="checkbox" id="save-proj-to-folder"${rememberSaveToFolder ? ' checked' : ''}>
+        <span>이 폴더에도 저장</span>
+      </label>
       <p class="open-proj-hint">
         파일명 형식: <code>YYYYMMDDHHMMSS</code> 또는 <code>YYYYMMDDHHMMSS_테마.json</code>
         · 굵은 제목(<code>project.title</code>)과 파일명 테마는 별개입니다.
@@ -406,28 +444,96 @@ async function promptSaveTheme() {
         <input type="checkbox" id="save-theme-update-title"${rememberUpdateTitle ? ' checked' : ''}>
         <span>이 이름으로 프로젝트 제목도 갱신</span>
       </label>
-      <p class="open-proj-hint">기본은 꺼져 있습니다(마지막 선택 기억). 테마를 비우면 제목은 바꾸지 않으며, 이미 저장된 옛 스냅샷 제목은 그대로입니다.</p>`,
-    onConfirm: () => {
+      <p class="open-proj-hint">제목 갱신은 기본 OFF(마지막 선택 기억). 테마를 비우면 제목은 바꾸지 않습니다.</p>
+    </div>`;
+
+  confirmBtn.type = 'button';
+  confirmBtn.textContent = '저장';
+  confirmBtn.disabled = false;
+
+  const folderNameEl = bodyEl.querySelector('#save-proj-folder-name');
+  const refreshFolderLabel = () => {
+    if (folderNameEl) folderNameEl.textContent = syncFolderLabelText();
+  };
+
+  return new Promise((resolve) => {
+    let settled = false;
+
+    const cleanup = () => {
+      cancelBtn.removeEventListener('click', onCancel);
+      confirmBtn.removeEventListener('click', onConfirm);
+      form.removeEventListener('submit', onFormSubmit);
+      dialog.removeEventListener('close', onDialogClose);
+      bodyEl.querySelector('#save-proj-pick-folder')?.removeEventListener('click', onPickFolder);
+      confirmBtn.type = prevConfirmType || 'submit';
+      confirmBtn.textContent = prevConfirmText || '확인';
+      confirmBtn.disabled = false;
+    };
+
+    const finish = (value) => {
+      if (settled) return;
+      settled = true;
+      cleanup();
+      if (dialog.open) dialog.close();
+      resolve(value);
+    };
+
+    const onCancel = () => finish(null);
+    const onDialogClose = () => {
+      if (!settled) finish(null);
+    };
+
+    const onFormSubmit = (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      onConfirm();
+    };
+
+    const onPickFolder = async () => {
+      try {
+        await pickSyncDirectory();
+        refreshFolderLabel();
+      } catch (err) {
+        alert(`폴더 연결 실패: ${err?.message || err}`);
+      }
+    };
+
+    const onConfirm = () => {
       theme = document.getElementById('save-theme-input')?.value?.trim() || '';
       updateTitle = Boolean(document.getElementById('save-theme-update-title')?.checked);
-    },
+      saveToFolder = Boolean(document.getElementById('save-proj-to-folder')?.checked);
+
+      const safe = sanitizeThemeTag(theme);
+      try {
+        if (safe) localStorage.setItem(SAVE_THEME_KEY, safe);
+        else localStorage.removeItem(SAVE_THEME_KEY);
+        localStorage.setItem(SAVE_UPDATE_TITLE_KEY, updateTitle ? '1' : '0');
+        localStorage.setItem(SAVE_TO_FOLDER_KEY, saveToFolder ? '1' : '0');
+      } catch {
+        /* ignore */
+      }
+
+      finish({
+        theme: safe,
+        updateTitle: Boolean(updateTitle && safe),
+        saveToFolder,
+      });
+    };
+
+    bodyEl.querySelector('#save-proj-pick-folder')?.addEventListener('click', onPickFolder);
+    cancelBtn.addEventListener('click', onCancel);
+    confirmBtn.addEventListener('click', onConfirm);
+    form.addEventListener('submit', onFormSubmit);
+    dialog.addEventListener('close', onDialogClose);
+    dialog.showModal();
+    document.getElementById('save-theme-input')?.focus();
   });
-  if (!confirmed) return null;
+}
 
-  const safe = sanitizeThemeTag(theme);
-  try {
-    if (safe) localStorage.setItem(SAVE_THEME_KEY, safe);
-    else localStorage.removeItem(SAVE_THEME_KEY);
-    localStorage.setItem(SAVE_UPDATE_TITLE_KEY, updateTitle ? '1' : '0');
-  } catch {
-    /* ignore */
-  }
-
-  // 테마가 없으면 제목 갱신 요청은 무시
-  return {
-    theme: safe,
-    updateTitle: Boolean(updateTitle && safe),
-  };
+function syncFolderLabelText() {
+  if (!hasSyncDir()) return '연결되지 않음 — 「폴더 연결」을 누르세요';
+  const name = getSyncFolderLabel();
+  return name ? `연결됨: ${name}` : '연결됨';
 }
 
 /** 파일명 테마 태그 → 표시용 프로젝트 제목 (_ → 공백) */
