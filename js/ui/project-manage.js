@@ -13,7 +13,6 @@ import { nowIso } from '../core/utils.js';
 import {
   listGithubProjectsDetailed,
   listGithubProjectSnapshots,
-  deleteGithubProjectSnapshots,
   fetchGithubDefaultMeta,
   isGithubRateLimitError,
   canDeleteGithubProjectSnapshot,
@@ -35,10 +34,6 @@ import {
   formatTitleHistoryTime,
 } from '../core/project-title-history.js';
 import { titleFilenameHint } from '../core/project-display.js';
-import {
-  offerOrphanCleanupOnProjectDelete,
-  finalizeOrphanCleanupAfterSnapshotDelete,
-} from './project-delete-orphan-flow.js';
 import { hasGithubToken, getGithubConfig, snapshotsDir } from '../core/github-config.js';
 import { getRepoFileJson, commitRepoFiles } from '../core/github-api.js';
 import {
@@ -111,7 +106,6 @@ export async function showProjectManageDialog() {
         <div id="proj-list" class="proj-manage-project-list" role="list" aria-label="프로젝트"></div>
         <div class="proj-manage-gh-actions">
           <button type="button" class="btn-sm" id="proj-select-all" disabled>전체 선택</button>
-          <button type="button" class="btn-sm char-btn-danger" id="proj-gh-delete" disabled>GitHub 선택 삭제</button>
           <button type="button" class="btn-sm" id="proj-orphan-analyze" title="고아 후보 분석 후 선택 삭제">고아 자산 분석</button>
         </div>
         <section id="proj-orphan-panel" class="proj-orphan-panel" hidden>
@@ -136,7 +130,7 @@ export async function showProjectManageDialog() {
         </section>
         <section class="proj-orphan-history">
           <h5 class="proj-orphan-history-title">정리 이력</h5>
-          <p class="proj-orphan-note">프로젝트 삭제 연동 분석·정리 기록(이 브라우저). 자동 삭제는 마스터만 가능합니다.</p>
+          <p class="proj-orphan-note">프로젝트 열기에서 삭제할 때·수동 정리한 기록(이 브라우저). 자동 삭제는 마스터만 가능합니다.</p>
           <div id="proj-orphan-history-list" class="proj-orphan-history-list"></div>
         </section>
         <section class="proj-orphan-history proj-title-history">
@@ -151,7 +145,6 @@ export async function showProjectManageDialog() {
   const statusEl = bodyEl.querySelector('#proj-status');
   const refreshBtn = bodyEl.querySelector('#proj-refresh');
   const selectAllBtn = bodyEl.querySelector('#proj-select-all');
-  const deleteBtn = bodyEl.querySelector('#proj-gh-delete');
   const orphanBtn = bodyEl.querySelector('#proj-orphan-analyze');
   const orphanPanel = bodyEl.querySelector('#proj-orphan-panel');
   const orphanStatusEl = bodyEl.querySelector('#proj-orphan-status');
@@ -181,9 +174,6 @@ export async function showProjectManageDialog() {
   function updateActionButtons() {
     const adminId = selectedAdminId();
     confirmBtn.disabled = !adminId || !admins.length;
-    const ghChecked = [...listEl.querySelectorAll('input[name="proj-item"]:checked')]
-      .filter((el) => el.dataset.ghId);
-    deleteBtn.disabled = ghChecked.length === 0;
     selectAllBtn.disabled = catalog.length === 0;
   }
 
@@ -435,119 +425,6 @@ export async function showProjectManageDialog() {
     const allOn = boxes.every((b) => b.checked);
     boxes.forEach((b) => { b.checked = !allOn; });
     updateActionButtons();
-  });
-
-  deleteBtn.addEventListener('click', async () => {
-    const ids = [...listEl.querySelectorAll('input[name="proj-item"]:checked')]
-      .map((el) => el.dataset.ghId)
-      .filter(Boolean);
-    if (!ids.length) return;
-    if (!hasGithubToken()) {
-      alert('GitHub 삭제에는 PAT가 필요합니다.');
-      return;
-    }
-    const names = ids.map((id) => {
-      const c = catalog.find((x) => x.ghSnapshotId === id);
-      return c ? `${c.title} (${c.fileHint || id})` : id;
-    });
-    if (!confirm(`GitHub 스냅샷 ${ids.length}개를 삭제할까요?\n\n${names.join('\n')}`)) return;
-    deleteBtn.disabled = true;
-    statusEl.textContent = 'GitHub 삭제 중…';
-    try {
-      let orphanOffer = {
-        analyzed: false,
-        autoDelete: false,
-        paths: [],
-        analysis: null,
-        restricted: false,
-      };
-      try {
-        orphanOffer = await offerOrphanCleanupOnProjectDelete(ids, {
-          labels: names,
-          onProgress: ({ label }) => {
-            if (label) statusEl.textContent = label;
-          },
-        });
-      } catch (orphanErr) {
-        const msg = String(orphanErr?.message || orphanErr);
-        if (!confirm(`고아 자산 분석에 실패했습니다.\n${msg}\n\n스냅샷 삭제만 계속할까요?`)) {
-          updateActionButtons();
-          return;
-        }
-      }
-
-      statusEl.textContent = 'GitHub 스냅샷 삭제 중…';
-      const result = await deleteGithubProjectSnapshots(ids, {
-        onProgress: ({ label }) => {
-          if (label) statusEl.textContent = label;
-        },
-      });
-
-      let orphanCleanupNote = '';
-      if (orphanOffer.autoDelete && orphanOffer.paths.length) {
-        try {
-          statusEl.textContent = '고아 자산 정리 중…';
-          const cleaned = await finalizeOrphanCleanupAfterSnapshotDelete({
-            snapshotIds: ids,
-            labels: names,
-            offer: orphanOffer,
-            onProgress: ({ label }) => {
-              if (label) statusEl.textContent = label;
-            },
-          });
-          if (cleaned) {
-            const sha = cleaned.commitSha ? ` · ${String(cleaned.commitSha).slice(0, 7)}` : '';
-            orphanCleanupNote = cleaned.alreadyAbsent
-              ? `고아 ${cleaned.deletedCount}개 이미 없음`
-              : `고아 ${cleaned.deletedCount}개 정리${sha}`;
-          }
-        } catch (cleanErr) {
-          orphanCleanupNote = `고아 정리 실패: ${cleanErr?.message || cleanErr}`;
-        }
-      } else if (orphanOffer.analyzed) {
-        try {
-          await finalizeOrphanCleanupAfterSnapshotDelete({
-            snapshotIds: ids,
-            labels: names,
-            offer: orphanOffer,
-          });
-        } catch {
-          /* 이력만 */
-        }
-        if (orphanOffer.analysis?.projectOnlyCount && !orphanOffer.autoDelete) {
-          orphanCleanupNote = `고아 후보 ${orphanOffer.analysis.projectOnlyCount}개(삭제 안 함)`;
-        }
-      }
-
-      await refreshCatalog();
-      await renderOrphanCleanupHistory();
-      const details = [
-        result.alreadyAbsent
-          ? `GitHub ${result.deletedCount || result.deleted.length}개 이미 삭제됨`
-          : `GitHub ${result.deletedCount || result.deleted.length}개 삭제 완료`,
-      ];
-      if (result.latestUpdated) {
-        details.push(result.latestTarget ? `latest → ${result.latestTarget}` : 'latest 포인터 제거');
-      }
-      if (result.defaultUpdated) {
-        details.push(result.defaultTarget ? `기본 → ${result.defaultTarget}` : '기본 포인터 제거');
-      }
-      if (orphanCleanupNote) details.push(orphanCleanupNote);
-      statusEl.textContent = `${details.join(' · ')} · ${statusEl.textContent}`;
-    } catch (err) {
-      const message = String(err?.message || err);
-      const guidance = /동기화 충돌|fast.?forward|먼저 갱신/i.test(message)
-        ? ' 같은 main에 앱 푸시·다른 저장/삭제가 겹쳤습니다. 목록 새로고침 후 다시 시도하세요.'
-        : /네트워크 연결 실패|Failed to fetch|타임아웃|끊겼/i.test(message)
-          ? ' 연결이 끊겼습니다. 목록을 새로고침해 삭제 여부를 확인하세요.'
-          : /권한|마스터|일반 사용자/i.test(message)
-            ? ' GitHub 최신 메타 기준으로 권한이 거부되었습니다.'
-            : '';
-      alert(`삭제 실패: ${message}${guidance}`);
-      await refreshCatalog();
-      statusEl.textContent = `삭제 실패: ${message}${guidance} · ${statusEl.textContent}`;
-      updateActionButtons();
-    }
   });
 
   async function renderOrphanCleanupHistory() {
