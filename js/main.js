@@ -338,12 +338,18 @@ async function saveCurrentProject() {
     return;
   }
   try {
-    const themeChoice = await promptSaveTheme();
-    if (themeChoice === null) return; // 취소
+    const saveChoice = await promptSaveTheme();
+    if (saveChoice === null) return; // 취소
+    const themeChoice = saveChoice.theme;
 
     if (hasGithubToken()) {
       const proceed = await confirmGithubSyncIfLowQuota();
       if (!proceed) return;
+    }
+
+    // 체크 ON + 테마 있음 → 현재 프로젝트 제목을 테마 기준으로 갱신한 뒤 저장/내보내기
+    if (saveChoice.updateTitle && themeChoice) {
+      project.setCurrentProjectTitle(titleFromSaveTheme(themeChoice));
     }
 
     await flushPendingSave();
@@ -353,25 +359,34 @@ async function saveCurrentProject() {
       theme: themeChoice,
       skipRateLimitCheck: true,
     });
-    console.info('[NovelExplor] 동기화 파일:', filename);
+    console.info('[NovelExplor] 동기화 파일:', filename, {
+      updateTitle: saveChoice.updateTitle,
+      title: project.getCurrentProject()?.title || '',
+    });
   } catch (err) {
     alert(`프로젝트 저장 실패: ${err.message}`);
   }
 }
 
 const SAVE_THEME_KEY = 'ne-save-theme';
+/** 제목 갱신 체크 기억 — 값이 없을 때(최초)는 OFF */
+const SAVE_UPDATE_TITLE_KEY = 'ne-save-update-title';
 
 /**
- * 저장 파일명 테일 테마 입력
- * @returns {Promise<string|null>} 테마 문자열(빈 문자열 허용) / 취소 시 null
+ * 저장 파일명 테일 테마 입력 (+ 제목 갱신 옵션, 기본 OFF)
+ * @returns {Promise<{ theme: string, updateTitle: boolean }|null>} 취소 시 null
  */
 async function promptSaveTheme() {
   let theme = '';
+  let updateTitle = false;
   let last = '';
+  let rememberUpdateTitle = false;
   try {
     last = localStorage.getItem(SAVE_THEME_KEY) || '';
+    rememberUpdateTitle = localStorage.getItem(SAVE_UPDATE_TITLE_KEY) === '1';
   } catch {
     last = '';
+    rememberUpdateTitle = false;
   }
 
   const confirmed = await showDialog({
@@ -379,15 +394,22 @@ async function promptSaveTheme() {
     bodyHtml: `
       <p class="open-proj-hint">
         파일명 형식: <code>YYYYMMDDHHMMSS</code> 또는 <code>YYYYMMDDHHMMSS_테마.json</code>
+        · 굵은 제목(<code>project.title</code>)과 파일명 테마는 별개입니다.
       </p>
       <label class="char-form-field">
         <span class="char-form-label">테마 (선택 · 파일명 끝에 붙음)</span>
         <input type="text" id="save-theme-input" class="char-form-input"
           maxlength="40" placeholder="예: 판타지, 1부, 개정판" value="${escAttr(last)}" autocomplete="off">
       </label>
-      <p class="open-proj-hint">비우면 시각만 사용합니다. 공백·특수문자는 자동으로 정리됩니다.</p>`,
+      <p class="open-proj-hint">비우면 시각만 사용합니다. 공백·특수문자는 자동으로 정리됩니다.</p>
+      <label class="save-theme-title-option">
+        <input type="checkbox" id="save-theme-update-title"${rememberUpdateTitle ? ' checked' : ''}>
+        <span>이 이름으로 프로젝트 제목도 갱신</span>
+      </label>
+      <p class="open-proj-hint">기본은 꺼져 있습니다(마지막 선택 기억). 테마를 비우면 제목은 바꾸지 않으며, 이미 저장된 옛 스냅샷 제목은 그대로입니다.</p>`,
     onConfirm: () => {
       theme = document.getElementById('save-theme-input')?.value?.trim() || '';
+      updateTitle = Boolean(document.getElementById('save-theme-update-title')?.checked);
     },
   });
   if (!confirmed) return null;
@@ -396,11 +418,24 @@ async function promptSaveTheme() {
   try {
     if (safe) localStorage.setItem(SAVE_THEME_KEY, safe);
     else localStorage.removeItem(SAVE_THEME_KEY);
+    localStorage.setItem(SAVE_UPDATE_TITLE_KEY, updateTitle ? '1' : '0');
   } catch {
     /* ignore */
   }
 
-  return safe;
+  // 테마가 없으면 제목 갱신 요청은 무시
+  return {
+    theme: safe,
+    updateTitle: Boolean(updateTitle && safe),
+  };
+}
+
+/** 파일명 테마 태그 → 표시용 프로젝트 제목 (_ → 공백) */
+function titleFromSaveTheme(themeTag) {
+  return String(themeTag || '')
+    .replace(/_/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
 }
 
 function escAttr(str) {

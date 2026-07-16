@@ -4,13 +4,22 @@
  */
 
 import { listUsers, canBeProjectWriter, normalizeWriters, normalizeWriterNames, isMaster, getCurrentUser, ROLE_LABELS } from '../core/auth.js';
-import { listProjects, applyAdminWriteAccess, loadProject, getCurrentProject } from '../core/project.js';
+import {
+  listProjects,
+  applyAdminWriteAccess,
+  loadProject,
+  getCurrentProject,
+  setCurrentProjectTitle,
+} from '../core/project.js';
+import * as storage from '../core/storage.js';
+import { nowIso } from '../core/utils.js';
 import {
   listGithubProjectsDetailed,
   listGithubProjectSnapshots,
   deleteGithubProjectSnapshots,
   fetchGithubDefaultMeta,
   isGithubRateLimitError,
+  canDeleteGithubProjectSnapshot,
 } from '../core/default-project.js';
 import {
   analyzeOrphanGithubAssets,
@@ -23,6 +32,12 @@ import {
   formatCleanupHistoryTime,
   appendOrphanCleanupHistory,
 } from '../core/orphan-cleanup-history.js';
+import {
+  listProjectTitleHistory,
+  appendProjectTitleHistory,
+  formatTitleHistoryTime,
+} from '../core/project-title-history.js';
+import { titleFilenameHint } from '../core/project-display.js';
 import {
   offerOrphanCleanupOnProjectDelete,
   finalizeOrphanCleanupAfterSnapshotDelete,
@@ -95,6 +110,7 @@ export async function showProjectManageDialog() {
           체크 = 위 관리자에게 쓰기 권한.
           <strong>로컬</strong> DB · <strong>폴더</strong> JSON · <strong>GitHub</strong> 스냅샷(PAT)에 바로 반영합니다.
           다운로드만 한 JSON은 목록에 없습니다.
+          굵은 글씨 = 프로젝트 제목 · 코드 = 파일명(테마). 제목 수정은 파일명을 바꾸지 않습니다.
         </p>
         <p id="proj-status" class="proj-manage-gh-status">불러오는 중…</p>
         <div id="proj-list" class="proj-manage-project-list" role="list" aria-label="프로젝트"></div>
@@ -128,6 +144,11 @@ export async function showProjectManageDialog() {
           <p class="proj-orphan-note">프로젝트 삭제 연동 분석·정리 기록(이 브라우저). 자동 삭제는 마스터만 가능합니다.</p>
           <div id="proj-orphan-history-list" class="proj-orphan-history-list"></div>
         </section>
+        <section class="proj-orphan-history proj-title-history">
+          <h5 class="proj-orphan-history-title">제목 변경 이력</h5>
+          <p class="proj-orphan-note">프로젝트 관리에서 수정한 제목 기록(이 브라우저). GitHub는 수정 직전 권한을 다시 확인합니다.</p>
+          <div id="proj-title-history-list" class="proj-orphan-history-list"></div>
+        </section>
       </section>
     </div>`;
 
@@ -147,6 +168,7 @@ export async function showProjectManageDialog() {
   const orphanClearBtn = bodyEl.querySelector('#proj-orphan-clear');
   const orphanDeleteBtn = bodyEl.querySelector('#proj-orphan-delete');
   const orphanHistoryListEl = bodyEl.querySelector('#proj-orphan-history-list');
+  const titleHistoryListEl = bodyEl.querySelector('#proj-title-history-list');
 
   /** @type {ProjectCatalogItem[]} */
   let catalog = [];
@@ -204,24 +226,187 @@ export async function showProjectManageDialog() {
         item.latestLabel || '',
         badges.join(' · '),
       ].filter(Boolean).join(' · ');
+      const mismatch = item.fileHint
+        ? titleFilenameHint(item.title || '', item.fileHint)
+        : '';
 
       return `
-        <label class="proj-manage-card" role="listitem">
-          <input type="checkbox" name="proj-item" value="${esc(item.key)}"
-            data-local-id="${esc(item.localId || '')}"
-            data-gh-id="${esc(item.ghSnapshotId || '')}">
+        <div class="proj-manage-card" role="listitem">
+          <label class="proj-manage-card-check">
+            <input type="checkbox" name="proj-item" value="${esc(item.key)}"
+              data-local-id="${esc(item.localId || '')}"
+              data-gh-id="${esc(item.ghSnapshotId || '')}">
+          </label>
           <span class="proj-manage-card-body">
             <strong class="proj-manage-card-title">${esc(item.title)}</strong>
             ${item.fileHint ? `<code class="proj-manage-card-file">${esc(item.fileHint)}</code>` : ''}
+            ${mismatch ? `<small class="proj-manage-title-mismatch">${esc(mismatch)}</small>` : ''}
             <small class="proj-manage-card-meta">${esc(meta)}</small>
           </span>
-        </label>`;
+          <button type="button" class="btn-sm proj-manage-rename" data-key="${esc(item.key)}"
+            title="프로젝트 제목(project.title) 수정 · 파일명은 그대로">제목 수정</button>
+        </div>`;
     }).join('');
 
     listEl.querySelectorAll('input[name="proj-item"]').forEach((el) => {
       el.addEventListener('change', updateActionButtons);
     });
+    listEl.querySelectorAll('.proj-manage-rename').forEach((btn) => {
+      btn.addEventListener('click', () => {
+        const item = catalog.find((c) => c.key === btn.dataset.key);
+        if (item) renameCatalogItemTitle(item);
+      });
+    });
     syncChecksToAdmin();
+  }
+
+  /**
+   * 목록 항목의 project.title 수정 (로컬 / 폴더 / GitHub)
+   * @param {ProjectCatalogItem} item
+   */
+  async function renameCatalogItemTitle(item) {
+    if (!item) return;
+    if (!isMaster()) {
+      alert('프로젝트 제목 수정은 마스터만 사용할 수 있습니다.');
+      return;
+    }
+
+    const raw = prompt(
+      '프로젝트 제목 수정\n\n· 1~80자\n· 파일명(테마)은 바뀌지 않습니다.',
+      item.title || ''
+    );
+    if (raw === null) return;
+
+    const validated = validateProjectTitleInput(raw);
+    if (!validated.ok) {
+      alert(validated.error);
+      return;
+    }
+    const title = validated.title;
+    if (title === String(item.title || '').trim()) {
+      statusEl.textContent = '제목이 동일하여 변경하지 않았습니다.';
+      return;
+    }
+
+    if (item.ghSnapshotId && !hasGithubToken()) {
+      alert('GitHub 스냅샷 제목을 수정하려면 PAT가 필요합니다.');
+      return;
+    }
+
+    const renameBtn = [...listEl.querySelectorAll('.proj-manage-rename')]
+      .find((btn) => btn.dataset.key === item.key);
+    if (renameBtn) renameBtn.disabled = true;
+    statusEl.textContent = `제목 수정 중… ${item.fileHint || item.title}`;
+    /** @type {string[]} */
+    const done = [];
+    /** @type {string[]} */
+    const errors = [];
+    let commitSha = '';
+    const previousTitle = item.title || '';
+
+    try {
+      if (item.localId) {
+        try {
+          await renameLocalProjectTitle(item.localId, title);
+          done.push('로컬');
+        } catch (err) {
+          errors.push(`로컬: ${formatTitleRenameError(err)}`);
+        }
+      }
+
+      if (item.ghSnapshotId) {
+        try {
+          statusEl.textContent = 'GitHub 권한·메타 확인 중…';
+          const ghResult = await renameGithubSnapshotTitle(item, title);
+          done.push('GitHub');
+          commitSha = ghResult?.commitSha || '';
+        } catch (err) {
+          errors.push(`GitHub: ${formatTitleRenameError(err)}`);
+        }
+      }
+
+      if (item.folderName) {
+        try {
+          const folderResult = await renameFolderBackupTitle(item.folderName, title);
+          if (folderResult.error) errors.push(`폴더: ${folderResult.error}`);
+          else done.push('폴더');
+        } catch (err) {
+          errors.push(`폴더: ${formatTitleRenameError(err)}`);
+        }
+      }
+
+      if (!done.length && !errors.length) {
+        errors.push('수정할 저장소를 찾지 못했습니다.');
+      }
+
+      if (done.length) {
+        const user = getCurrentUser();
+        try {
+          await appendProjectTitleHistory({
+            userId: user?.id || '',
+            username: user?.username || '',
+            role: user?.role || '',
+            previousTitle,
+            nextTitle: title,
+            targets: done,
+            localId: item.localId || '',
+            ghSnapshotId: item.ghSnapshotId || '',
+            folderName: item.folderName || '',
+            fileHint: item.fileHint || '',
+            commitSha,
+            note: errors.length ? `부분 성공 · ${errors.slice(0, 2).join(' / ')}` : '',
+          });
+        } catch {
+          /* 이력 실패는 무시 */
+        }
+      }
+
+      await refreshCatalog();
+      await renderTitleHistory();
+      const shaHint = commitSha ? ` · ${String(commitSha).slice(0, 7)}` : '';
+      const errLine = errors.length ? ` · 오류: ${errors.slice(0, 2).join(' / ')}` : '';
+      statusEl.textContent = done.length
+        ? `제목 수정 완료(${done.join(', ')}) → ${title}${shaHint}${errLine}`
+        : `제목 수정 실패${errLine}`;
+      if (errors.length && !done.length) {
+        alert(`제목 수정 실패\n\n${errors.join('\n')}`);
+      } else if (errors.length) {
+        alert(`제목 일부만 반영되었습니다.\n\n성공: ${done.join(', ')}\n\n${errors.join('\n')}`);
+      }
+    } finally {
+      if (renameBtn) renameBtn.disabled = false;
+      updateActionButtons();
+    }
+  }
+
+  async function renderTitleHistory() {
+    if (!titleHistoryListEl) return;
+    try {
+      const entries = await listProjectTitleHistory();
+      if (!entries.length) {
+        titleHistoryListEl.innerHTML = '<p class="proj-manage-empty">제목 변경 이력이 없습니다.</p>';
+        return;
+      }
+      titleHistoryListEl.innerHTML = entries.slice(0, 12).map((entry) => {
+        const who = entry.username || entry.userId || 'unknown';
+        const targets = (entry.targets || []).join(', ') || '대상 없음';
+        const file = entry.fileHint || entry.ghSnapshotId || entry.folderName || entry.localId || '';
+        const sha = entry.commitSha ? ` · ${String(entry.commitSha).slice(0, 7)}` : '';
+        const note = entry.note ? ` · ${entry.note}` : '';
+        return `
+          <div class="proj-orphan-history-row">
+            <span class="proj-orphan-history-time">${esc(formatTitleHistoryTime(entry.at))}</span>
+            <span class="proj-orphan-history-body">
+              <strong>${esc(entry.previousTitle || '(없음)')}</strong>
+              → <strong>${esc(entry.nextTitle || '')}</strong>
+              · ${esc(targets)}${esc(sha)}
+              · ${esc(who)}${file ? ` · ${esc(file)}` : ''}${esc(note)}
+            </span>
+          </div>`;
+      }).join('');
+    } catch (err) {
+      titleHistoryListEl.innerHTML = `<p class="proj-manage-empty">이력 로드 실패: ${esc(err?.message || err)}</p>`;
+    }
   }
 
   async function refreshCatalog() {
@@ -677,6 +862,7 @@ export async function showProjectManageDialog() {
   updateActionButtons();
   refreshCatalog();
   renderOrphanCleanupHistory();
+  renderTitleHistory();
 
   return new Promise((resolve) => {
     let settled = false;
@@ -1148,6 +1334,160 @@ async function patchGithubWriters(snaps, admin, grant) {
   }
 
   return { patched, errors };
+}
+
+const PROJECT_TITLE_MAX = 80;
+
+/**
+ * @param {string} raw
+ * @returns {{ ok: true, title: string } | { ok: false, error: string }}
+ */
+function validateProjectTitleInput(raw) {
+  const title = String(raw || '')
+    .trim()
+    .replace(/\s+/g, ' ');
+  if (!title) return { ok: false, error: '제목이 비어 있습니다.' };
+  if (title.length > PROJECT_TITLE_MAX) {
+    return { ok: false, error: `제목은 ${PROJECT_TITLE_MAX}자 이하여야 합니다. (현재 ${title.length}자)` };
+  }
+  if (/[\u0000-\u001F\u007F]/.test(title)) {
+    return { ok: false, error: '제목에 사용할 수 없는 제어 문자가 있습니다.' };
+  }
+  return { ok: true, title };
+}
+
+function formatTitleRenameError(err) {
+  const message = String(err?.message || err || '알 수 없는 오류');
+  if (/동기화 충돌|fast.?forward|먼저 갱신/i.test(message)) {
+    return `${message} — 목록을 새로고침한 뒤 다시 시도하세요.`;
+  }
+  if (/네트워크|Failed to fetch|타임아웃|끊겼/i.test(message)) {
+    return `${message} — 연결을 확인한 뒤 목록을 새로고침하세요.`;
+  }
+  if (/권한|마스터|PAT|토큰/i.test(message)) {
+    return `${message} — GitHub 연결과 권한을 확인하세요.`;
+  }
+  if (/한도 초과|rate limit/i.test(message)) {
+    return `${message} — PAT API 잔량을 확인하세요.`;
+  }
+  return message;
+}
+
+/**
+ * @param {string} localId
+ * @param {string} title
+ */
+async function renameLocalProjectTitle(localId, title) {
+  const validated = validateProjectTitleInput(title);
+  if (!validated.ok) throw new Error(validated.error);
+  const id = String(localId || '').trim();
+  if (!id) throw new Error('로컬 프로젝트 ID가 없습니다.');
+  const record = await storage.get('projects', id);
+  if (!record) throw new Error('로컬 프로젝트를 찾을 수 없습니다. 목록을 새로고침하세요.');
+  record.title = validated.title;
+  record.updatedAt = nowIso();
+  await storage.put('projects', record);
+
+  const cur = getCurrentProject();
+  const curId = cur?.id || cur?.projectId;
+  if (curId && curId === id) {
+    setCurrentProjectTitle(validated.title);
+    await flushSave(true);
+  }
+}
+
+/**
+ * @param {string} filename
+ * @param {string} title
+ * @returns {Promise<{ error: string }>}
+ */
+async function renameFolderBackupTitle(filename, title) {
+  const validated = validateProjectTitleInput(title);
+  if (!validated.ok) return { error: validated.error };
+  const name = String(filename || '').replace(/^.*[\\/]/, '');
+  if (!name) return { error: '파일명이 없습니다.' };
+  if (!hasSyncDir()) return { error: '동기화 폴더가 연결되지 않았습니다.' };
+
+  await initSyncFolder();
+  const files = await listTimestampBackups();
+  const entry = files.find((f) => f.name === name);
+  if (!entry) return { error: `폴더에 없음: ${name}. 목록을 새로고침하세요.` };
+
+  const file = await readBackupFile(entry.handle);
+  const data = JSON.parse(await file.text());
+  if (!data.project || typeof data.project !== 'object') {
+    return { error: `project 없음: ${name}` };
+  }
+  if (data.project.title === validated.title
+    && (typeof data.title !== 'string' || data.title === validated.title)) {
+    return { error: '' };
+  }
+  data.project.title = validated.title;
+  if (typeof data.title === 'string') data.title = validated.title;
+
+  const ok = await writeBackupToSyncFolder(name, JSON.stringify(data, null, 2));
+  if (!ok) return { error: `쓰기 실패: ${name}` };
+  return { error: '' };
+}
+
+/**
+ * GitHub 스냅샷 제목 수정 — 최신 메타·권한 재확인 후 1커밋
+ * @param {ProjectCatalogItem} item
+ * @param {string} title
+ * @returns {Promise<{ commitSha: string, unchanged?: boolean }>}
+ */
+async function renameGithubSnapshotTitle(item, title) {
+  const validated = validateProjectTitleInput(title);
+  if (!validated.ok) throw new Error(validated.error);
+  if (!isMaster()) throw new Error('프로젝트 제목 수정은 마스터만 사용할 수 있습니다.');
+  if (!hasGithubToken()) throw new Error('GitHub PAT가 필요합니다.');
+
+  const snapshotId = String(item.ghSnapshotId || '').replace(/\.json$/i, '');
+  const name = String(item.fileHint || `${snapshotId}.json`).replace(/^.*[\\/]/, '');
+  if (!snapshotId || !name) throw new Error('스냅샷 파일명이 없습니다.');
+
+  const defaultMeta = await fetchGithubDefaultMeta({ fresh: true });
+  const defaultSnapshotId = String(
+    defaultMeta?.snapshotId || defaultMeta?.filename || ''
+  ).replace(/\.json$/i, '');
+
+  const repoPath = `${snapshotsDir(getGithubConfig())}/${name}`;
+  let data;
+  try {
+    data = await getRepoFileJson(repoPath);
+  } catch (err) {
+    throw new Error(`최신 스냅샷을 읽지 못했습니다: ${err?.message || err}`);
+  }
+  if (!data?.project || typeof data.project !== 'object') {
+    throw new Error(`project 없음: ${name}`);
+  }
+
+  const freshSnap = {
+    snapshotId,
+    name,
+    title: data.project.title || item.title || name,
+    writers: Array.isArray(data.project.writers) ? data.project.writers : [],
+    writerUsernames: Array.isArray(data.project.writerUsernames) ? data.project.writerUsernames : [],
+    ownerId: data.project.ownerId || '',
+  };
+  // 원격 최신 writers/기본 포인터 기준으로 쓰기 가능 여부 재확인 (마스터는 통과)
+  if (!canDeleteGithubProjectSnapshot(freshSnap, getCurrentUser(), defaultSnapshotId)) {
+    throw new Error('GitHub 최신 메타 기준 쓰기 권한이 없습니다. 목록을 새로고침하세요.');
+  }
+
+  if (data.project.title === validated.title
+    && (typeof data.title !== 'string' || data.title === validated.title)) {
+    return { commitSha: '', unchanged: true };
+  }
+
+  data.project.title = validated.title;
+  if (typeof data.title === 'string') data.title = validated.title;
+
+  const commit = await commitRepoFiles(
+    [{ repoPath, content: JSON.stringify(data, null, 2) }],
+    `NovelExplor: rename project title (${name})`
+  );
+  return { commitSha: commit?.commitSha || '', unchanged: false };
 }
 
 function stampFromIso(iso) {

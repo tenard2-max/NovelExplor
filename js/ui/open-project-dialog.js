@@ -18,6 +18,7 @@ import {
 } from '../core/default-project.js';
 import { hasGithubToken } from '../core/github-config.js';
 import { isMaster } from '../core/auth.js';
+import { titleFilenameHint } from '../core/project-display.js';
 import {
   offerOrphanCleanupOnProjectDelete,
   finalizeOrphanCleanupAfterSnapshotDelete,
@@ -289,12 +290,14 @@ async function showGithubOpenProjectDialog() {
 
   function selectGithub(item) {
     selection = { type: 'github', snapshotId: item.snapshotId, name: item.name, title: item.title };
+    const mismatch = titleFilenameHint(item.title || '', item.name || '');
     previewEl.hidden = false;
     previewBodyEl.innerHTML = `
       <p class="open-proj-preview-title"><strong>${esc(item.title || item.name)}</strong>
         ${item.author ? `<span class="open-proj-preview-author">— ${esc(item.author)}</span>` : ''}</p>
       <p class="open-proj-preview-file"><code>${esc(item.name)}</code></p>
-      <p class="open-proj-preview-hint">GitHub 스냅샷을 불러옵니다. writers에 없으면 열람만 가능합니다.</p>`;
+      ${mismatch ? `<p class="open-proj-title-mismatch">${esc(mismatch)}</p>` : ''}
+      <p class="open-proj-preview-hint">굵은 글씨 = 프로젝트 제목 · 코드 = 파일명(테마). writers에 없으면 열람만 가능합니다.</p>`;
     confirmBtn.disabled = false;
     defaultEl.querySelectorAll('.open-proj-file').forEach((el) => el.classList.remove('is-selected'));
     githubListEl.querySelectorAll('.open-proj-file').forEach((el) => {
@@ -369,12 +372,14 @@ async function showGithubOpenProjectDialog() {
         const deleteTitle = blockReason || (isDefault
           ? '기본 프로젝트 삭제 (마스터 전용)'
           : '이 GitHub 스냅샷 삭제');
+        const mismatch = titleFilenameHint(s.title || '', s.name || '');
         return `
           <div class="open-proj-file-row">
             <button type="button" class="open-proj-file" data-id="${esc(s.snapshotId)}" role="option">
               <span class="open-proj-file-stamp">${esc(s.label)}${isDefault ? ' · 기본' : ''}</span>
-              <span class="open-proj-file-name">${esc(s.title || s.name)}</span>
+              <span class="open-proj-file-name open-proj-file-title">${esc(s.title || s.name)}</span>
               <code class="open-proj-file-name">${esc(s.name)}${s.author ? ` · ${esc(s.author)}` : ''}</code>
+              ${mismatch ? `<span class="open-proj-title-mismatch">${esc(mismatch)}</span>` : ''}
             </button>
             ${canDelete ? `
               <button type="button"

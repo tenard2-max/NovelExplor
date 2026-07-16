@@ -40,6 +40,7 @@ export function initNav() {
   });
 
   on('project:loaded', updateBadges);
+  on('project:saved', updateBadges);
   on('project:loaded', () => {
     // DB 로드 후 현재 뷰가 IDB 우선 섹션이면 다시 그림
     if (currentView === 'character' || currentView === 'timeline' || currentView === 'story-nav') {

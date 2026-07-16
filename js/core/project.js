@@ -73,6 +73,18 @@ export function getCurrentProject() {
 
 }
 
+/**
+ * 현재 열린 프로젝트 제목만 갱신한다 (저장·내보내기 전에 호출).
+ * @param {string} title
+ */
+export function setCurrentProjectTitle(title) {
+  if (!currentProject) throw new Error('열린 프로젝트가 없습니다.');
+  const next = String(title || '').trim().replace(/\s+/g, ' ').slice(0, 80);
+  if (!next) throw new Error('프로젝트 제목이 비어 있습니다.');
+  currentProject.title = next;
+  return currentProject;
+}
+
 /** 현재 열린 프로젝트 콘텐츠 관리 가능 (마스터=전체, writers 포함 시) */
 export function canManageCurrentProject() {
   return canManageProjectContent(currentProject);

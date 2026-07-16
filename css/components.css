@@ -372,6 +372,39 @@
   line-height: 1.4;
 }
 
+.open-proj-file-title {
+  font-weight: 700;
+  color: var(--text);
+}
+
+.open-proj-title-mismatch,
+.proj-manage-title-mismatch {
+  display: block;
+  margin-top: 2px;
+  font-size: 10px;
+  line-height: 1.35;
+  color: #f59e0b;
+}
+
+.save-theme-title-option {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  margin: 10px 0 0;
+  font-size: 13px;
+  color: var(--text);
+  cursor: pointer;
+  line-height: 1.35;
+}
+
+.save-theme-title-option input[type="checkbox"] {
+  width: 16px;
+  height: 16px;
+  margin-top: 1px;
+  flex: 0 0 auto;
+  cursor: pointer;
+}
+
 .open-proj-file-list,
 .open-proj-db-list {
   display: flex;
@@ -624,11 +657,19 @@
   border-radius: var(--radius);
   background: transparent;
   color: inherit;
-  text-align: left;
-  cursor: pointer;
+}
+
+.proj-manage-card-check {
+  display: flex;
+  align-items: flex-start;
   margin: 0;
-  width: 100%;
-  box-sizing: border-box;
+  cursor: pointer;
+}
+
+.proj-manage-rename {
+  flex-shrink: 0;
+  margin-top: 1px;
+  white-space: nowrap;
 }
 
 .proj-manage-card:hover {
@@ -663,6 +704,10 @@
   font-size: 11px;
   color: var(--text-muted);
   word-break: break-all;
+}
+
+.proj-manage-title-mismatch {
+  margin-top: 0;
 }
 
 .proj-manage-card-meta {
