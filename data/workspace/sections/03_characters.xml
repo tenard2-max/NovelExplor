@@ -1,68 +1,43 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <Section id="character" viewId="character" title="인물" version="1">
   <Characters>
-    <Character id="CHR0001" name="늑대" race="인간" gender="M" age="0" occupation="대학생" firstEpisode="1" lastEpisode="3" status="Alive">
-      <Description>EP 자동 감지 (56회 언급)</Description>
-      <Avatar src="../overlays/characters/CHR0001.png" mime="image/png"/>
-      <Gallery/>
-    </Character>
-    <Character id="CHR0002" name="뽀로로" race="AI" gender="F" age="0" occupation="전략 AI" firstEpisode="1" lastEpisode="3" status="Alive">
-      <Description>EP 자동 감지 (40회 언급)</Description>
+    <Character id="CHR0001" name="주인공(지안)" race="인간" gender="M" age="20" occupation="대학생" firstEpisode="1" lastEpisode="7" status="Alive">
+      <Description>100세 이상 회귀, 기억 일부 소실</Description>
       <Avatar src="" mime="image/png"/>
       <Gallery/>
     </Character>
-    <Character id="CHR0003" name="패티" race="인간" gender="M" age="0" occupation="대학생" firstEpisode="1" lastEpisode="3" status="Alive">
-      <Description>EP 자동 감지 (22회 언급)</Description>
-      <Avatar src="../overlays/characters/CHR0003.png" mime="image/png"/>
-      <Gallery/>
-    </Character>
-    <Character id="CHR0004" name="루피" race="인간" gender="F" age="0" occupation="대학생" firstEpisode="1" lastEpisode="3" status="Alive">
-      <Description>EP 자동 감지 (21회 언급)</Description>
+    <Character id="CHR0002" name="AI 폰" race="AI" gender="F" age="0" occupation="전략 AI" firstEpisode="1" lastEpisode="7" status="Alive">
+      <Description>2080년 자기학습 AI, 노인 케어 성격</Description>
       <Avatar src="" mime="image/png"/>
       <Gallery/>
     </Character>
-    <Character id="CHR0005" name="유진이" race="인간" gender="F" age="0" occupation="대학생" firstEpisode="1" lastEpisode="3" status="Alive">
-      <Description>EP 자동 감지 (14회 언급)</Description>
-      <Avatar src="../overlays/characters/CHR0005.png" mime="image/png"/>
-      <Gallery/>
-    </Character>
-    <Character id="CHR0006" name="포비" race="인간" gender="M" age="0" occupation="기업 오너" firstEpisode="1" lastEpisode="3" status="Alive">
-      <Description>EP 자동 감지 (13회 언급)</Description>
+    <Character id="CHR0003" name="민수" race="인간" gender="M" age="20" occupation="대학생" firstEpisode="2" lastEpisode="7" status="Alive">
+      <Description>맵부심, 미래 최강 방패</Description>
       <Avatar src="" mime="image/png"/>
       <Gallery/>
     </Character>
-    <Character id="CHR0007" name="크롱" race="" gender="" age="0" occupation="" firstEpisode="1" lastEpisode="3" status="Alive">
-      <Description>EP 자동 감지 (13회 언급)</Description>
-      <Avatar src="../overlays/characters/CHR0007.png" mime="image/png"/>
+    <Character id="CHR0004" name="지은" race="인간" gender="F" age="20" occupation="대학생" firstEpisode="3" lastEpisode="7" status="Alive">
+      <Description>첫사랑, 지켜야 할 평범한 인간</Description>
+      <Avatar src="" mime="image/png"/>
       <Gallery/>
     </Character>
-    <Character id="CHR0008" name="에디" race="" gender="" age="0" occupation="" firstEpisode="1" lastEpisode="3" status="Alive">
-      <Description>EP 자동 감지 (13회 언급)</Description>
-      <Avatar src="../overlays/characters/CHR0008.png" mime="image/png"/>
+    <Character id="CHR0005" name="수아" race="인간" gender="F" age="20" occupation="대학생" firstEpisode="4" lastEpisode="7" status="Alive">
+      <Description>지은의 친구, 후반 핵심 조력자</Description>
+      <Avatar src="" mime="image/png"/>
       <Gallery/>
     </Character>
-    <Character id="CHR0009" name="해리" race="" gender="" age="0" occupation="" firstEpisode="2" lastEpisode="3" status="Alive">
+    <Character id="CHR0006" name="아버지" race="인간" gender="M" age="55" occupation="기업 오너" firstEpisode="7" lastEpisode="7" status="Alive">
+      <Description>중견기업 대표, 투자금 58.7억 위임</Description>
+      <Avatar src="" mime="image/png"/>
+      <Gallery/>
+    </Character>
+    <Character id="CHR0009" name="한하린" race="" gender="F" age="20" occupation="대학생" firstEpisode="8" lastEpisode="16" status="Alive">
+      <Description>EP 자동 감지 (10회 언급)</Description>
+      <Avatar src="" mime="image/png"/>
+      <Gallery/>
+    </Character>
+    <Character id="CHR0010" name="서유나" race="인간" gender="F" age="20" occupation="대학생" firstEpisode="14" lastEpisode="16" status="Alive">
       <Description>EP 자동 감지 (8회 언급)</Description>
-      <Avatar src="../overlays/characters/CHR0009.png" mime="image/png"/>
-      <Gallery/>
-    </Character>
-    <Character id="CHR0010" name="가은이" race="" gender="" age="0" occupation="" firstEpisode="0" lastEpisode="0" status="Alive">
-      <Description></Description>
-      <Avatar src="" mime="image/png"/>
-      <Gallery/>
-    </Character>
-    <Character id="CHR0011" name="이클립스" race="" gender="" age="0" occupation="" firstEpisode="0" lastEpisode="0" status="Alive">
-      <Description></Description>
-      <Avatar src="" mime="image/png"/>
-      <Gallery/>
-    </Character>
-    <Character id="CHR0012" name="다이아나" race="" gender="" age="0" occupation="" firstEpisode="0" lastEpisode="0" status="Alive">
-      <Description></Description>
-      <Avatar src="" mime="image/png"/>
-      <Gallery/>
-    </Character>
-    <Character id="CHR0013" name="오로라핑" race="" gender="" age="0" occupation="" firstEpisode="0" lastEpisode="0" status="Alive">
-      <Description></Description>
       <Avatar src="" mime="image/png"/>
       <Gallery/>
     </Character>
