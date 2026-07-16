@@ -17,7 +17,7 @@ const MAX_RETRIES = 2;
 const BLOB_BATCH = 4;
 const REF_FAST_FORWARD_RETRIES = 5;
 /** 스냅샷 삭제처럼 같은 main에 코드 푸시와 겹칠 때 쓰는 강화 재시도 */
-const REF_FAST_FORWARD_RETRIES_STRONG = 8;
+const REF_FAST_FORWARD_RETRIES_STRONG = 4;
 const DIR_CACHE_TTL_MS = 5 * 60 * 1000;
 const DIR_CACHE_PREFIX = 'ne-gh-dir:';
 
@@ -144,8 +144,8 @@ async function commitTreeWithRetry(owner, repo, branch, {
       });
       // 동시에 여러 브라우저가 main을 갱신할 때 같은 간격으로 다시 충돌하지 않도록
       // 지수형 backoff에 작은 jitter를 더한다.
-      const retryDelay = Math.min(5000, 250 * (2 ** (attempt - 1)));
-      await sleep(retryDelay + Math.floor(Math.random() * 400));
+      const retryDelay = Math.min(2500, 200 * (2 ** (attempt - 1)));
+      await sleep(retryDelay + Math.floor(Math.random() * 200));
     }
 
     const { parentSha, baseTreeSha } = await getBranchTip(owner, repo, branch);
@@ -270,13 +270,20 @@ async function githubRequest(path, {
         throw err;
       }
       const aborted = err?.name === 'AbortError';
-      const network = err instanceof TypeError;
+      const network = err instanceof TypeError
+        || /failed to fetch|networkerror|load failed/i.test(String(err?.message || ''));
       if ((aborted || network) && attempt < retries) {
         await sleep(800 * (attempt + 1));
         continue;
       }
       if (aborted) {
         throw new Error(`GitHub 요청 타임아웃 (${Math.round(timeoutMs / 1000)}초)`);
+      }
+      if (network) {
+        throw new Error(
+          'GitHub 네트워크 연결 실패(Failed to fetch). '
+          + '잠시 후 다시 시도하거나 인터넷·PAT 연결을 확인해 주세요.'
+        );
       }
       throw err;
     } finally {
@@ -592,6 +599,13 @@ export function isGithubSyncConflictError(err) {
   const msg = String(err?.message || err || '');
   return /동기화 충돌|fast.?forward|먼저 갱신/i.test(msg)
     || isGithubNonFastForwardError(err);
+}
+
+export function isGithubNetworkError(err) {
+  const msg = String(err?.message || err || '');
+  return /Failed to fetch|네트워크 연결 실패|타임아웃|networkerror|load failed/i.test(msg)
+    || err?.name === 'AbortError'
+    || err instanceof TypeError;
 }
 
 /** @deprecated commitRepoFiles 사용 */

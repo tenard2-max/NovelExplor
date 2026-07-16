@@ -18,6 +18,7 @@ import {
   invalidateRepoDirCache,
   isGithubRateLimitError,
   isGithubSyncConflictError,
+  isGithubNetworkError,
   repoPathExists,
 } from './github-api.js';
 import { pullProjectFromGithub } from './github-pull.js';
@@ -66,11 +67,31 @@ export async function setLocalDefaultMeta(meta) {
   });
 }
 
-async function fetchRepoJsonFresh(repoPath) {
+async function fetchRepoJsonFresh(repoPath, timeoutMs = 15000) {
   const url = `${rawGithubUrl(repoPath)}?t=${Date.now()}`;
-  const res = await trackedRawFetch(url, { cache: 'no-store' });
-  if (!res.ok) throw new Error(`GitHub 파일 읽기 실패 (${res.status}): ${repoPath}`);
-  return JSON.parse(await res.text());
+  const controller = typeof AbortController !== 'undefined' ? new AbortController() : null;
+  const timer = controller ? setTimeout(() => controller.abort(), timeoutMs) : null;
+  try {
+    const res = await trackedRawFetch(url, {
+      cache: 'no-store',
+      signal: controller?.signal,
+    });
+    if (!res.ok) throw new Error(`GitHub 파일 읽기 실패 (${res.status}): ${repoPath}`);
+    return JSON.parse(await res.text());
+  } catch (err) {
+    if (err?.name === 'AbortError') {
+      throw new Error(`GitHub 파일 읽기 타임아웃 (${Math.round(timeoutMs / 1000)}초): ${repoPath}`);
+    }
+    if (err instanceof TypeError || /failed to fetch|networkerror|load failed/i.test(String(err?.message || ''))) {
+      throw new Error(
+        'GitHub 네트워크 연결 실패(Failed to fetch). '
+        + '잠시 후 다시 시도하거나 인터넷·PAT 연결을 확인해 주세요.'
+      );
+    }
+    throw err;
+  } finally {
+    if (timer) clearTimeout(timer);
+  }
 }
 
 /** GitHub snapshots/default.json 읽기 (공개 저장소는 PAT 없이 가능) */
@@ -309,16 +330,23 @@ async function validateGithubSnapshotDelete(snapshotIds, user = getCurrentUser()
  * - 일반 사용자: 삭제 불가
  * latest/default 포인터가 가리키면 남은 최신으로 갱신하거나 포인터 파일도 제거
  * @param {string[]} snapshotIds 파일명에서 .json 제외 (예: 20260711120000_테마)
+ * @param {{ onProgress?: (p: { label?: string }) => void }} [options]
  * @returns {Promise<{
  *   deleted: string[], deletedCount: number, commitSha: string,
  *   latestUpdated: boolean, latestTarget: string,
  *   defaultUpdated: boolean, defaultTarget: string
  * }>}
  */
-export async function deleteGithubProjectSnapshots(snapshotIds) {
+export async function deleteGithubProjectSnapshots(snapshotIds, options = {}) {
+  const onProgress = typeof options.onProgress === 'function' ? options.onProgress : null;
+  const report = (label) => {
+    if (onProgress) onProgress({ label });
+  };
+
   const metrics = beginGithubOperation('snapshot-delete');
   try {
     return await runWithGithubSyncLock('snapshot-delete', async () => {
+      report('삭제 권한 확인 중…');
       const user = getCurrentUser();
       const {
         toDelete,
@@ -385,60 +413,92 @@ export async function deleteGithubProjectSnapshots(snapshotIds) {
       }
 
       const names = toDelete.map((s) => s.name).join(', ');
-      let commit;
-      try {
-        commit = await commitRepoChanges(
-          pointerWrites,
-          deletePaths,
-          `NovelExplor: delete snapshot(s) ${names}`,
-          { maxRetries: 8 }
-        );
-      } catch (err) {
-        if (!isGithubSyncConflictError(err)) throw err;
+      report(`${names} 삭제 커밋 중…`);
 
-        // 다른 커밋이 같은 파일을 이미 지웠으면 성공으로 본다.
-        invalidateRepoDirCache(snapDir);
-        const stillPresent = [];
-        for (const snapshot of toDelete) {
-          const exists = await repoPathExists(`${snapDir}/${snapshot.name}`);
-          if (exists) stillPresent.push(snapshot);
-        }
-
-        if (!stillPresent.length) {
-          const result = {
-            deleted: toDelete.map((s) => s.name),
-            deletedCount: toDelete.length,
-            latestUpdated,
-            latestTarget,
-            defaultUpdated,
-            defaultTarget,
-            commitSha: '',
-            alreadyAbsent: true,
-          };
-          emit('github:snapshots-changed', result);
-          return result;
-        }
-
-        // 아직 남아 있으면 한 번 더 최신 tip 기준으로 삭제 재시도
-        await new Promise((r) => setTimeout(r, 1200));
-        commit = await commitRepoChanges(
-          pointerWrites,
-          stillPresent.map((s) => `${snapDir}/${s.name}`),
-          `NovelExplor: delete snapshot(s) retry ${stillPresent.map((s) => s.name).join(', ')}`,
-          { maxRetries: 8 }
-        );
-      }
-
-      invalidateRepoDirCache(snapDir);
-      const result = {
+      const buildResult = (commitSha, alreadyAbsent = false) => ({
         deleted: toDelete.map((s) => s.name),
         deletedCount: toDelete.length,
         latestUpdated,
         latestTarget,
         defaultUpdated,
         defaultTarget,
-        commitSha: commit.commitSha,
-      };
+        commitSha: commitSha || '',
+        alreadyAbsent,
+      });
+
+      async function checkAlreadyAbsent() {
+        invalidateRepoDirCache(snapDir);
+        const stillPresent = [];
+        for (const snapshot of toDelete) {
+          try {
+            if (await repoPathExists(`${snapDir}/${snapshot.name}`)) {
+              stillPresent.push(snapshot);
+            }
+          } catch {
+            // 존재 확인 자체가 네트워크 실패면 판단 보류
+            stillPresent.push(snapshot);
+          }
+        }
+        return stillPresent;
+      }
+
+      let commit;
+      try {
+        commit = await commitRepoChanges(
+          pointerWrites,
+          deletePaths,
+          `NovelExplor: delete snapshot(s) ${names}`,
+          {
+            maxRetries: 4,
+            onProgress: (p) => report(p?.label || '삭제 커밋 중…'),
+          }
+        );
+      } catch (err) {
+        const conflict = isGithubSyncConflictError(err);
+        const network = isGithubNetworkError(err);
+        if (!conflict && !network) throw err;
+
+        report(conflict ? '충돌 확인 중…' : '네트워크 오류 — 삭제 여부 확인 중…');
+        const stillPresent = await checkAlreadyAbsent();
+        if (!stillPresent.length) {
+          const result = buildResult('', true);
+          emit('github:snapshots-changed', result);
+          return result;
+        }
+
+        if (network) {
+          throw new Error(
+            `${err.message || err}\n`
+            + '삭제 요청이 끊겼습니다. 목록을 새로고침한 뒤 파일이 남아 있으면 다시 시도해 주세요.'
+          );
+        }
+
+        // 충돌이고 아직 남아 있으면 짧게 한 번만 더 시도
+        report('충돌 재시도 중…');
+        await new Promise((r) => setTimeout(r, 800));
+        try {
+          commit = await commitRepoChanges(
+            pointerWrites,
+            stillPresent.map((s) => `${snapDir}/${s.name}`),
+            `NovelExplor: delete snapshot(s) retry ${stillPresent.map((s) => s.name).join(', ')}`,
+            {
+              maxRetries: 3,
+              onProgress: (p) => report(p?.label || '삭제 재시도 중…'),
+            }
+          );
+        } catch (retryErr) {
+          const stillAfter = await checkAlreadyAbsent();
+          if (!stillAfter.length) {
+            const result = buildResult('', true);
+            emit('github:snapshots-changed', result);
+            return result;
+          }
+          throw retryErr;
+        }
+      }
+
+      invalidateRepoDirCache(snapDir);
+      const result = buildResult(commit.commitSha);
       emit('github:snapshots-changed', result);
       return result;
     });

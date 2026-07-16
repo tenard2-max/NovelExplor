@@ -420,7 +420,11 @@ async function showGithubOpenProjectDialog() {
           btn.textContent = '삭제 중…';
           countEl.textContent = `${item.name} 삭제 중…`;
           try {
-            const result = await deleteGithubProjectSnapshots([snapshotId]);
+            const result = await deleteGithubProjectSnapshots([snapshotId], {
+              onProgress: ({ label }) => {
+                if (label) countEl.textContent = `${item.name} · ${label}`;
+              },
+            });
             if (selection?.type === 'github' && selection.snapshotId === snapshotId) {
               selection = null;
               previewEl.hidden = true;
@@ -461,11 +465,13 @@ async function showGithubOpenProjectDialog() {
             const guidance = /동기화 충돌|fast.?forward|먼저 갱신/i.test(message)
               ? '\n\n같은 GitHub main에 앱 코드 푸시·다른 저장/삭제가 겹쳤습니다.\n'
                 + '목록을 새로 불러온 뒤 다시 시도해 주세요.'
-              : /권한|마스터|일반 사용자/i.test(message)
-                ? '\n\nGitHub 최신 메타 기준으로 삭제 권한이 거부되었습니다.'
-                : /한도 초과|rate limit/i.test(message)
-                  ? '\n\nPAT의 GitHub API 잔량을 확인해 주세요.'
-                  : '';
+              : /네트워크 연결 실패|Failed to fetch|타임아웃|끊겼/i.test(message)
+                ? '\n\n삭제 중 연결이 끊겼습니다. 목록을 새로고침해 실제 삭제 여부를 확인하세요.'
+                : /권한|마스터|일반 사용자/i.test(message)
+                  ? '\n\nGitHub 최신 메타 기준으로 삭제 권한이 거부되었습니다.'
+                  : /한도 초과|rate limit/i.test(message)
+                    ? '\n\nPAT의 GitHub API 잔량을 확인해 주세요.'
+                    : '';
             alert(`GitHub 프로젝트 삭제 실패\n\n${message}${guidance}`);
             try {
               snaps = await listGithubProjectsDetailed();

@@ -221,7 +221,11 @@ export async function showProjectManageDialog() {
     deleteBtn.disabled = true;
     statusEl.textContent = 'GitHub 삭제 중…';
     try {
-      const result = await deleteGithubProjectSnapshots(ids);
+      const result = await deleteGithubProjectSnapshots(ids, {
+        onProgress: ({ label }) => {
+          if (label) statusEl.textContent = label;
+        },
+      });
       await refreshCatalog();
       const details = [
         result.alreadyAbsent
@@ -239,9 +243,11 @@ export async function showProjectManageDialog() {
       const message = String(err?.message || err);
       const guidance = /동기화 충돌|fast.?forward|먼저 갱신/i.test(message)
         ? ' 같은 main에 앱 푸시·다른 저장/삭제가 겹쳤습니다. 목록 새로고침 후 다시 시도하세요.'
-        : /권한|마스터|일반 사용자/i.test(message)
-          ? ' GitHub 최신 메타 기준으로 권한이 거부되었습니다.'
-          : '';
+        : /네트워크 연결 실패|Failed to fetch|타임아웃|끊겼/i.test(message)
+          ? ' 연결이 끊겼습니다. 목록을 새로고침해 삭제 여부를 확인하세요.'
+          : /권한|마스터|일반 사용자/i.test(message)
+            ? ' GitHub 최신 메타 기준으로 권한이 거부되었습니다.'
+            : '';
       alert(`삭제 실패: ${message}${guidance}`);
       await refreshCatalog();
       statusEl.textContent = `삭제 실패: ${message}${guidance} · ${statusEl.textContent}`;
