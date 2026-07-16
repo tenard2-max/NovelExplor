@@ -59,6 +59,26 @@ export async function waitUntilGithubIdle(timeoutMs = 120000) {
   }
 }
 
+/**
+ * 프로젝트 동기화와 겹치면 안 되는 GitHub 쓰기 작업을 단독 실행한다.
+ * 대기 완료 직후 잠금을 선점하므로 같은 브라우저의 저장·삭제 경쟁을 막는다.
+ */
+export async function runWithGithubSyncLock(label, operation, timeoutMs = 120000) {
+  if (typeof operation !== 'function') {
+    throw new TypeError('GitHub 작업 함수가 필요합니다.');
+  }
+  await waitUntilGithubIdle(timeoutMs);
+  // 동시에 대기를 시작한 다른 단독 작업이 먼저 잠금을 잡았을 수 있다.
+  if (syncInFlight) await waitUntilGithubIdle(timeoutMs);
+  syncInFlight = true;
+  emit('github:sync-start', { reason: label, exclusive: true });
+  try {
+    return await operation();
+  } finally {
+    syncInFlight = false;
+  }
+}
+
 /** 업로드 전용 — PNG·MD·TXT 등 (JSON 스냅샷 버전은 갱신하지 않음) */
 const UPLOAD_REASONS = new Set([
   'character-image',

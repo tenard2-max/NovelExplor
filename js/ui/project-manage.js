@@ -221,11 +221,26 @@ export async function showProjectManageDialog() {
     deleteBtn.disabled = true;
     statusEl.textContent = 'GitHub 삭제 중…';
     try {
-      await deleteGithubProjectSnapshots(ids);
+      const result = await deleteGithubProjectSnapshots(ids);
       await refreshCatalog();
+      const details = [`GitHub ${result.deletedCount || result.deleted.length}개 삭제 완료`];
+      if (result.latestUpdated) {
+        details.push(result.latestTarget ? `latest → ${result.latestTarget}` : 'latest 포인터 제거');
+      }
+      if (result.defaultUpdated) {
+        details.push(result.defaultTarget ? `기본 → ${result.defaultTarget}` : '기본 포인터 제거');
+      }
+      statusEl.textContent = `${details.join(' · ')} · ${statusEl.textContent}`;
     } catch (err) {
-      alert(`삭제 실패: ${err.message || err}`);
-      statusEl.textContent = `삭제 실패: ${err.message || err}`;
+      const message = String(err?.message || err);
+      const guidance = /동기화 충돌|fast.?forward|먼저 갱신/i.test(message)
+        ? ' 다른 저장 작업과 충돌했습니다. 목록을 새로고침한 뒤 다시 시도하세요.'
+        : /권한|마스터|일반 사용자/i.test(message)
+          ? ' GitHub 최신 메타 기준으로 권한이 거부되었습니다.'
+          : '';
+      alert(`삭제 실패: ${message}${guidance}`);
+      await refreshCatalog();
+      statusEl.textContent = `삭제 실패: ${message}${guidance} · ${statusEl.textContent}`;
       updateActionButtons();
     }
   });

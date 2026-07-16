@@ -15,7 +15,7 @@ const DEFAULT_TIMEOUT_MS = 45000;
 const BLOB_TIMEOUT_MS = 90000;
 const MAX_RETRIES = 2;
 const BLOB_BATCH = 4;
-const REF_FAST_FORWARD_RETRIES = 2;
+const REF_FAST_FORWARD_RETRIES = 5;
 const DIR_CACHE_TTL_MS = 5 * 60 * 1000;
 const DIR_CACHE_PREFIX = 'ne-gh-dir:';
 
@@ -136,7 +136,10 @@ async function commitTreeWithRetry(owner, repo, branch, {
         total: progressTotal,
         label: `브랜치 충돌 — 재시도 ${attempt}/${REF_FAST_FORWARD_RETRIES}…`,
       });
-      await sleep(400 * attempt);
+      // 동시에 여러 브라우저가 main을 갱신할 때 같은 간격으로 다시 충돌하지 않도록
+      // 지수형 backoff에 작은 jitter를 더한다.
+      const retryDelay = Math.min(4000, 300 * (2 ** (attempt - 1)));
+      await sleep(retryDelay + Math.floor(Math.random() * 250));
     }
 
     const { parentSha, baseTreeSha } = await getBranchTip(owner, repo, branch);
@@ -336,6 +339,16 @@ export async function getRepoFileContent(repoPath) {
  * 5분 세션 캐시로 중복 Contents API 호출을 줄임
  * @returns {Promise<{ name: string, path: string, type: string, size: number, sha: string }[]>}
  */
+/** 디렉터리 목록 캐시 무효화 — 삭제·동기화 직전 최신 목록 조회용 */
+export function invalidateRepoDirCache(repoPath) {
+  const { owner, repo, branch } = getGithubConfig();
+  const cacheKey = `${DIR_CACHE_PREFIX}${owner}/${repo}/${branch}:${repoPath}`;
+  dirMemoryCache.delete(cacheKey);
+  try {
+    sessionStorage.removeItem(cacheKey);
+  } catch { /* private mode 등 */ }
+}
+
 export async function listRepoDir(repoPath) {
   const { owner, repo, branch } = getGithubConfig();
   const cacheKey = `${DIR_CACHE_PREFIX}${owner}/${repo}/${branch}:${repoPath}`;
@@ -435,10 +448,31 @@ export async function putRepoFile(repoPath, content, message, {
  * @param {{ onProgress?: (p: object) => void }} [options]
  */
 export async function commitRepoFiles(files, message = 'NovelExplor sync', options = {}) {
-  if (!files?.length) throw new Error('커밋할 파일이 없습니다.');
+  return commitRepoChanges(files, [], message, options);
+}
+
+/**
+ * 파일 쓰기와 삭제를 하나의 Git tree 커밋으로 반영한다.
+ * 포인터 갱신과 스냅샷 삭제가 중간 상태로 분리되지 않게 할 때 사용한다.
+ * @param {{ repoPath: string, content: string, contentBase64?: boolean }[]} files
+ * @param {string[]} deletePaths
+ * @param {string} message
+ * @param {{ onProgress?: (p: object) => void }} [options]
+ */
+export async function commitRepoChanges(
+  files = [],
+  deletePaths = [],
+  message = 'NovelExplor sync',
+  options = {}
+) {
+  const writes = Array.isArray(files) ? files : [];
+  const deletes = [...new Set(
+    (deletePaths || []).map((path) => String(path || '').trim()).filter(Boolean)
+  )];
+  if (!writes.length && !deletes.length) throw new Error('커밋할 변경사항이 없습니다.');
 
   const onProgress = options.onProgress;
-  const total = files.length;
+  const total = writes.length + deletes.length;
   const { owner, repo, branch } = getGithubConfig();
 
   reportProgress(onProgress, {
@@ -451,8 +485,8 @@ export async function commitRepoFiles(files, message = 'NovelExplor sync', optio
   const treeItems = [];
   let done = 0;
 
-  for (let i = 0; i < files.length; i += BLOB_BATCH) {
-    const batch = files.slice(i, i + BLOB_BATCH);
+  for (let i = 0; i < writes.length; i += BLOB_BATCH) {
+    const batch = writes.slice(i, i + BLOB_BATCH);
     const blobs = await Promise.all(batch.map(async (f) => {
       const blobBody = f.contentBase64
         ? { content: f.content, encoding: 'base64' }
@@ -485,6 +519,23 @@ export async function commitRepoFiles(files, message = 'NovelExplor sync', optio
     });
   }
 
+  for (const path of deletes) {
+    treeItems.push({
+      path,
+      mode: '100644',
+      type: 'blob',
+      sha: null,
+    });
+    done += 1;
+    reportProgress(onProgress, {
+      phase: 'deletes',
+      done,
+      total,
+      file: path,
+      label: `삭제 준비 ${done}/${total} ${shortPath(path)}`,
+    });
+  }
+
   const commit = await commitTreeWithRetry(owner, repo, branch, {
     message,
     treeItems,
@@ -499,7 +550,12 @@ export async function commitRepoFiles(files, message = 'NovelExplor sync', optio
     label: `완료 ${total}파일 (100%)`,
   });
 
-  return { commitSha: commit.sha, fileCount: files.length };
+  return {
+    commitSha: commit.sha,
+    fileCount: total,
+    writtenCount: writes.length,
+    deletedCount: deletes.length,
+  };
 }
 
 /**
@@ -510,23 +566,7 @@ export async function commitRepoFiles(files, message = 'NovelExplor sync', optio
 export async function deleteRepoPaths(repoPaths, message = 'NovelExplor: delete files') {
   const paths = [...new Set((repoPaths || []).map((p) => String(p || '').trim()).filter(Boolean))];
   if (!paths.length) throw new Error('삭제할 파일이 없습니다.');
-
-  const { owner, repo, branch } = getGithubConfig();
-
-  const treeItems = paths.map((path) => ({
-    path,
-    mode: '100644',
-    type: 'blob',
-    sha: null,
-  }));
-
-  const commit = await commitTreeWithRetry(owner, repo, branch, {
-    message,
-    treeItems,
-    progressTotal: paths.length,
-  });
-
-  return { commitSha: commit.sha, fileCount: paths.length };
+  return commitRepoChanges([], paths, message);
 }
 
 /** @deprecated commitRepoFiles 사용 */

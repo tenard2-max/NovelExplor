@@ -3,15 +3,27 @@
 import * as storage from './storage.js';
 import { nowIso } from './utils.js';
 import {
+  ROLES,
   canManageProjectContent,
   canSetDefaultProject,
   getCurrentUser,
   isMaster,
 } from './auth.js';
 import { getGithubConfig, snapshotsDir, hasGithubToken, rawGithubUrl } from './github-config.js';
-import { getRepoFileJson, listRepoDir, deleteRepoPaths, commitRepoFiles, isGithubRateLimitError } from './github-api.js';
+import {
+  getRepoFileJson,
+  listRepoDir,
+  commitRepoChanges,
+  commitRepoFiles,
+  invalidateRepoDirCache,
+  isGithubRateLimitError,
+} from './github-api.js';
 import { pullProjectFromGithub } from './github-pull.js';
-import { syncProjectToGithub, waitUntilGithubIdle } from './github-sync.js';
+import {
+  runWithGithubSyncLock,
+  syncProjectToGithub,
+  waitUntilGithubIdle,
+} from './github-sync.js';
 import { exportTimestampedBackup, buildBackupJson, restoreFromBackup } from './backup.js';
 import { getCurrentProject } from './project.js';
 import { flushSave } from './autosave.js';
@@ -48,12 +60,22 @@ export async function setLocalDefaultMeta(meta) {
   });
 }
 
+async function fetchRepoJsonFresh(repoPath) {
+  const url = `${rawGithubUrl(repoPath)}?t=${Date.now()}`;
+  const res = await trackedRawFetch(url, { cache: 'no-store' });
+  if (!res.ok) throw new Error(`GitHub 파일 읽기 실패 (${res.status}): ${repoPath}`);
+  return JSON.parse(await res.text());
+}
+
 /** GitHub snapshots/default.json 읽기 (공개 저장소는 PAT 없이 가능) */
-export async function fetchGithubDefaultMeta() {
+export async function fetchGithubDefaultMeta({ fresh = false } = {}) {
   const cfg = getGithubConfig();
   const snapDir = snapshotsDir(cfg);
   try {
-    const meta = await getRepoFileJson(`${snapDir}/default.json`);
+    const repoPath = `${snapDir}/default.json`;
+    const meta = fresh
+      ? await fetchRepoJsonFresh(repoPath)
+      : await getRepoFileJson(repoPath);
     if (!meta?.snapshotId && !meta?.filename) return null;
     const snapshotId = meta.snapshotId
       || String(meta.filename || '').replace(/\.json$/i, '');
@@ -169,17 +191,57 @@ function formatStampLabel(stamp) {
     + `${s.slice(8, 10)}:${s.slice(10, 12)}:${s.slice(12, 14)}`;
 }
 
+function resolveGithubDefaultSnapshotId(defaultMeta) {
+  return String(
+    defaultMeta?.snapshotId
+    || String(defaultMeta?.filename || '').replace(/\.json$/i, '')
+    || ''
+  ).replace(/\.json$/i, '');
+}
+
+/** 삭제 직전 스냅샷 JSON 메타를 raw에서 다시 읽는다. */
+async function fetchGithubSnapshotMetaFresh(snapshot, snapDir) {
+  const base = {
+    ...snapshot,
+    title: snapshot.label || snapshot.name,
+    author: '',
+    writers: [],
+    writerUsernames: [],
+    ownerId: '',
+    exportedAt: '',
+  };
+  try {
+    const data = await fetchRepoJsonFresh(`${snapDir}/${snapshot.name}`);
+    const project = data?.project || {};
+    return {
+      ...base,
+      title: project.title || data?.title || base.title,
+      author: project.author || '',
+      writers: Array.isArray(project.writers) ? project.writers : [],
+      writerUsernames: Array.isArray(project.writerUsernames) ? project.writerUsernames : [],
+      ownerId: project.ownerId || '',
+      exportedAt: data?.exportedAt || project.updatedAt || '',
+    };
+  } catch {
+    return base;
+  }
+}
+
 /**
- * GitHub 타임스탬프 스냅샷 JSON 삭제
- * - 마스터: 모든 스냅샷
- * - 권한 관리자(소설가·개발자): writers/owner 권한이 있는 스냅샷
- * latest/default 포인터가 가리키면 남은 최신으로 갱신하거나 포인터 파일도 제거
- * @param {string[]} snapshotIds 파일명에서 .json 제외 (예: 20260711120000_테마)
- * @returns {Promise<{ deleted: string[], latestUpdated: boolean, defaultUpdated: boolean }>}
+ * 삭제 직전 GitHub에서 최신 목록·메타·기본 포인터를 다시 읽고 권한을 검증한다.
+ * @returns {Promise<{
+ *   toDelete: object[],
+ *   before: object[],
+ *   defaultMeta: object | null,
+ *   defaultSnapshotId: string,
+ *   latestMeta: object | null,
+ * }>}
  */
-export async function deleteGithubProjectSnapshots(snapshotIds) {
-  const user = getCurrentUser();
+async function validateGithubSnapshotDelete(snapshotIds, user = getCurrentUser()) {
   if (!user) throw new Error('로그인이 필요합니다.');
+  if (user.role === ROLES.USER) {
+    throw new Error('일반 사용자는 GitHub 프로젝트를 삭제할 수 없습니다.');
+  }
   if (!hasGithubToken()) {
     throw new Error('GitHub Personal Access Token이 필요합니다. 우측 패널에서 연결하세요.');
   }
@@ -191,110 +253,199 @@ export async function deleteGithubProjectSnapshots(snapshotIds) {
   const snapDir = snapshotsDir(cfg);
   const deleteSet = new Set(ids);
 
+  invalidateRepoDirCache(snapDir);
   const before = await listGithubProjectSnapshots();
   const toDelete = before.filter((s) => deleteSet.has(s.snapshotId));
   if (!toDelete.length) throw new Error('선택한 스냅샷을 저장소에서 찾지 못했습니다.');
 
-  if (!isMaster(user)) {
-    const detailed = await listGithubProjectsDetailed();
-    const detailedById = new Map(detailed.map((snapshot) => [snapshot.snapshotId, snapshot]));
-    const unauthorized = toDelete.filter((snapshot) => {
-      const detail = detailedById.get(snapshot.snapshotId);
-      return !detail || !canDeleteGithubProjectSnapshot(detail, user);
-    });
-    if (unauthorized.length) {
-      throw new Error('쓰기 권한이 있는 GitHub 프로젝트만 삭제할 수 있습니다.');
-    }
-  }
-
   let latestMeta = null;
   let defaultMeta = null;
   try {
-    latestMeta = await getRepoFileJson(`${snapDir}/latest.json`);
+    latestMeta = await fetchRepoJsonFresh(`${snapDir}/latest.json`);
   } catch { /* none */ }
   try {
-    defaultMeta = await getRepoFileJson(`${snapDir}/default.json`);
+    defaultMeta = await fetchRepoJsonFresh(`${snapDir}/default.json`);
   } catch { /* none */ }
 
-  const paths = toDelete.map((s) => `${snapDir}/${s.name}`);
-  const deletedIds = new Set(toDelete.map((s) => s.snapshotId));
-  const remaining = before.filter((s) => !deletedIds.has(s.snapshotId));
-  const nextLatest = remaining[0] || null;
+  const defaultSnapshotId = resolveGithubDefaultSnapshotId(defaultMeta);
+  const denied = [];
 
-  const pointerWrites = [];
-  let latestUpdated = false;
-  let defaultUpdated = false;
-
-  const latestPointsDeleted = latestMeta
-    && deletedIds.has(String(latestMeta.snapshotId || '').replace(/\.json$/i, ''));
-  if (latestPointsDeleted) {
-    if (nextLatest) {
-      pointerWrites.push({
-        repoPath: `${snapDir}/latest.json`,
-        content: JSON.stringify({
-          snapshotId: nextLatest.snapshotId,
-          filename: nextLatest.name,
-          updatedAt: nowIso(),
-          reason: 'delete-repoint',
-        }, null, 2),
-      });
-      latestUpdated = true;
-    } else {
-      paths.push(`${snapDir}/latest.json`);
-      latestUpdated = true;
+  for (const snapshot of toDelete) {
+    const freshMeta = await fetchGithubSnapshotMetaFresh(snapshot, snapDir);
+    if (!canDeleteGithubProjectSnapshot(freshMeta, user, defaultSnapshotId)) {
+      denied.push(snapshot.name);
     }
   }
 
-  const defaultId = defaultMeta?.snapshotId
-    || String(defaultMeta?.filename || '').replace(/\.json$/i, '');
-  if (!isMaster(user) && defaultMeta && deletedIds.has(String(defaultId))) {
-    throw new Error('기본 프로젝트는 마스터만 삭제할 수 있습니다.');
-  }
-  if (defaultMeta && deletedIds.has(String(defaultId))) {
-    if (nextLatest) {
-      pointerWrites.push({
-        repoPath: `${snapDir}/default.json`,
-        content: JSON.stringify({
-          snapshotId: nextLatest.snapshotId,
-          filename: nextLatest.name,
-          title: defaultMeta.title || '기본 프로젝트',
-          updatedAt: nowIso(),
-          reason: 'delete-repoint',
-        }, null, 2),
-      });
-      defaultUpdated = true;
-    } else {
-      paths.push(`${snapDir}/default.json`);
-      defaultUpdated = true;
-    }
+  if (denied.length) {
+    const reason = denied.some((name) => {
+      const id = name.replace(/\.json$/i, '');
+      return defaultSnapshotId && id === defaultSnapshotId;
+    })
+      ? '기본 프로젝트는 마스터만 삭제할 수 있습니다.'
+      : '쓰기 권한이 있는 GitHub 프로젝트만 삭제할 수 있습니다.';
+    throw new Error(`${reason}\n\n${denied.join('\n')}`);
   }
 
-  const names = toDelete.map((s) => s.name).join(', ');
-  await deleteRepoPaths(
-    paths,
-    `NovelExplor: delete snapshot(s) ${names}`
-  );
-
-  if (pointerWrites.length) {
-    await commitRepoFiles(
-      pointerWrites,
-      `NovelExplor: repoint after snapshot delete`
-    );
-  }
-
-  emit('github:snapshots-changed', { deleted: toDelete.map((s) => s.snapshotId) });
   return {
-    deleted: toDelete.map((s) => s.name),
-    latestUpdated,
-    defaultUpdated,
+    toDelete,
+    before,
+    defaultMeta,
+    defaultSnapshotId,
+    latestMeta,
   };
 }
 
-/** 현재 사용자가 해당 GitHub 스냅샷을 삭제할 수 있는지 반환한다. */
-export function canDeleteGithubProjectSnapshot(snapshot, user = getCurrentUser()) {
+/**
+ * GitHub 타임스탬프 스냅샷 JSON 삭제
+ * - 마스터: 모든 스냅샷(기본 포함)
+ * - 권한 관리자(소설가·개발자): ownerId/writers/writerUsernames 권한이 있는 스냅샷
+ * - 일반 사용자: 삭제 불가
+ * latest/default 포인터가 가리키면 남은 최신으로 갱신하거나 포인터 파일도 제거
+ * @param {string[]} snapshotIds 파일명에서 .json 제외 (예: 20260711120000_테마)
+ * @returns {Promise<{
+ *   deleted: string[], deletedCount: number, commitSha: string,
+ *   latestUpdated: boolean, latestTarget: string,
+ *   defaultUpdated: boolean, defaultTarget: string
+ * }>}
+ */
+export async function deleteGithubProjectSnapshots(snapshotIds) {
+  return runWithGithubSyncLock('snapshot-delete', async () => {
+    const user = getCurrentUser();
+    const {
+      toDelete,
+      before,
+      defaultMeta,
+      defaultSnapshotId,
+      latestMeta,
+    } = await validateGithubSnapshotDelete(snapshotIds, user);
+
+    const cfg = getGithubConfig();
+    const snapDir = snapshotsDir(cfg);
+
+    const deletePaths = toDelete.map((s) => `${snapDir}/${s.name}`);
+    const deletedIds = new Set(toDelete.map((s) => s.snapshotId));
+    const remaining = before.filter((s) => !deletedIds.has(s.snapshotId));
+    const nextLatest = remaining[0] || null;
+    const nextLatestMeta = nextLatest
+      ? await fetchGithubSnapshotMetaFresh(nextLatest, snapDir)
+      : null;
+
+    const pointerWrites = [];
+    let latestUpdated = false;
+    let defaultUpdated = false;
+    let latestTarget = '';
+    let defaultTarget = '';
+
+    const latestPointsDeleted = latestMeta
+      && deletedIds.has(String(latestMeta.snapshotId || '').replace(/\.json$/i, ''));
+    if (latestPointsDeleted) {
+      latestUpdated = true;
+      latestTarget = nextLatest?.snapshotId || '';
+      if (nextLatest) {
+        pointerWrites.push({
+          repoPath: `${snapDir}/latest.json`,
+          content: JSON.stringify({
+            snapshotId: nextLatest.snapshotId,
+            filename: nextLatest.name,
+            updatedAt: nowIso(),
+            reason: 'delete-repoint',
+          }, null, 2),
+        });
+      } else {
+        deletePaths.push(`${snapDir}/latest.json`);
+      }
+    }
+
+    if (defaultMeta && defaultSnapshotId && deletedIds.has(defaultSnapshotId)) {
+      defaultUpdated = true;
+      defaultTarget = nextLatest?.snapshotId || '';
+      if (nextLatest) {
+        pointerWrites.push({
+          repoPath: `${snapDir}/default.json`,
+          content: JSON.stringify({
+            snapshotId: nextLatest.snapshotId,
+            filename: nextLatest.name,
+            title: nextLatestMeta?.title || nextLatest.label || '기본 프로젝트',
+            updatedAt: nowIso(),
+            reason: 'delete-repoint',
+          }, null, 2),
+        });
+      } else {
+        deletePaths.push(`${snapDir}/default.json`);
+      }
+    }
+
+    const names = toDelete.map((s) => s.name).join(', ');
+    const commit = await commitRepoChanges(
+      pointerWrites,
+      deletePaths,
+      `NovelExplor: delete snapshot(s) ${names}`
+    );
+
+    invalidateRepoDirCache(snapDir);
+    const result = {
+      deleted: toDelete.map((s) => s.name),
+      deletedCount: toDelete.length,
+      latestUpdated,
+      latestTarget,
+      defaultUpdated,
+      defaultTarget,
+      commitSha: commit.commitSha,
+    };
+    emit('github:snapshots-changed', result);
+    return result;
+  });
+}
+
+/**
+ * 현재 사용자가 해당 GitHub 스냅샷을 삭제할 수 있는지 반환한다.
+ * @param {object} snapshot
+ * @param {object} [user]
+ * @param {string} [defaultSnapshotId] GitHub default.json 이 가리키는 snapshotId
+ */
+export function canDeleteGithubProjectSnapshot(
+  snapshot,
+  user = getCurrentUser(),
+  defaultSnapshotId = ''
+) {
   if (!user || !snapshot) return false;
+  if (user.role === ROLES.USER) return false;
+
+  const snapshotId = String(snapshot.snapshotId || '').replace(/\.json$/i, '');
+  const isDefault = Boolean(
+    defaultSnapshotId
+    && snapshotId
+    && snapshotId === String(defaultSnapshotId).replace(/\.json$/i, '')
+  );
+  if (isDefault && !isMaster(user)) return false;
   if (isMaster(user)) return true;
   return canManageProjectContent(snapshot, user);
+}
+
+/** UI용 — 삭제 버튼을 숨기거나 비활성화할 때 이유 표시 */
+export function getGithubSnapshotDeleteBlockReason(
+  snapshot,
+  user = getCurrentUser(),
+  defaultSnapshotId = ''
+) {
+  if (!user) return '로그인이 필요합니다.';
+  if (user.role === ROLES.USER) return '일반 사용자는 삭제할 수 없습니다.';
+  if (!hasGithubToken()) return 'GitHub PAT를 먼저 연결하세요.';
+
+  const snapshotId = String(snapshot?.snapshotId || '').replace(/\.json$/i, '');
+  const isDefault = Boolean(
+    defaultSnapshotId
+    && snapshotId
+    && snapshotId === String(defaultSnapshotId).replace(/\.json$/i, '')
+  );
+  if (isDefault && !isMaster(user)) {
+    return '기본 프로젝트는 마스터만 삭제할 수 있습니다.';
+  }
+  if (canDeleteGithubProjectSnapshot(snapshot, user, defaultSnapshotId)) {
+    return '';
+  }
+  return '이 프로젝트에 대한 쓰기 권한이 없습니다.';
 }
 
 /**

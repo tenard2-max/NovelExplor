@@ -2,7 +2,7 @@
 
 import { trackedRawFetch } from './core/github-metrics.js';
 
-export const APP_BUILD = '20260716084554';
+export const APP_BUILD = '20260716094026';
 
 /**
  * 로컬/오프라인에서도 네비에 표시할 기본 스탬프.

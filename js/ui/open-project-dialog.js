@@ -10,13 +10,14 @@ import {
 } from '../core/sync-folder.js';
 import { countCharactersWithPhotos, listProjects } from '../core/project.js';
 import {
-  canDeleteGithubProjectSnapshot,
   deleteGithubProjectSnapshots,
   fetchGithubDefaultMeta,
+  getGithubSnapshotDeleteBlockReason,
   getLocalDefaultMeta,
   listGithubProjectsDetailed,
 } from '../core/default-project.js';
 import { hasGithubToken } from '../core/github-config.js';
+import { isMaster } from '../core/auth.js';
 
 /**
  * @returns {Promise<
@@ -337,8 +338,8 @@ async function showGithubOpenProjectDialog() {
 
   try {
     countEl.textContent = 'GitHub 스냅샷 불러오는 중…';
-    const snaps = await listGithubProjectsDetailed();
-    const githubDefaultId = String(
+    let snaps = await listGithubProjectsDetailed();
+    let githubDefaultId = String(
       ghDefault?.snapshotId
       || ghDefault?.filename
       || ''
@@ -359,12 +360,11 @@ async function showGithubOpenProjectDialog() {
 
       githubListEl.innerHTML = snaps.map((s) => {
         const isDefault = Boolean(githubDefaultId && s.snapshotId === githubDefaultId);
-        const canDelete = canDeleteGithubProjectSnapshot(s) && !isDefault;
-        const deleteTitle = isDefault
-          ? '기본 프로젝트는 이 목록에서 삭제할 수 없습니다.'
-          : hasGithubToken()
-            ? '이 GitHub 스냅샷 삭제'
-            : '삭제하려면 GitHub PAT를 먼저 연결하세요.';
+        const blockReason = getGithubSnapshotDeleteBlockReason(s, undefined, githubDefaultId);
+        const canDelete = !blockReason;
+        const deleteTitle = blockReason || (isDefault
+          ? '기본 프로젝트 삭제 (마스터 전용)'
+          : '이 GitHub 스냅샷 삭제');
         return `
           <div class="open-proj-file-row">
             <button type="button" class="open-proj-file" data-id="${esc(s.snapshotId)}" role="option">
@@ -376,8 +376,8 @@ async function showGithubOpenProjectDialog() {
               <button type="button"
                       class="btn-sm btn-danger open-proj-gh-delete"
                       data-delete-id="${esc(s.snapshotId)}"
-                      title="${esc(deleteTitle)}"
-                      ${hasGithubToken() ? '' : 'disabled'}>
+                      data-is-default="${isDefault ? '1' : '0'}"
+                      title="${esc(deleteTitle)}">
                 삭제
               </button>` : ''}
           </div>`;
@@ -399,27 +399,80 @@ async function showGithubOpenProjectDialog() {
             alert('GitHub 프로젝트를 삭제하려면 PAT를 먼저 연결하세요.');
             return;
           }
-          if (!confirm(
-            `GitHub에서 이 프로젝트 버전을 삭제할까요?\n\n`
-            + `${item.title || item.name}\n${item.name}\n\n이 작업은 되돌릴 수 없습니다.`
-          )) return;
+          const isDefaultDelete = btn.dataset.isDefault === '1';
+          const confirmLines = [
+            'GitHub에서 이 프로젝트 버전을 삭제할까요?',
+            '',
+            item.title || item.name,
+            item.name,
+          ];
+          if (isDefaultDelete && isMaster()) {
+            confirmLines.push(
+              '',
+              '⚠ 이 버전은 현재 기본 프로젝트입니다.',
+              '삭제하면 default.json 포인터가 다른 최신 버전으로 바뀝니다.'
+            );
+          }
+          confirmLines.push('', '이 작업은 되돌릴 수 없습니다.');
+          if (!confirm(confirmLines.join('\n'))) return;
 
           btn.disabled = true;
           btn.textContent = '삭제 중…';
           countEl.textContent = `${item.name} 삭제 중…`;
           try {
-            await deleteGithubProjectSnapshots([snapshotId]);
-            const index = snaps.findIndex((snapshot) => snapshot.snapshotId === snapshotId);
-            if (index >= 0) snaps.splice(index, 1);
+            const result = await deleteGithubProjectSnapshots([snapshotId]);
             if (selection?.type === 'github' && selection.snapshotId === snapshotId) {
               selection = null;
               previewEl.hidden = true;
               previewBodyEl.innerHTML = '';
               confirmBtn.disabled = true;
             }
-            renderGithubSnapshots(`삭제 완료 · 원격 스냅샷 ${snaps.length}개`);
+
+            // 저장소 기준으로 목록과 기본 포인터를 다시 읽어 성공 상태를 확정한다.
+            const [refreshedSnapshots, refreshedDefault] = await Promise.all([
+              listGithubProjectsDetailed(),
+              fetchGithubDefaultMeta({ fresh: true }),
+            ]);
+            snaps = refreshedSnapshots;
+            githubDefaultId = String(
+              refreshedDefault?.snapshotId
+              || refreshedDefault?.filename
+              || ''
+            ).replace(/\.json$/i, '');
+
+            const details = [`${result.deletedCount || result.deleted.length}개 삭제 완료`];
+            if (result.latestUpdated) {
+              details.push(result.latestTarget
+                ? `latest → ${result.latestTarget}`
+                : 'latest 포인터 제거');
+            }
+            if (result.defaultUpdated) {
+              details.push(result.defaultTarget
+                ? `기본 → ${result.defaultTarget}`
+                : '기본 포인터 제거');
+            }
+            renderGithubSnapshots(`${details.join(' · ')} · 원격 ${snaps.length}개`);
           } catch (err) {
-            alert(`GitHub 프로젝트 삭제 실패: ${err.message || err}`);
+            const message = String(err?.message || err);
+            const guidance = /동기화 충돌|fast.?forward|먼저 갱신/i.test(message)
+              ? '\n\n다른 저장 작업과 충돌했습니다. 목록을 새로 불러온 뒤 다시 시도해 주세요.'
+              : /권한|마스터|일반 사용자/i.test(message)
+                ? '\n\nGitHub 최신 메타 기준으로 삭제 권한이 거부되었습니다.'
+                : /한도 초과|rate limit/i.test(message)
+                  ? '\n\nPAT의 GitHub API 잔량을 확인해 주세요.'
+                  : '';
+            alert(`GitHub 프로젝트 삭제 실패\n\n${message}${guidance}`);
+            try {
+              snaps = await listGithubProjectsDetailed();
+              const refreshedDefault = await fetchGithubDefaultMeta({ fresh: true });
+              githubDefaultId = String(
+                refreshedDefault?.snapshotId
+                || refreshedDefault?.filename
+                || ''
+              ).replace(/\.json$/i, '');
+            } catch {
+              /* 기존 목록 유지 */
+            }
             renderGithubSnapshots();
           }
         });
